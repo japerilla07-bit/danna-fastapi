@@ -1,0 +1,62 @@
+﻿# Excluir cosas que NO van al Docker build context (acelera el build masivamente)
+
+# Python local
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments (CRÍTICO — pesan cientos de MB)
+venv/
+venv312/
+.venv/
+env/
+ENV/
+
+# Node — frontend build se hace dentro del Dockerfile
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend_dist/
+node_modules/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Logs y datos locales
+*.log
+*.log.*
+logs/
+sessions/
+ui_state/
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Backups
+*.bak
+*.backup
+*.bak.json
+*.BAK.json
+backend-backup-*/
+Dockerfile.old-streamlit
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Documentación que no es para producción
+README.md
+docs/
+*.md
