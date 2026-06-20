@@ -1,0 +1,320 @@
+/* ════════════════════════════════════════════════════════════════
+ * OPTIMAL STATE STRIP
+ * Port 1:1 de optimal_strip_mockup.html aprobado por el usuario.
+ * Las variables CSS (--cyan, --green, --amber, --red, --panel, etc.)
+ * se heredan de index.css.
+ * ════════════════════════════════════════════════════════════════ */
+
+/* ─── Strip container ─── */
+.strip {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 20px;
+  align-items: center;
+  padding: 14px 22px;
+  border-radius: 14px;
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--panel-bd-hi);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 0 60px rgba(0,229,255,0.04),
+    0 16px 40px rgba(0,0,0,0.40);
+  overflow: hidden;
+}
+
+/* Barra lateral izquierda (la "luz de estado") */
+.strip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  border-radius: 3px 0 0 3px;
+  animation: strip-edge-pulse 2.5s ease-in-out infinite;
+}
+
+/* Sombra interior izquierda (refuerza el glow hacia adentro) */
+.strip::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 220px;
+  pointer-events: none;
+  border-radius: 14px 0 0 14px;
+}
+
+@keyframes strip-edge-pulse {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
+
+/* ─── Izquierda: dot + label estado ─── */
+.strip-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.strip-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  animation: strip-dot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes strip-dot-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.35); opacity: 0.55; }
+}
+
+.strip-label {
+  font-family: var(--font-head);
+  font-weight: 400;
+  font-size: 17px;
+  letter-spacing: 5px;
+  line-height: 1;
+}
+
+/* ─── Centro: subtitle ─── */
+.strip-sub {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--txt-md);
+  letter-spacing: 0.3px;
+  position: relative;
+  z-index: 1;
+}
+
+.strip-warn {
+  color: var(--amber);
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(255,176,32,0.35);
+}
+
+.strip-danger {
+  color: var(--red);
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(255,45,79,0.35);
+}
+
+/* ─── Pillars (MESA / ORDEN / RACHA / WHEEL) ─── */
+.strip-pillars {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  position: relative;
+  z-index: 1;
+}
+
+.pillar {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 50%, rgba(0,0,0,0.10) 100%),
+    rgba(10, 16, 26, 0.45);
+  border: 1px solid var(--panel-bd);
+  transition: all 200ms ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.04),
+    0 1px 2px rgba(0,0,0,0.2);
+}
+
+.pillar:hover {
+  transform: translateY(-1px);
+}
+
+.pillar-k {
+  color: var(--txt-lo);
+  font-size: 10px;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.pillar-v {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Pillar good (verde) */
+.pillar-good {
+  background:
+    linear-gradient(180deg, rgba(0,255,156,0.10) 0%, transparent 50%, rgba(0,0,0,0.10) 100%),
+    rgba(0,255,156,0.03);
+  border-color: rgba(0,255,156,0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(0,255,156,0.16),
+    0 1px 2px rgba(0,0,0,0.2),
+    0 0 14px rgba(0,255,156,0.10);
+}
+.pillar-good .pillar-v {
+  color: var(--green);
+  text-shadow: 0 0 8px rgba(0,255,156,0.30);
+}
+.pillar-good .pillar-k { color: rgba(0,255,156,0.55); }
+
+/* Pillar mid (amber) */
+.pillar-mid {
+  background:
+    linear-gradient(180deg, rgba(255,176,32,0.08) 0%, transparent 50%, rgba(0,0,0,0.10) 100%),
+    rgba(255,176,32,0.03);
+  border-color: rgba(255,176,32,0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255,176,32,0.14),
+    0 1px 2px rgba(0,0,0,0.2),
+    0 0 12px rgba(255,176,32,0.08);
+}
+.pillar-mid .pillar-v {
+  color: var(--amber);
+  text-shadow: 0 0 8px rgba(255,176,32,0.30);
+}
+.pillar-mid .pillar-k { color: rgba(255,176,32,0.55); }
+
+/* Pillar bad (rojo) */
+.pillar-bad {
+  background:
+    linear-gradient(180deg, rgba(255,45,79,0.08) 0%, transparent 50%, rgba(0,0,0,0.10) 100%),
+    rgba(255,45,79,0.03);
+  border-color: rgba(255,45,79,0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255,45,79,0.14),
+    0 1px 2px rgba(0,0,0,0.2),
+    0 0 12px rgba(255,45,79,0.08);
+}
+.pillar-bad .pillar-v {
+  color: var(--red);
+  text-shadow: 0 0 8px rgba(255,45,79,0.30);
+}
+.pillar-bad .pillar-k { color: rgba(255,45,79,0.55); }
+
+/* ─── COND score derecha ─── */
+.strip-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-left: 18px;
+  border-left: 1px solid var(--panel-bd);
+  position: relative;
+  z-index: 1;
+}
+
+.strip-score-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.strip-score-k {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--txt-lo);
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * Estados (optimal / caution / abort)
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* OPTIMAL — verde */
+.strip-optimal {
+  border-color: rgba(0,255,156,0.40);
+  box-shadow:
+    inset 0 1px 0 rgba(0,255,156,0.10),
+    0 0 60px rgba(0,255,156,0.10),
+    0 0 24px rgba(0,255,156,0.06),
+    0 16px 40px rgba(0,0,0,0.40);
+}
+.strip-optimal::before {
+  background: linear-gradient(180deg, var(--green) 0%, rgba(0,255,156,0.4) 100%);
+  box-shadow: 0 0 20px var(--green-soft), 0 0 40px rgba(0,255,156,0.30);
+}
+.strip-optimal::after {
+  background: linear-gradient(90deg, rgba(0,255,156,0.10) 0%, transparent 100%);
+}
+.strip-optimal .strip-dot {
+  background: var(--green);
+  box-shadow: 0 0 14px var(--green-soft), 0 0 28px rgba(0,255,156,0.30);
+}
+.strip-optimal .strip-label {
+  color: var(--green);
+  text-shadow: 0 0 14px rgba(0,255,156,0.40);
+}
+.strip-optimal .strip-score-num {
+  color: var(--green);
+  text-shadow: 0 0 14px rgba(0,255,156,0.40);
+}
+
+/* CAUTION — amber */
+.strip-caution {
+  border-color: rgba(255,176,32,0.40);
+  box-shadow:
+    inset 0 1px 0 rgba(255,176,32,0.10),
+    0 0 50px rgba(255,176,32,0.10),
+    0 0 22px rgba(255,176,32,0.06),
+    0 16px 40px rgba(0,0,0,0.40);
+}
+.strip-caution::before {
+  background: linear-gradient(180deg, var(--amber) 0%, rgba(255,176,32,0.4) 100%);
+  box-shadow: 0 0 20px var(--amber-soft), 0 0 40px rgba(255,176,32,0.30);
+}
+.strip-caution::after {
+  background: linear-gradient(90deg, rgba(255,176,32,0.08) 0%, transparent 100%);
+}
+.strip-caution .strip-dot {
+  background: var(--amber);
+  box-shadow: 0 0 14px var(--amber-soft), 0 0 28px rgba(255,176,32,0.30);
+}
+.strip-caution .strip-label {
+  color: var(--amber);
+  text-shadow: 0 0 14px rgba(255,176,32,0.40);
+}
+.strip-caution .strip-score-num {
+  color: var(--amber);
+  text-shadow: 0 0 14px rgba(255,176,32,0.40);
+}
+
+/* ABORT — rojo */
+.strip-abort {
+  border-color: rgba(255,45,79,0.40);
+  box-shadow:
+    inset 0 1px 0 rgba(255,45,79,0.10),
+    0 0 50px rgba(255,45,79,0.10),
+    0 0 22px rgba(255,45,79,0.06),
+    0 16px 40px rgba(0,0,0,0.40);
+}
+.strip-abort::before {
+  background: linear-gradient(180deg, var(--red) 0%, rgba(255,45,79,0.4) 100%);
+  box-shadow: 0 0 20px var(--red-soft), 0 0 40px rgba(255,45,79,0.30);
+}
+.strip-abort::after {
+  background: linear-gradient(90deg, rgba(255,45,79,0.08) 0%, transparent 100%);
+}
+.strip-abort .strip-dot {
+  background: var(--red);
+  box-shadow: 0 0 14px var(--red-soft), 0 0 28px rgba(255,45,79,0.30);
+}
+.strip-abort .strip-label {
+  color: var(--red);
+  text-shadow: 0 0 14px rgba(255,45,79,0.40);
+}
+.strip-abort .strip-score-num {
+  color: var(--red);
+  text-shadow: 0 0 14px rgba(255,45,79,0.40);
+}

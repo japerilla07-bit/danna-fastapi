@@ -1,0 +1,26 @@
+{
+  "t": 189,
+  "session_id": "b4a5fff23a9248568dafca37579338c6",
+  "last_spins_len": 218,
+  "consec_losses": {
+    "primary": 0,
+    "docenas": 0,
+    "columnas": 0,
+    "color": 1,
+    "paridad": 0,
+    "rango": 0,
+    "max_conf": 0,
+    "guardian_docena": 1
+  },
+  "cooldowns": {
+    "primary": 3,
+    "docenas": 0,
+    "columnas": 2,
+    "color": 0,
+    "paridad": 0,
+    "rango": 0,
+    "max_conf": 2,
+    "guardian_docena": 0
+  },
+  "engine_risk_version": 2
+}

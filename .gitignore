@@ -1,0 +1,81 @@
+﻿# ── Python ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ───────────────────────────────
+venv/
+venv312/
+env/
+.venv/
+ENV/
+
+# ── Bases de datos locales (Railway las gestiona) ──────
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# ── Logs ───────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+
+# ── Sesiones y estado local ────────────────────────────
+sessions/
+ui_state/
+*.jsonl
+
+# ── Estado RUNTIME del motor (Railway los regenera) ────
+guardianes_docena_state.json
+guardianes_columna_state.json
+risk_state.json
+weights_state.json
+meta_shadow_state.json
+
+# ── Backups manuales (NO van a Git) ────────────────────
+*.bak.json
+*.BAK.json
+*.bak.json.json
+backend-backup-*/
+*.bak
+*.backup
+
+# ── Carpetas de runtime de models_v3_17R ───────────────
+models_v3_17R/mesa_profiles/
+models_v3_17R/gunner/
+
+# ── Secretos y configuración local ─────────────────────
+.env
+.env.local
+.env.*.local
+cookies.txt
+*.pem
+*.key
+
+# ── Frontend ───────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env.local
+frontend_dist/
+node_modules/
+
+# ── IDE ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+# ── Excepciones: _seed/ SÍ debe versionarse (baseline para nuevos usuarios) ──
+!models_v3_17R/_seed/
+!models_v3_17R/_seed/**
+!models_v3_17R/_seed/*.jsonl
+!models_v3_17R/_seed/*.json

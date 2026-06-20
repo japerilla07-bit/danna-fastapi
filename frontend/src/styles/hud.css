@@ -1,0 +1,356 @@
+/* ════════════════════════════════════════════════════════════════
+ * HUD TOP BAR v2 — Premium Cyber
+ * Port 1:1 de hud_mockup_v2.html aprobado por el usuario.
+ * ════════════════════════════════════════════════════════════════ */
+
+/* @property necesario para animar el conic-gradient border */
+@property --hud-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* ─── HUD container ─── */
+.hud {
+  position: relative;
+  background: var(--panel);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--panel-bd-hi);
+  border-radius: 18px;
+  padding: 24px 28px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.07),
+    inset 0 0 1px rgba(255,255,255,0.04),
+    0 0 0 1px rgba(0,229,255,0.03),
+    0 0 80px rgba(0,229,255,0.06),
+    0 32px 80px rgba(0,0,0,0.55);
+}
+
+/* Borde con gradient animado (conic-gradient rotando) */
+.hud::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--hud-angle, 0deg),
+    transparent 0%,
+    rgba(0,229,255,0.7) 8%,
+    rgba(168,85,247,0.5) 16%,
+    transparent 25%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.55;
+  animation: hud-rotate-border 8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes hud-rotate-border {
+  from { --hud-angle: 0deg; }
+  to   { --hud-angle: 360deg; }
+}
+
+/* ─── Esquinas técnicas tipo cabina ─── */
+.hud-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--cyan);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.hud-corner-tl { top: 8px; left: 8px; border-right: none; border-bottom: none; }
+.hud-corner-tr { top: 8px; right: 8px; border-left: none; border-bottom: none; }
+.hud-corner-bl { bottom: 8px; left: 8px; border-right: none; border-top: none; }
+.hud-corner-br { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+
+/* ─── Layout interior ─── */
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.hud-left, .hud-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* ─── Brand: triple gradient + flow + breathe ─── */
+.hud-brand {
+  display: flex;
+  flex-direction: column;
+  margin-right: 4px;
+}
+
+.hud-brand-app {
+  font-family: var(--font-head);
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: 7px;
+  line-height: 1;
+  background: linear-gradient(135deg, #00e5ff 0%, #a855f7 60%, #ec4899 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 0 12px rgba(0,229,255,0.40))
+    drop-shadow(0 0 24px rgba(168,85,247,0.15));
+  animation:
+    hud-brand-flow 8s ease-in-out infinite,
+    hud-brand-breathe 4s ease-in-out infinite;
+}
+
+@keyframes hud-brand-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@keyframes hud-brand-breathe {
+  0%, 100% { filter: drop-shadow(0 0 12px rgba(0,229,255,0.40)) drop-shadow(0 0 24px rgba(168,85,247,0.15)); }
+  50%      { filter: drop-shadow(0 0 24px rgba(0,229,255,0.65)) drop-shadow(0 0 40px rgba(168,85,247,0.35)); }
+}
+
+.hud-brand-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--txt-lo);
+  letter-spacing: 3px;
+  margin-top: 8px;
+  text-transform: uppercase;
+}
+
+/* ─── Chips (bevel real con gradient 3-stops) ─── */
+.hud-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 16px;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 50%, rgba(0,0,0,0.15) 100%),
+    rgba(10, 16, 26, 0.50);
+  border: 1px solid var(--panel-bd);
+  position: relative;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 1px 2px rgba(0,0,0,0.3);
+}
+
+.hud-chip:hover {
+  border-color: var(--panel-bd-hi);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.07),
+    0 4px 12px rgba(0,0,0,0.35),
+    0 0 24px rgba(0,229,255,0.08);
+}
+
+.hud-chip-k {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--txt-lo);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.hud-chip-v {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--txt-hi);
+  letter-spacing: 0.3px;
+}
+
+.hud-chip-stat {
+  align-items: center;
+  text-align: center;
+  min-width: 100px;
+}
+
+.hud-chip-stat .hud-chip-v {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.hud-chip-principal {
+  min-width: 280px;
+  max-width: 480px;
+}
+
+/* ─── Pills de estado: dot pulsante + triple glow ─── */
+.hud-chip-state {
+  align-items: center;
+  overflow: hidden;
+}
+
+.hud-chip-state .hud-chip-v::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 10px;
+  vertical-align: middle;
+  animation: hud-dot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes hud-dot-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.4);  opacity: 0.55; }
+}
+
+/* BET = verde */
+.hud-state-bet {
+  border-color: rgba(0,255,156,0.42);
+  background:
+    linear-gradient(180deg, rgba(0,255,156,0.14) 0%, rgba(0,255,156,0.02) 100%),
+    rgba(0,255,156,0.03);
+  box-shadow:
+    inset 0 1px 0 rgba(0,255,156,0.20),
+    0 0 30px rgba(0,255,156,0.20),
+    0 0 60px rgba(0,255,156,0.08);
+}
+.hud-state-bet .hud-chip-v {
+  color: var(--green);
+  text-shadow: 0 0 12px rgba(0,255,156,0.45);
+}
+.hud-state-bet .hud-chip-v::before {
+  background: var(--green);
+  box-shadow: 0 0 14px var(--green-soft);
+}
+
+/* PROBE = amber */
+.hud-state-probe {
+  border-color: rgba(255,176,32,0.42);
+  background:
+    linear-gradient(180deg, rgba(255,176,32,0.12) 0%, rgba(255,176,32,0.02) 100%),
+    rgba(255,176,32,0.03);
+  box-shadow:
+    inset 0 1px 0 rgba(255,176,32,0.16),
+    0 0 26px rgba(255,176,32,0.16),
+    0 0 50px rgba(255,176,32,0.06);
+}
+.hud-state-probe .hud-chip-v {
+  color: var(--amber);
+  text-shadow: 0 0 12px rgba(255,176,32,0.45);
+}
+.hud-state-probe .hud-chip-v::before {
+  background: var(--amber);
+  box-shadow: 0 0 14px var(--amber-soft);
+}
+
+/* WAIT = rojo */
+.hud-state-wait {
+  border-color: rgba(255,45,79,0.42);
+  background:
+    linear-gradient(180deg, rgba(255,45,79,0.12) 0%, rgba(255,45,79,0.02) 100%),
+    rgba(255,45,79,0.03);
+  box-shadow:
+    inset 0 1px 0 rgba(255,45,79,0.16),
+    0 0 24px rgba(255,45,79,0.16),
+    0 0 50px rgba(255,45,79,0.06);
+}
+.hud-state-wait .hud-chip-v {
+  color: var(--red);
+  text-shadow: 0 0 12px rgba(255,45,79,0.45);
+}
+.hud-state-wait .hud-chip-v::before {
+  background: var(--red);
+  box-shadow: 0 0 14px var(--red-soft);
+}
+
+/* ─── Mission strip ─── */
+.hud-mission {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-bd);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.hud-mission-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--txt-md);
+  letter-spacing: 0.3px;
+  flex: 1;
+  min-width: 280px;
+}
+
+.hud-mission-line strong {
+  color: var(--cyan);
+  font-weight: 600;
+  text-shadow: 0 0 8px rgba(0,229,255,0.30);
+}
+
+.hud-mission-metrics {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hud-mini-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--panel-bd);
+  transition: all 180ms ease;
+}
+
+.hud-mini-chip:hover {
+  transform: translateY(-1px);
+  border-color: var(--panel-bd-hi);
+}
+
+.hud-mini-k {
+  color: var(--txt-lo);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.hud-mini-v {
+  color: var(--txt-hi);
+  font-weight: 500;
+}
+
+.hud-mini-good {
+  background: rgba(0,255,156,0.06);
+  border-color: rgba(0,255,156,0.25);
+}
+.hud-mini-good .hud-mini-v { color: var(--green); }
+
+.hud-mini-bad {
+  background: rgba(255,45,79,0.06);
+  border-color: rgba(255,45,79,0.25);
+}
+.hud-mini-bad .hud-mini-v { color: var(--red); }
+
+.hud-mini-mid {
+  background: rgba(255,176,32,0.04);
+  border-color: rgba(255,176,32,0.20);
+}
+.hud-mini-mid .hud-mini-v { color: var(--amber); }

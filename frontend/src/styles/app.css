@@ -1,0 +1,140 @@
+/* ════════════════════════════════════════════════════════════════
+ * AppPage shell — Premium Cyber
+ * Contenedor + userbar superior (botón logout coherente con HUD).
+ * ════════════════════════════════════════════════════════════════ */
+
+.app-wrap {
+  min-height: 100vh;
+  padding: 36px 32px;
+  max-width: 1600px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 2;
+}
+
+/* ─── User bar ─── */
+.app-userbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding: 0 4px;
+}
+
+.app-user-info {
+  text-align: right;
+}
+
+.app-user-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--txt-hi);
+  font-weight: 500;
+}
+
+.app-user-plan {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--amber);
+  letter-spacing: 1.5px;
+  margin-top: 3px;
+  text-shadow: 0 0 8px rgba(255,176,32,0.30);
+}
+
+/* Botón logout: mismo lenguaje que .hud-chip (bevel real) */
+.app-logout-btn {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 16px;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 50%, rgba(0,0,0,0.15) 100%),
+    rgba(10, 16, 26, 0.50);
+  border: 1px solid var(--panel-bd);
+  cursor: pointer;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 1px 2px rgba(0,0,0,0.3);
+}
+
+.app-logout-btn:hover {
+  border-color: rgba(255,45,79,0.40);
+  background:
+    linear-gradient(180deg, rgba(255,45,79,0.10) 0%, rgba(255,45,79,0.02) 100%),
+    rgba(255,45,79,0.03);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,45,79,0.20),
+    0 4px 12px rgba(0,0,0,0.35),
+    0 0 24px rgba(255,45,79,0.18);
+}
+
+.app-logout-k {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--txt-lo);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: color 200ms ease;
+}
+
+.app-logout-btn:hover .app-logout-k {
+  color: var(--red);
+}
+
+.app-logout-v {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt-hi);
+  letter-spacing: 0.5px;
+  transition: color 200ms ease;
+}
+
+.app-logout-btn:hover .app-logout-v {
+  color: var(--red);
+  text-shadow: 0 0 12px rgba(255,45,79,0.45);
+}
+
+/* ─── Loading / Error ─── */
+.app-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+}
+
+.app-loading-text {
+  font-family: var(--font-head);
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--cyan);
+  letter-spacing: 5px;
+  animation: app-loading-pulse 1.5s ease-in-out infinite;
+  text-shadow: 0 0 16px rgba(0,229,255,0.50);
+}
+
+.app-error-text {
+  font-family: var(--font-head);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--red);
+  letter-spacing: 3px;
+  text-shadow: 0 0 16px rgba(255,45,79,0.50);
+}
+
+@keyframes app-loading-pulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+/* ─── Spacers ─── */
+.app-spacer-sm { height: 8px; }
+.app-spacer-md { height: 14px; }
+.app-spacer-lg { height: 24px; }

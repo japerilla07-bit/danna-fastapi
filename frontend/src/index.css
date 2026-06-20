@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ════════════════════════════════════════════════════════════════
+ * D.A.N.N.A. — Base premium cyber
+ * Fuentes: Michroma (head), Space Grotesk (UI), JetBrains Mono (data)
+ * El CSS específico de cada componente vive en src/styles/<nombre>.css
+ * ════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Michroma&display=swap');
+
+:root {
+  /* ── Fondo ── */
+  --bg-0:        #04060a;
+  --bg-1:        #070b14;
+  --bg-2:        #0a0f1a;
+
+  /* ── Glass ── */
+  --panel:           rgba(10, 16, 26, 0.55);
+  --panel-bd:        rgba(255,255,255,0.07);
+  --panel-bd-hi:     rgba(255,255,255,0.15);
+
+  /* ── Acentos ── */
+  --cyan:        #00e5ff;
+  --cyan-2:      #0099ff;
+  --cyan-soft:   rgba(0,229,255,0.45);
+  --cyan-bleed:  rgba(0,229,255,0.06);
+
+  --violet:      #a855f7;
+  --magenta:     #ec4899;
+
+  --green:       #00ff9c;
+  --green-soft:  rgba(0,255,156,0.55);
+
+  --amber:       #ffb020;
+  --amber-soft:  rgba(255,176,32,0.55);
+
+  --red:         #ff2d4f;
+  --red-soft:    rgba(255,45,79,0.55);
+
+  /* ── Texto ── */
+  --txt-hi:  #f0f4f8;
+  --txt-md:  #94a3b8;
+  --txt-lo:  #54607a;
+  --txt-vlo: #344056;
+
+  /* ── Fuentes ── */
+  --font-head:  'Michroma', 'Space Grotesk', sans-serif;
+  --font-ui:    'Space Grotesk', sans-serif;
+  --font-mono:  'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 25% 0%, rgba(168,85,247,0.10) 0%, transparent 50%),
+    radial-gradient(ellipse at 75% 100%, rgba(0,229,255,0.08) 0%, transparent 50%),
+    var(--bg-0);
+  font-family: var(--font-ui);
+  color: var(--txt-hi);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ─── Canvas neural background ─── */
+.neural-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+#root {
+  position: relative;
+  z-index: 2;
+}
+
+/* ─── Telemetría decorativa (esquinas de pantalla) ─── */
+.telemetry {
+  position: fixed;
+  z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--txt-vlo);
+  letter-spacing: 1.5px;
+  pointer-events: none;
+  line-height: 1.6;
+}
+.telemetry-tl { top: 16px;    left: 16px; }
+.telemetry-tr { top: 16px;    right: 16px;  text-align: right; }
+.telemetry-bl { bottom: 16px; left: 16px; }
+.telemetry-br { bottom: 16px; right: 16px;  text-align: right; }
+.telemetry-l { color: var(--cyan); }
+
+/* ─── Scrollbars ─── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-1); }
+::-webkit-scrollbar-thumb {
+  background: rgba(0,229,255,0.20);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--cyan-soft); }
+
+::selection {
+  background: var(--cyan-soft);
+  color: var(--bg-0);
+}

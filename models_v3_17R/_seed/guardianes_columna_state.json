@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "step": 10078,
+  "last_pick_norm": "Columna 3",
+  "last_edge": 0.03172421530797975,
+  "last_hit": true,
+  "last_spin": 6,
+  "miss_streak": 0,
+  "cooldown_left": 0,
+  "ewma_hit": {
+    "Columna 1": 0.0438873838343937,
+    "Columna 2": 0.15420076368383903,
+    "Columna 3": 0.5230676995804087
+  },
+  "ewma_edge": {
+    "Columna 1": 0.02371461030358134,
+    "Columna 2": 0.03434905227707594,
+    "Columna 3": 0.02584691424739156
+  }
+}
