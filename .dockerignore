@@ -1,4 +1,4 @@
-﻿# Excluir cosas que NO van al Docker build context (acelera el build masivamente)
+# Excluir cosas que NO van al Docker build context (acelera el build masivamente)
 
 # Python local
 __pycache__/

@@ -1,4 +1,4 @@
-﻿# ────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────
 # D.A.N.N.A. — Production Dockerfile (FastAPI + React)
 # Multi-stage build:
 #   Stage 1: Node — construye el frontend React → frontend_dist/
