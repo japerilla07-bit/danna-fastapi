@@ -124,11 +124,16 @@ except Exception:
 
 
 def _cfg(name: str, default=None):
+    # 1. Try module-level config (legacy)
     if config is not None and hasattr(config, name):
         try:
             return getattr(config, name)
         except Exception:
-            return default
+            pass
+    # 2. Fallback to environment variable
+    env_val = os.environ.get(name)
+    if env_val is not None:
+        return env_val
     return default
 
 
