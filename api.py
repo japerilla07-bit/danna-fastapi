@@ -236,3 +236,87 @@ def get_user(username: str):
         "plan_expires": user.get("plan_expires", ""),
         "spins_used_total": user.get("spins_used_total", 0),
     }
+
+# ????????????????????????????????????????????????????????????????????
+# ADMIN ENDPOINT ? Aprobar usuario manualmente
+# ????????????????????????????????????????????????????????????????????
+# Uso (curl):
+#   curl -X POST https://tu-app.railway.app/api/admin/approve \
+#        -H "X-Admin-Secret: <tu-secret>" \
+#        -H "Content-Type: application/json" \
+#        -d '{"username": "gunner", "plan": "admin"}'
+#
+# Requiere env var DANNA_ADMIN_SECRET configurada en Railway.
+# Si falta el header o no coincide, devuelve 401.
+# ????????????????????????????????????????????????????????????????????
+
+class AdminApproveRequest(BaseModel):
+    username: str
+    plan: str = "trial"
+    days: Optional[int] = None
+    approved_by: str = "admin_endpoint"
+
+
+class AdminApproveResponse(BaseModel):
+    success: bool
+    message: str
+    username: Optional[str] = None
+    plan: Optional[str] = None
+    status: Optional[str] = None
+
+
+@app.post("/api/admin/approve", response_model=AdminApproveResponse)
+def admin_approve(
+    req: AdminApproveRequest,
+    x_admin_secret: Optional[str] = Header(None, alias="X-Admin-Secret"),
+):
+    # 1. Validar secret
+    expected_secret = os.environ.get("DANNA_ADMIN_SECRET", "")
+    if not expected_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="DANNA_ADMIN_SECRET no configurado en el servidor"
+        )
+    if not x_admin_secret or x_admin_secret != expected_secret:
+        raise HTTPException(status_code=401, detail="Admin secret invalido o faltante")
+
+    # 2. Validar plan
+    valid_plans = list(PLANS.keys())
+    if req.plan not in valid_plans:
+        return AdminApproveResponse(
+            success=False,
+            message=f"Plan invalido. Validos: {valid_plans}"
+        )
+
+    # 3. Verificar que el usuario exista
+    user = get_user_info(req.username)
+    if not user:
+        return AdminApproveResponse(
+            success=False,
+            message=f"Usuario '{req.username}' no existe. Registralo primero via /api/register"
+        )
+
+    # 4. Aprobar
+    try:
+        admin_approve_user(
+            username=req.username,
+            plan=req.plan,
+            approved_by=req.approved_by,
+            days=req.days,
+        )
+    except Exception as e:
+        return AdminApproveResponse(
+            success=False,
+            message=f"Error al aprobar usuario: {str(e)}"
+        )
+
+    # 5. Confirmar
+    updated = get_user_info(req.username)
+    return AdminApproveResponse(
+        success=True,
+        message=f"Usuario '{req.username}' aprobado con plan '{req.plan}'",
+        username=updated.get("username"),
+        plan=updated.get("plan"),
+        status=updated.get("status"),
+    )
+
