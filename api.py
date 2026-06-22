@@ -47,9 +47,9 @@ LS_WEBHOOK_SECRET = os.environ.get("LEMONSQUEEZY_WEBHOOK_SECRET", "")
 # Reemplaza estos IDs con los de tu dashboard de LemonSqueezy
 # Settings → Products → tu producto → Variants → copy variant ID
 LS_VARIANT_MAP = {
-    os.environ.get("LS_VARIANT_DAILY",   "1486458"): "daily_pass",
-    os.environ.get("LS_VARIANT_WEEKLY",  "1486467"): "weekly_pro",
-    os.environ.get("LS_VARIANT_MONTHLY", "1486469"): "monthly",
+    os.environ.get("LEMONSQUEEZY_VARIANT_DAILY",   "1486458"): "daily_pass",
+    os.environ.get("LEMONSQUEEZY_VARIANT_WEEKLY",  "1486467"): "weekly_pro",
+    os.environ.get("LEMONSQUEEZY_VARIANT_MONTHLY", "1486469"): "monthly",
 }
 
 # ── Helpers ───────────────────────────────────────────────────────
