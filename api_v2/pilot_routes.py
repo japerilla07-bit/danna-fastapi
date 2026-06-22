@@ -12,11 +12,12 @@ del set de sugerencias activas del Pilot.
 import logging
 from typing import Optional, Any
 
-from fastapi import APIRouter, HTTPException, Cookie
+from fastapi import APIRouter, HTTPException, Cookie, Depends
 from pydantic import BaseModel
 
 from auth import get_user_info
 from core.jwt_utils import decode_token
+from core.auth_helpers import require_active_user
 from core.session_manager import session_manager
 
 # pilot.py vive en backend/pilot.py (al lado de main.py)
@@ -37,17 +38,6 @@ VALID_BET_KEYS = {"color", "paridad", "rango", "docenas", "columnas", "max_conf"
 
 
 # ── Auth helper ──────────────────────────────────────────────────
-def _require_user(token: Optional[str]) -> dict:
-    if not token:
-        raise HTTPException(status_code=401, detail="No autenticado")
-    payload = decode_token(token)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Sesion invalida")
-    username = payload.get("sub")
-    user = get_user_info(username) if username else None
-    if user is None:
-        raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    return user
 
 
 # ── Modelos ──────────────────────────────────────────────────────
@@ -60,14 +50,13 @@ class OverrideRequest(BaseModel):
 @router.post("/override")
 def post_override(
     body: OverrideRequest,
-    danna_session: Optional[str] = Cookie(None),
+    user: dict = Depends(require_active_user),
 ):
     """
     Activa override del operador: el Pilot tomará la apuesta indicada
     como la elegida por el usuario para los próximos giros, hasta que
     acierte (HIT) o agote la progresión (L4 MISS).
     """
-    user = _require_user(danna_session)
     username = user["username"]
     sess = session_manager.get(username)
 
@@ -95,9 +84,8 @@ def post_override(
 
 
 @router.post("/override/clear")
-def post_override_clear(danna_session: Optional[str] = Cookie(None)):
+def post_override_clear(user: dict = Depends(require_active_user)):
     """Libera el override manualmente."""
-    user = _require_user(danna_session)
     username = user["username"]
     sess = session_manager.get(username)
 
@@ -115,9 +103,8 @@ def post_override_clear(danna_session: Optional[str] = Cookie(None)):
 
 
 @router.get("/override")
-def get_override(danna_session: Optional[str] = Cookie(None)):
+def get_override(user: dict = Depends(require_active_user)):
     """Lee el estado actual del override."""
-    user = _require_user(danna_session)
     username = user["username"]
     sess = session_manager.get(username)
 
@@ -131,7 +118,7 @@ def get_override(danna_session: Optional[str] = Cookie(None)):
 
 
 @router.post("/reset")
-def post_pilot_reset(danna_session: Optional[str] = Cookie(None)):
+def post_pilot_reset(user: dict = Depends(require_active_user)):
     """
     Resetea state['pilot'] a estado fresco (PilotState._fresh()).
     Limpia engine_track (las deques de últimos 20 resultados por categoría),
@@ -143,7 +130,6 @@ def post_pilot_reset(danna_session: Optional[str] = Cookie(None)):
     Útil cuando engine_track se corrompe con tipos mixtos (int/str) que
     causan TypeError en pilot.evaluate.
     """
-    user = _require_user(danna_session)
     username = user["username"]
     sess = session_manager.get(username)
 

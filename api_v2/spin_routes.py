@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from auth import get_user_info, get_spins_remaining, increment_spin
 from core.jwt_utils import decode_token
+from core.auth_helpers import require_active_user
 from core.session_manager import session_manager
 from core.engine_pool import engine_pool
 
@@ -58,20 +59,8 @@ class SpinResponse(BaseModel):
 
 
 @router.post("/spin", response_model=SpinResponse)
-async def process_spin_route(req: SpinRequest, danna_session: Optional[str] = Cookie(None)):
-    if not danna_session:
-        raise HTTPException(status_code=401, detail="No autenticado")
-        
-    payload = decode_token(danna_session)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Sesion invalida")
-        
-    username = payload.get("sub")
-    user = get_user_info(username) if username else None
-    
-    if user is None:
-        raise HTTPException(status_code=401, detail="Usuario no encontrado")
-
+async def process_spin_route(req: SpinRequest, user: dict = Depends(require_active_user)):
+    username = user["username"]
     # ADQUIRIR CANDADO ASÍNCRONO: Ejecución estricta 1 a 1 por usuario
     lock = get_user_lock(username)
     async with lock:

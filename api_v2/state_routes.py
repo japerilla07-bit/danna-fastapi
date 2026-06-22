@@ -13,10 +13,11 @@ Endpoints de solo-lectura para el dashboard React.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Cookie, Query
+from fastapi import APIRouter, HTTPException, Cookie, Depends, Query
 
 from auth import get_user_info, get_spins_remaining
 from core.jwt_utils import decode_token
+from core.auth_helpers import require_active_user
 from core.session_manager import session_manager
 from core.engine_pool import engine_pool
 from danna_core.processor_helpers import _ensure_last_suggestion_current
@@ -26,22 +27,10 @@ log = logging.getLogger("state_routes")
 router = APIRouter(prefix="/api", tags=["state"])
 
 
-def _require_user(token: Optional[str]) -> dict:
-    if not token:
-        raise HTTPException(status_code=401, detail="No autenticado")
-    payload = decode_token(token)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Sesion invalida")
-    username = payload.get("sub")
-    user = get_user_info(username) if username else None
-    if user is None:
-        raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    return user
 
 
 @router.get("/session/state")
-def get_session_state(danna_session: Optional[str] = Cookie(None)):
-    user = _require_user(danna_session)
+def get_session_state(user: dict = Depends(require_active_user)):
     sess = session_manager.get(user["username"])
     return {
         "user_id": user["username"],
@@ -50,8 +39,7 @@ def get_session_state(danna_session: Optional[str] = Cookie(None)):
 
 
 @router.post("/session/reset")
-def reset_session(danna_session: Optional[str] = Cookie(None)):
-    user = _require_user(danna_session)
+def reset_session(user: dict = Depends(require_active_user)):
     username = user["username"]
     sess = session_manager.reset(username)
     engine_pool.evict(username)
@@ -63,8 +51,7 @@ def reset_session(danna_session: Optional[str] = Cookie(None)):
 
 
 @router.get("/state")
-def get_state_snapshot(danna_session: Optional[str] = Cookie(None)):
-    user = _require_user(danna_session)
+def get_state_snapshot(user: dict = Depends(require_active_user)):
     username = user["username"]
     sess = session_manager.get(username)
 
@@ -482,10 +469,9 @@ def get_state_snapshot(danna_session: Optional[str] = Cookie(None)):
 
 @router.get("/sequence")
 def get_sequence(
-    danna_session: Optional[str] = Cookie(None),
+    user: dict = Depends(require_active_user),
     limit: int = Query(0, ge=0, le=5000, description="0 = todos"),
 ):
-    user = _require_user(danna_session)
     sess = session_manager.get(user["username"])
     spins = list(sess.get("spins", []) or [])
     total = len(spins)
@@ -499,8 +485,7 @@ def get_sequence(
 
 
 @router.get("/admin/sessions")
-def list_active_sessions(danna_session: Optional[str] = Cookie(None)):
-    user = _require_user(danna_session)
+def list_active_sessions(user: dict = Depends(require_active_user)):
     if user.get("plan") != "admin":
         raise HTTPException(status_code=403, detail="Solo admin")
     return {

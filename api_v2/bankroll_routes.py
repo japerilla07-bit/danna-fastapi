@@ -13,28 +13,18 @@ Estos endpoints son equivalentes al panel de bankroll manual de Streamlit.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Cookie
+from fastapi import APIRouter, HTTPException, Cookie, Depends
 from pydantic import BaseModel, Field
 
 from auth import get_user_info
 from core.jwt_utils import decode_token
+from core.auth_helpers import require_active_user
 from core.session_manager import session_manager
 
 log = logging.getLogger("bankroll_routes")
 router = APIRouter(prefix="/api/bankroll", tags=["bankroll"])
 
 
-def _require_user(token: Optional[str]) -> dict:
-    if not token:
-        raise HTTPException(status_code=401, detail="No autenticado")
-    payload = decode_token(token)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Sesion invalida")
-    username = payload.get("sub")
-    user = get_user_info(username) if username else None
-    if user is None:
-        raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    return user
 
 
 class SetBankrollRequest(BaseModel):
@@ -64,16 +54,14 @@ def _bankroll_snapshot(sess) -> dict:
 
 
 @router.get("")
-def get_bankroll(danna_session: Optional[str] = Cookie(None)):
-    user = _require_user(danna_session)
+def get_bankroll(user: dict = Depends(require_active_user)):
     sess = session_manager.get(user["username"])
     return _bankroll_snapshot(sess)
 
 
 @router.post("/set")
-def set_bankroll(req: SetBankrollRequest, danna_session: Optional[str] = Cookie(None)):
+def set_bankroll(req: SetBankrollRequest, user: dict = Depends(require_active_user)):
     """Establecer nuevo saldo (opcionalmente reseteando bankroll_initial)."""
-    user = _require_user(danna_session)
     sess = session_manager.get(user["username"])
     sess["bankroll"] = float(req.amount)
     if req.reset_initial:
@@ -84,9 +72,8 @@ def set_bankroll(req: SetBankrollRequest, danna_session: Optional[str] = Cookie(
 
 
 @router.post("/adjust")
-def adjust_bankroll(req: AdjustBankrollRequest, danna_session: Optional[str] = Cookie(None)):
+def adjust_bankroll(req: AdjustBankrollRequest, user: dict = Depends(require_active_user)):
     """Ajustar el saldo sumando/restando una cantidad."""
-    user = _require_user(danna_session)
     sess = session_manager.get(user["username"])
     current = float(sess.get("bankroll", 0.0) or 0.0)
     new_value = max(0.0, current + float(req.delta))
