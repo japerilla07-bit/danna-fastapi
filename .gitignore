@@ -79,3 +79,8 @@ Thumbs.db
 !models_v3_17R/_seed/**
 !models_v3_17R/_seed/*.jsonl
 !models_v3_17R/_seed/*.json
+
+# ── Build artifacts locales del frontend ────────────────────
+frontend/*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
