@@ -5,6 +5,7 @@ D.A.N.N.A. Authentication & Subscription Module
 import os
 import sqlite3
 import hashlib
+import bcrypt
 from datetime import datetime, timezone, timedelta
 
 import streamlit as st
@@ -63,7 +64,33 @@ def _get_db():
 
 
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(("danna_salt_2026_" + password).encode()).hexdigest()
+    """Hash password using bcrypt with auto-generated salt.
+
+    bcrypt is designed for password hashing:
+    - Slow (intentionally) to resist brute force
+    - Unique salt per password
+    - Industry standard since 1999
+    """
+    if not isinstance(password, str):
+        password = str(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """Verify a password against a bcrypt hash.
+
+    Returns True if password matches, False otherwise.
+    Safe to call with any string input - never raises.
+    """
+    try:
+        if not isinstance(password, str):
+            password = str(password)
+        if not isinstance(stored_hash, str):
+            return False
+        return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+    except Exception:
+        return False
+
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -91,7 +118,7 @@ def verify_user(username, password):
         username = username.strip().lower()
         conn = _get_db()
         row  = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
-        if row is None or row["password_hash"] != _hash_password(password):
+        if row is None or not _verify_password(password, row["password_hash"]):
             conn.close(); return None
         conn.execute("UPDATE users SET last_login=? WHERE id=?", (datetime.now(timezone.utc).isoformat(), row["id"]))
         conn.commit(); user = dict(row); conn.close()
