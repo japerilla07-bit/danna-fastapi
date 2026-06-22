@@ -1,0 +1,371 @@
+/* ─────────────────────────────────────────────────────────────
+   LANDING PAGE — D.A.N.N.A.
+   Estilo cyber-glass con gradientes dorados, scanlines, animaciones
+   ───────────────────────────────────────────────────────────── */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600&display=swap");
+
+.landing-root {
+  --bg: #03050a;
+  --panel: #080c14;
+  --cyan: #ffd700;
+  --amber: #b8960f;
+  --green: #fff7ad;
+  --dim: rgba(255, 215, 0, 0.1);
+  --border: rgba(255, 215, 0, 0.14);
+  --text: #f8fafc;
+  --muted: rgba(248, 250, 252, 0.45);
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+  scroll-behavior: smooth;
+}
+
+.landing-root *,
+.landing-root *::before,
+.landing-root *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Scanline overlay */
+.landing-root::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 215, 0, 0.01) 3px,
+    rgba(255, 215, 0, 0.01) 4px
+  );
+}
+
+/* Typography */
+.landing-root .font-head { font-family: "Orbitron", monospace; }
+.landing-root .font-mono { font-family: "JetBrains Mono", monospace; }
+
+/* Gradient text */
+.landing-root .grad-cyan {
+  background: linear-gradient(90deg, #ffd700, #fff7ad, #b8960f);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: holo 8s ease-in-out infinite;
+}
+.landing-root .grad-amber {
+  background: linear-gradient(90deg, var(--amber), #fff7ad, var(--amber));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@keyframes holo {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Cards */
+.landing-root .card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.landing-root .card-glow {
+  box-shadow: 0 0 40px rgba(255, 215, 0, 0.06);
+}
+
+/* Fade in */
+.landing-root .fade {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: all 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.landing-root .fade.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Divider */
+.landing-root .divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 0 auto;
+  max-width: 900px;
+}
+
+/* Stat chip */
+.landing-root .stat-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.landing-root .stat-chip .val {
+  font-family: "Orbitron", monospace;
+  font-weight: 700;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.landing-root .stat-chip .lbl {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.landing-root .stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+/* Science cards */
+.landing-root .sci-card {
+  padding: 28px;
+  background: rgba(255, 215, 0, 0.04);
+  border: 1px solid var(--border);
+  border-left: 3px solid #ffd700;
+  border-radius: 4px;
+}
+.landing-root .sci-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* Plan cards */
+.landing-root .plan-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.landing-root .plan-card:hover {
+  border-color: rgba(255, 215, 0, 0.3);
+  box-shadow: 0 0 24px rgba(255, 215, 0, 0.08);
+}
+.landing-root .plan-card.featured {
+  border-color: var(--amber);
+  box-shadow: 0 0 30px rgba(232, 160, 32, 0.12);
+  background: rgba(232, 160, 32, 0.04);
+}
+
+.landing-root .plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* CTA Buttons */
+.landing-root .btn-primary {
+  display: inline-block;
+  text-align: center;
+  background: transparent;
+  border: 1px solid #ffd700;
+  color: #ffd700;
+  font-family: "Orbitron", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 14px 32px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.landing-root .btn-primary:hover {
+  background: #ffd700;
+  color: #000;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+.landing-root .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.landing-root .btn-amber {
+  display: inline-block;
+  text-align: center;
+  background: var(--amber);
+  border: 1px solid var(--amber);
+  color: #000;
+  font-family: "Orbitron", monospace;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 14px 32px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+  width: 100%;
+}
+.landing-root .btn-amber:hover {
+  background: #fff;
+  border-color: #fff;
+  box-shadow: 0 0 20px rgba(232, 160, 32, 0.3);
+}
+.landing-root .btn-outline {
+  display: inline-block;
+  text-align: center;
+  background: transparent;
+  border: 1px solid rgba(255, 215, 0, 0.22);
+  color: var(--muted);
+  font-family: "Orbitron", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 12px 24px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+  width: 100%;
+}
+.landing-root .btn-outline:hover {
+  border-color: #ffd700;
+  color: #ffd700;
+}
+
+/* Form inputs */
+.landing-root .field {
+  width: 100%;
+  background: rgba(4, 8, 14, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 13px 16px;
+  color: var(--text);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.landing-root .field:focus {
+  border-color: rgba(255, 215, 0, 0.55);
+}
+.landing-root .field::placeholder {
+  color: var(--muted);
+}
+
+/* Badge */
+.landing-root .badge {
+  display: inline-block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid;
+}
+
+/* Alert bar */
+.landing-root .alert-bar {
+  background: rgba(224, 48, 64, 0.08);
+  border-bottom: 1px solid rgba(224, 48, 64, 0.18);
+  padding: 8px;
+  text-align: center;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: rgba(224, 48, 64, 0.85);
+  text-transform: uppercase;
+}
+
+/* Nav */
+.landing-root nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(3, 5, 10, 0.9);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Checkbox */
+.landing-root input[type="checkbox"] {
+  accent-color: #ffd700;
+  width: 15px;
+  height: 15px;
+}
+
+/* Pulse dot */
+.landing-root .pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffd700;
+  display: inline-block;
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Exclusive bar */
+.landing-root .exclusive-bar {
+  background: rgba(232, 160, 32, 0.06);
+  border: 1px solid rgba(232, 160, 32, 0.2);
+  border-radius: 6px;
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Sections */
+.landing-root .hero-section {
+  text-align: center;
+  padding: 7rem 1.5rem 5rem;
+  max-width: 80rem;
+  margin: 0 auto;
+}
+.landing-root .exclusive-section {
+  padding: 4rem 1.5rem;
+  max-width: 64rem;
+  margin: 0 auto;
+}
+.landing-root .planes-section {
+  padding: 6rem 1.5rem;
+  max-width: 80rem;
+  margin: 0 auto;
+}
+.landing-root .registro-section {
+  padding: 6rem 1.5rem;
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .landing-root .stat-chip .val { font-size: 1.2rem; }
+  .landing-root nav { padding: 12px 16px; }
+  .landing-root .stats-row { grid-template-columns: repeat(2, 1fr); }
+}

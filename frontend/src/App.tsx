@@ -1,9 +1,9 @@
 // Rutas principales de la app.
-// - /login    → LoginPage (público)
+// - /         → LandingPage (publico - landing comercial)
+// - /login    → LoginPage (publico)
 // - /app/*    → AppPage (protegido)
-// - /         → redirige a /app (que a su vez redirige a /login si no autenticado)
-
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from '@/pages/LandingPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { AppPage } from '@/pages/AppPage';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -12,6 +12,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/app/*"
@@ -21,8 +22,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/app" replace />} />
-        <Route path="*" element={<Navigate to="/app" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
