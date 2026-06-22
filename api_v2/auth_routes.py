@@ -52,11 +52,13 @@ class MeResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 def _set_session_cookie(response: Response, token: str):
     """Setea la cookie httpOnly con el JWT."""
+    import os as _os
+    is_production = _os.environ.get("DANNA_ENV", "production").lower() == "production"
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         httponly=True,          # no accesible desde JavaScript (anti-XSS)
-        secure=False,           # True en producción HTTPS; False local
+        secure=is_production,   # HTTPS-only en produccion
         samesite="lax",         # protección CSRF razonable
         max_age=JWT_TTL_SECONDS,
         path="/",

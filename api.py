@@ -32,11 +32,9 @@ app.add_middleware(
     allow_origins=[
         "https://dannaengine.com",
         "https://www.dannaengine.com",
-        "https://japerilla07-bit.github.io",
-        "null",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -222,20 +220,6 @@ async def lemonsqueezy_webhook(
     }
 
 
-@app.get("/api/user/{username}")
-def get_user(username: str):
-    """Info básica de usuario — para verificar estado desde landing page."""
-    user = get_user_info(username)
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    # No exponer password_hash
-    return {
-        "username": user["username"],
-        "status":   user["status"],
-        "plan":     user["plan"],
-        "plan_expires": user.get("plan_expires", ""),
-        "spins_used_total": user.get("spins_used_total", 0),
-    }
 
 # ????????????????????????????????????????????????????????????????????
 # ADMIN ENDPOINT ? Aprobar usuario manualmente
