@@ -649,21 +649,20 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                         state["god_last_scored"] = _gls
                         # CONTADOR GLOBAL (secuencial, cruza categorias): suma SOLO la
                         # apuesta TOP del pilot, UNA vez por spin, mientras GOD activo.
-                        try:
-                            if (not _god_global_done) and _pilot_top_bk and bet_key == _pilot_top_bk:
-                                _god_global_done = True
-                                _praw = state.setdefault("pilot", {})
-                                _cs = int(_praw.get("current_streak", 0) or 0)
-                                if bool(ui_hit):
-                                    _praw["current_streak"] = max(1, _cs + 1)
-                                else:
-                                    _praw["current_streak"] = min(-1, _cs - 1)
-                                    _cur_miss = max(0, -int(_praw["current_streak"]))
-                                    _mx = int(_praw.get("max_consec_misses_pilot", 0) or 0)
-                                    if _cur_miss > _mx:
-                                        _praw["max_consec_misses_pilot"] = _cur_miss
-                        except Exception:
-                            pass
+                        if (not _god_global_done) and _pilot_top_bk and bet_key == _pilot_top_bk:
+                            _god_global_done = True
+                            # Escribir en pilot.raw REAL (no en state["pilot"] suelto) via
+                            # record_pilot_outcome con contexto puesto ? mismo camino que
+                            # record_outcome. Asi god_stats (que lee _pilot_raw) lo refleja.
+                            if _PILOT_AVAILABLE:
+                                try:
+                                    _pilot.set_state_context(state)
+                                    try:
+                                        _pilot.PilotState.get().record_pilot_outcome(bool(ui_hit))
+                                    finally:
+                                        _pilot.clear_state_context()
+                                except Exception as _gc_e:
+                                    _logger.warning(f"[GLOBAL-COUNTER] fallo: {_gc_e}")
                         # LOG DIAGNOSTICO TEMPORAL - desfase TARGET LOCK vs counter
                         try:
                             _ls_diag = (state.get("last_suggestion") or {})
