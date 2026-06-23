@@ -410,8 +410,12 @@ export function QuantumPilot({ godBet, counters }: Props) {
   // El backend mantiene un counter por cada categoría en god_{bet_key}
   // (god_color, god_paridad, god_rango, god_docenas, god_columnas,
   // god_max_conf, etc.) — esto NO requiere cambios en backend.
-  const errorCounterKey = override?.bet_key
-    ? `god_${override.bet_key}`
+  // Counter ERRORES alineado con TARGET LOCK:
+  // topPick ya tiene la logica de 3 fuentes (override -> pickBet -> activeBets[0]).
+  // Antes este counter solo usaba override?.bet_key, lo que causaba que CONSEC/MAX
+  // mostraran 0 cuando TARGET LOCK caia a fuente 2 o 3.
+  const errorCounterKey = topPick?.bet_key
+    ? `god_${topPick.bet_key}`
     : 'god_primary';
   const godPrimary = (godBet?.counters_god ?? {})[errorCounterKey];
   const consecErr = godPrimary?.consec_errors ?? 0;
