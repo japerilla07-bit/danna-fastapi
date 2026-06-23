@@ -621,6 +621,38 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                     cg = state.setdefault("counters_god", {})
                     cg = _update_counters_local(cg, f"god_{bet_key}", ui_hit)
                     state["counters_god"] = cg
+                    # SNAPSHOT giro contado (N) para que el frontend muestre
+                    # exactamente lo que el contador acaba de evaluar, evitando
+                    # el desfase con el verdict nuevo (N+1) generado mas abajo.
+                    try:
+                        _gls = state.setdefault("god_last_scored", {})
+                        _ad_sc = decision_local.get("bet_advice", {}) if isinstance(decision_local, dict) else {}
+                        _entry_sc = _ad_sc.get(bet_key, {}) if isinstance(_ad_sc, dict) else {}
+                        _gls[f"god_{bet_key}"] = {
+                            "bet_key": bet_key,
+                            "hit": bool(ui_hit),
+                            "pick": _entry_sc.get("pick"),
+                            "spin": int(spin),
+                        }
+                        state["god_last_scored"] = _gls
+                        # LOG DIAGNOSTICO TEMPORAL - desfase TARGET LOCK vs counter
+                        try:
+                            _ls_diag = (state.get("last_suggestion") or {})
+                            _ba_eval = (_ls_diag.get("decision", {}) or {}).get("bet_advice", {}) or {}
+                            _pick_evaluado = (_ba_eval.get(bet_key, {}) or {}).get("pick")
+                            _ba_now = (decision_local.get("bet_advice", {}) if isinstance(decision_local, dict) else {}) or {}
+                            _pick_mostrado = (_ba_now.get(bet_key, {}) or {}).get("pick")
+                            _logger.warning(
+                                f"[DIFF-COUNTER] spin={spin} cat={bet_key} "
+                                f"| TARGET_LOCK_muestra={_pick_mostrado!r} "
+                                f"| counter_evalua_contra={_pick_evaluado!r} "
+                                f"| ui_hit={ui_hit} "
+                                f"| DIVERGE={str(_pick_mostrado)!=str(_pick_evaluado)}"
+                            )
+                        except Exception as _diag_e:
+                            _logger.warning(f"[DIFF-COUNTER] log fallo: {_diag_e}")
+                    except Exception:
+                        pass
 
                     # Buckets CCS por categoría
                     try:
