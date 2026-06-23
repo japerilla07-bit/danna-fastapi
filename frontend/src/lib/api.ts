@@ -91,6 +91,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ delta, reason }),
     }),
+  setStakeBase: (stakeBase: number) =>
+    request<Bankroll>('/api/bankroll/stake', {
+      method: 'POST',
+      body: JSON.stringify({ stake_base: stakeBase }),
+    }),
 };
 
 export { ApiError };

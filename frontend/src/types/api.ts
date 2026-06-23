@@ -516,6 +516,7 @@ export interface Bankroll {
   readonly initial: number;
   readonly pnl: number;
   readonly pnl_pct: number;
+  readonly stake_base?: number;
 }
 
 /**

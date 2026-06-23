@@ -717,14 +717,6 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                     if _gt["consec_errors"] > int(_gt.get("max_consec_errors", 0)):
                         _gt["max_consec_errors"] = _gt["consec_errors"]
                 state["god_target"] = _gt
-                try:
-                    _logger.info(
-                        f"[GOD-TARGET] bk={_target_bk} hit={_target_hit} "
-                        f"consec={_gt['consec_errors']} max={_gt['max_consec_errors']} "
-                        f"W/L={_gt['wins']}/{_gt['losses']}"
-                    )
-                except Exception:
-                    pass
         except Exception as _gt_err:
             try:
                 _logger.warning(f"[GOD-TARGET] error: {_gt_err}")

@@ -5,6 +5,7 @@ Endpoints para editar el saldo del usuario manualmente.
 
     POST /api/bankroll/set       — Establecer nuevo saldo (y reset de bankroll_initial)
     POST /api/bankroll/adjust    — Sumar/restar cantidad al saldo actual
+    POST /api/bankroll/stake     — Establecer el stake base del pilot
     GET  /api/bankroll           — Leer estado actual del bankroll
 
 Estos endpoints son equivalentes al panel de bankroll manual de Streamlit.
@@ -40,16 +41,24 @@ class AdjustBankrollRequest(BaseModel):
     reason: str = Field("", max_length=200)
 
 
+class SetStakeRequest(BaseModel):
+    stake_base: float = Field(..., gt=0, le=10_000_000, description="Stake base del pilot en COP (con cuanto empieza cada apuesta L1)")
+
+
 def _bankroll_snapshot(sess) -> dict:
     current = float(sess.get("bankroll", 0.0) or 0.0)
     initial = float(sess.get("bankroll_initial", 0.0) or 0.0)
     pnl = current - initial
     pnl_pct = (pnl / initial * 100.0) if initial > 0 else 0.0
+    # stake_base actual del pilot (para que el frontend lo muestre)
+    _pilot = sess.get("pilot", {}) or {}
+    stake_base = float(_pilot.get("stake_base", 2500.0) or 2500.0)
     return {
         "current": current,
         "initial": initial,
         "pnl": pnl,
         "pnl_pct": pnl_pct,
+        "stake_base": stake_base,
     }
 
 
@@ -80,4 +89,21 @@ def adjust_bankroll(req: AdjustBankrollRequest, user: dict = Depends(require_act
     sess["bankroll"] = new_value
     session_manager.save(user["username"])
     log.info(f"Bankroll adjust for '{user['username']}': {current} + {req.delta} = {new_value} ({req.reason})")
+    return _bankroll_snapshot(sess)
+
+
+@router.post("/stake")
+def set_stake_base(req: SetStakeRequest, user: dict = Depends(require_active_user)):
+    """Establecer el stake base del pilot (con cuanto empieza cada apuesta en L1).
+
+    La progresion (x3 docenas/columnas, x2 simples, hasta L4) ya esta montada
+    en el pilot y toma este valor como punto de partida. El processor lee
+    state["pilot"]["stake_base"] en cada evaluacion, asi que con guardarlo basta.
+    """
+    sess = session_manager.get(user["username"])
+    _pilot = sess.setdefault("pilot", {})
+    _pilot["stake_base"] = float(req.stake_base)
+    sess["pilot"] = _pilot
+    session_manager.save(user["username"])
+    log.info(f"Stake base set for '{user['username']}': {req.stake_base}")
     return _bankroll_snapshot(sess)
