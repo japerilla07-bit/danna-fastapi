@@ -417,23 +417,19 @@ export function QuantumPilot({ godBet, counters }: Props) {
   // Counter GOD: sigue el pickBet del pilot cuando GOD esta activo.
   // Backend incrementa god_{pickBet.bet_key} en ese caso.
   // TARGET LOCK no afecta este counter.
-  // ERRORES: lee directo de god_stats (misma fuente que SESION GOD).
-
-  // Sesión GOD (hits acumulados solo en modo GOD activo)
   const godStats = godBet?.god_stats;
-  const consecErr = godStats?.consec_errors ?? 0;
-  const maxConsecErr = godStats?.max_consec_errors ?? 0;
-  const hits = godStats?.wins ?? sessionStats.bets_hits ?? 0;
-  const misses = godStats?.losses ?? sessionStats.bets_misses ?? 0;
+  // ERRORES + SESION GOD: cuentan SOLO cuando GOD ACTIVO y hay TARGET LOCK.
+  // Fuente: counters_god[god_{topPick.bet_key}] (incrementado por backend en modo GOD).
+  const godEntry = (godBet.active && topPick?.bet_key)
+    ? (godBet?.counters_god ?? {})[`god_${topPick.bet_key}`] ?? null
+    : null;
+  const consecErr = godEntry?.consec_errors ?? 0;
+  const maxConsecErr = godEntry?.max_consec_errors ?? 0;
+  const hits = godEntry?.wins ?? 0;
+  const misses = godEntry?.losses ?? 0;
   const totalBets = hits + misses;
   const hitRate = totalBets > 0 ? (hits / totalBets) * 100 : 0;
-
-  // ERR/HIT de la misma fuente dinámica (override.bet_key o primary)
-  const godPrimaryWins = godStats?.wins ?? 0;
-  const godPrimaryLosses = godStats?.losses ?? 0;
-  const errHit = godPrimaryWins > 0
-    ? godPrimaryLosses / godPrimaryWins
-    : godPrimaryLosses;
+  const errHit = hits > 0 ? misses / hits : misses;
 
   // ── Minimizado
   if (minimized) {
