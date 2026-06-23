@@ -363,8 +363,8 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
             "wins": _pilot_raw.get("bets_hits", 0),
             "losses": _pilot_raw.get("bets_misses", 0),
             "avg_errors": (_pilot_raw.get("bets_misses", 0) / max(1, _pilot_raw.get("bets_emitted", 0))),
-            "consec_errors": max(0, -int(_pilot_raw.get("current_streak", 0) or 0)),
-            "max_consec_errors": int(_pilot_raw.get("max_consec_misses_pilot", 0) or 0),
+            "consec_errors": _pilot_raw.get("pilot_consec_errors", 0),
+            "max_consec_errors": _pilot_raw.get("pilot_max_consec_errors", 0),
         },
         # ★ ÚNICA FUENTE DE VERDAD para el frontend
         "last_verdict": _deep_jsonable(last_verdict),

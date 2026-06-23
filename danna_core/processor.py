@@ -494,18 +494,6 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
             decision_local = {}
 
 
-        # Apuesta TOP del pilot (la de TARGET LOCK) del verdict previo,
-        # disponible ANTES de que pilot.evaluate la sobreescriba.
-        # Alimenta el contador GLOBAL de errores consecutivos en GOD activo.
-        _pilot_top_bk = None
-        _god_global_done = False
-        try:
-            _lv_prev = (state.get("pilot") or {}).get("last_verdict") or {}
-            _pb_prev = _lv_prev.get("pick_bet") if isinstance(_lv_prev, dict) else None
-            if isinstance(_pb_prev, dict):
-                _pilot_top_bk = _pb_prev.get("bet_key")
-        except Exception:
-            _pilot_top_bk = None
         for bet_key in bet_keys:
             engine_hit, ui_hit = _hit_with_fallback(bet_key, return_both=True)
             hits_used[bet_key] = ui_hit
@@ -633,54 +621,6 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                     cg = state.setdefault("counters_god", {})
                     cg = _update_counters_local(cg, f"god_{bet_key}", ui_hit)
                     state["counters_god"] = cg
-                    # SNAPSHOT giro contado (N) para que el frontend muestre
-                    # exactamente lo que el contador acaba de evaluar, evitando
-                    # el desfase con el verdict nuevo (N+1) generado mas abajo.
-                    try:
-                        _gls = state.setdefault("god_last_scored", {})
-                        _ad_sc = decision_local.get("bet_advice", {}) if isinstance(decision_local, dict) else {}
-                        _entry_sc = _ad_sc.get(bet_key, {}) if isinstance(_ad_sc, dict) else {}
-                        _gls[f"god_{bet_key}"] = {
-                            "bet_key": bet_key,
-                            "hit": bool(ui_hit),
-                            "pick": _entry_sc.get("pick"),
-                            "spin": int(spin),
-                        }
-                        state["god_last_scored"] = _gls
-                        # CONTADOR GLOBAL (secuencial, cruza categorias): suma SOLO la
-                        # apuesta TOP del pilot, UNA vez por spin, mientras GOD activo.
-                        if (not _god_global_done) and _pilot_top_bk and bet_key == _pilot_top_bk:
-                            _god_global_done = True
-                            # Escribir en pilot.raw REAL (no en state["pilot"] suelto) via
-                            # record_pilot_outcome con contexto puesto ? mismo camino que
-                            # record_outcome. Asi god_stats (que lee _pilot_raw) lo refleja.
-                            if _PILOT_AVAILABLE:
-                                try:
-                                    _pilot.set_state_context(state)
-                                    try:
-                                        _pilot.PilotState.get().record_pilot_outcome(bool(ui_hit))
-                                    finally:
-                                        _pilot.clear_state_context()
-                                except Exception as _gc_e:
-                                    _logger.warning(f"[GLOBAL-COUNTER] fallo: {_gc_e}")
-                        # LOG DIAGNOSTICO TEMPORAL - desfase TARGET LOCK vs counter
-                        try:
-                            _ls_diag = (state.get("last_suggestion") or {})
-                            _ba_eval = (_ls_diag.get("decision", {}) or {}).get("bet_advice", {}) or {}
-                            _pick_evaluado = (_ba_eval.get(bet_key, {}) or {}).get("pick")
-                            _ba_now = (decision_local.get("bet_advice", {}) if isinstance(decision_local, dict) else {}) or {}
-                            _pick_mostrado = (_ba_now.get(bet_key, {}) or {}).get("pick")
-                            _logger.warning(
-                                f"[DIFF-COUNTER] spin={spin} cat={bet_key} "
-                                f"| TARGET_LOCK_muestra={_pick_mostrado!r} "
-                                f"| counter_evalua_contra={_pick_evaluado!r} "
-                                f"| ui_hit={ui_hit} "
-                                f"| DIVERGE={str(_pick_mostrado)!=str(_pick_evaluado)}"
-                            )
-                        except Exception as _diag_e:
-                            _logger.warning(f"[DIFF-COUNTER] log fallo: {_diag_e}")
-                    except Exception:
-                        pass
 
                     # Buckets CCS por categoría
                     try:

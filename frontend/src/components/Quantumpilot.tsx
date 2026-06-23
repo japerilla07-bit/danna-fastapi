@@ -392,38 +392,38 @@ export function QuantumPilot({ godBet, counters }: Props) {
     [override, applyOverride, clearOverride]
   );
 
-  // ── Errores en VIVO desde counters_god ──────────────────────────────
+  // ── ERRORES + SESIÓN GOD: contador GLOBAL de sesión GOD ──────────────
   // ────────────────────────────────────────────────────────────────────
-  // Estos contadores ÚNICAMENTE incluyen spins donde el sistema GOD estaba
-  // ACTIVO (HUD=OPTIMAL + Radar≥7 + Entropy≥50 + CCS≥69 + Table Health≥50).
-  // Cuando GOD no está activo, los valores quedan CONGELADOS — esto es
-  // intencional: el panel ERRORES refleja únicamente la calidad de la
-  // operación en modo GOD, no la actividad de todos los spins del motor.
+  // El backend mantiene un counter por categoría en counters_god[god_<cat>]
+  // (god_color, god_paridad, god_rango, god_docenas, god_columnas), que se
+  // incrementan ÚNICAMENTE cuando GOD está activo. Estos contadores por
+  // categoría están bien calculados por el backend (cada hit/miss evaluado
+  // contra el pick correcto de esa categoría).
   //
-  // FUENTE DINÁMICA:
-  //   • Si el operador eligió una sugerencia (override activo) → leemos
-  //     `counters_god['god_<bet_key>']` de ESA categoría. Así CONSEC/MÁX/
-  //     ERR/HIT reflejan los aciertos y errores de TU apuesta seleccionada.
-  //   • Si NO hay override activo → leemos `counters_god['god_primary']`
-  //     (la apuesta principal del motor, comportamiento por defecto).
+  // Aquí los AGREGAMOS en un único contador global de la sesión GOD:
+  //   • hits   = suma de wins de todas las categorías GOD
+  //   • misses = suma de losses de todas las categorías GOD
+  //   • CONSEC = el peor consec_errors actual entre las categorías
+  //   • MÁX    = el peor max_consec_errors histórico entre las categorías
   //
-  // El backend mantiene un counter por cada categoría en god_{bet_key}
-  // (god_color, god_paridad, god_rango, god_docenas, god_columnas,
-  // god_max_conf, etc.) — esto NO requiere cambios en backend.
-  // Counter ERRORES alineado con TARGET LOCK:
-  // topPick ya tiene la logica de 3 fuentes (override -> pickBet -> activeBets[0]).
-  // Antes este counter solo usaba override?.bet_key, lo que causaba que CONSEC/MAX
-  // mostraran 0 cuando TARGET LOCK caia a fuente 2 o 3.
-  // Counter GOD: sigue el pickBet del pilot cuando GOD esta activo.
-  // Backend incrementa god_{pickBet.bet_key} en ese caso.
-  // ERRORES + SESION GOD: contador GLOBAL del pilot en estado GOD ACTIVO.
-  // god_stats trae consec/max/wins/losses secuenciales (cruzan categorias),
-  // alimentados por la apuesta TOP del pilot solo cuando GOD esta activo.
-  const godStats = godBet?.god_stats;
-  const consecErr = godStats?.consec_errors ?? 0;
-  const maxConsecErr = godStats?.max_consec_errors ?? 0;
-  const hits = godStats?.wins ?? 0;
-  const misses = godStats?.losses ?? 0;
+  // Esto NO requiere cambios en backend — solo agrega lo que ya existe.
+  const _cg = godBet?.counters_god ?? {};
+  const _godAgg = GOD_CATS.reduce(
+    (acc, cat) => {
+      const e = _cg[`god_${cat}`] || {};
+      acc.wins += Number(e.wins ?? 0);
+      acc.losses += Number(e.losses ?? 0);
+      acc.consec = Math.max(acc.consec, Number(e.consec_errors ?? 0));
+      acc.maxConsec = Math.max(acc.maxConsec, Number(e.max_consec_errors ?? 0));
+      return acc;
+    },
+    { wins: 0, losses: 0, consec: 0, maxConsec: 0 }
+  );
+
+  const consecErr = _godAgg.consec;
+  const maxConsecErr = _godAgg.maxConsec;
+  const hits = _godAgg.wins;
+  const misses = _godAgg.losses;
   const totalBets = hits + misses;
   const hitRate = totalBets > 0 ? (hits / totalBets) * 100 : 0;
   const errHit = hits > 0 ? misses / hits : misses;
