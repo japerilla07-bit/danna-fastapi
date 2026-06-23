@@ -670,6 +670,68 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
         last_guardian_result = hits_used.get("guardian_docena", None)
 
         # ════════════════════════════════════════════════════════════════
+        # ★★★ CONTADOR TARGET LOCK (GOD) — dedicado y aislado ★★★
+        # ────────────────────────────────────────────────────────────────
+        # Cuenta SOLO el PICK que TARGET LOCK mostraba (la apuesta principal
+        # del pilot = last_verdict.pick_bet.bet_key del giro anterior), y SOLO
+        # cuando GOD estaba ACTIVO. Sin importar la categoría (docenas, color,
+        # etc.): suma errores consecutivos cruzando categorías. Acierto resetea.
+        #
+        # Estructura en state["god_target"]:
+        #   { wins, losses, consec_errors, max_consec_errors }
+        #
+        # No depende de counters_god (por categoría) ni de god_stats. Es un
+        # contador propio que evalúa el ui_hit YA calculado por el loop para
+        # la bet_key que el usuario vio en TARGET LOCK.
+        try:
+            _lv_prev = (state.get("pilot") or {}).get("last_verdict") or {}
+            _pb_prev = _lv_prev.get("pick_bet") if isinstance(_lv_prev, dict) else None
+            _target_bk = None
+            if isinstance(_pb_prev, dict):
+                _target_bk = str(_pb_prev.get("bet_key") or "").strip().lower() or None
+
+            # Estado GOD del SPIN (robusto, independiente de la variable del loop
+            # que puede quedar con un valor viejo si el ultimo bet_key hizo continue).
+            # Mismo criterio que el bloque GOD: _cond_state == "optimal" AND radar >= 7.
+            _cond_now = str(state.get("_cond_state", "") or "").strip().lower()
+            _ms_now = decision_local.get("mesa_score") if isinstance(decision_local, dict) else None
+            if not isinstance(_ms_now, dict):
+                _ms_now = (last_suggestion or {}).get("decision", {}).get("mesa_score") or {}
+            _s10_now = int(_ms_now.get("score10", 0) or 0) if isinstance(_ms_now, dict) else 0
+            _god_active_spin = (_cond_now == "optimal" and _s10_now >= 7)
+
+            # Solo contar si: GOD activo en este spin + hay una apuesta TARGET
+            # + esa apuesta fue evaluable (ui_hit no es None).
+            _target_hit = hits_used.get(_target_bk) if _target_bk else None
+            if bool(_god_active_spin) and (_target_bk is not None) and (_target_hit is not None):
+                _gt = state.setdefault("god_target", {
+                    "wins": 0, "losses": 0,
+                    "consec_errors": 0, "max_consec_errors": 0,
+                })
+                if bool(_target_hit):
+                    _gt["wins"] = int(_gt.get("wins", 0)) + 1
+                    _gt["consec_errors"] = 0
+                else:
+                    _gt["losses"] = int(_gt.get("losses", 0)) + 1
+                    _gt["consec_errors"] = int(_gt.get("consec_errors", 0)) + 1
+                    if _gt["consec_errors"] > int(_gt.get("max_consec_errors", 0)):
+                        _gt["max_consec_errors"] = _gt["consec_errors"]
+                state["god_target"] = _gt
+                try:
+                    _logger.info(
+                        f"[GOD-TARGET] bk={_target_bk} hit={_target_hit} "
+                        f"consec={_gt['consec_errors']} max={_gt['max_consec_errors']} "
+                        f"W/L={_gt['wins']}/{_gt['losses']}"
+                    )
+                except Exception:
+                    pass
+        except Exception as _gt_err:
+            try:
+                _logger.warning(f"[GOD-TARGET] error: {_gt_err}")
+            except Exception:
+                pass
+
+        # ════════════════════════════════════════════════════════════════
         # ★★★ PILOT EVALUATE — igual que app.py L8156-8209 ★★★
         # pilot.evaluate() genera el nuevo verdict (pick_bet, verdict GO/WAIT)
         # y lo guarda en state["pilot"]["last_verdict"].

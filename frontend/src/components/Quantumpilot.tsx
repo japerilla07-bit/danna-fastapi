@@ -55,11 +55,19 @@ interface GodStats {
   max_consec_errors: number;
 }
 
+interface GodTarget {
+  wins: number;
+  losses: number;
+  consec_errors: number;
+  max_consec_errors: number;
+}
+
 interface GodBetData {
   active: boolean;
   cond_state: string;
   radar_score: number;
   counters_god: Record<string, any>;
+  god_target?: GodTarget;
   active_bets: ActiveBet[];
   // ★ god_stats viene DIRECTO de pilot.raw → siempre fresco post-record_outcome
   god_stats?: GodStats;
@@ -392,38 +400,24 @@ export function QuantumPilot({ godBet, counters }: Props) {
     [override, applyOverride, clearOverride]
   );
 
-  // ── ERRORES + SESIÓN GOD: contador GLOBAL de sesión GOD ──────────────
+  // ── ERRORES + SESIÓN GOD: contador del PICK de TARGET LOCK ───────────
   // ────────────────────────────────────────────────────────────────────
-  // El backend mantiene un counter por categoría en counters_god[god_<cat>]
-  // (god_color, god_paridad, god_rango, god_docenas, god_columnas), que se
-  // incrementan ÚNICAMENTE cuando GOD está activo. Estos contadores por
-  // categoría están bien calculados por el backend (cada hit/miss evaluado
-  // contra el pick correcto de esa categoría).
+  // Fuente ÚNICA: godBet.god_target — un contador dedicado del backend que
+  // cuenta SOLO el pick que TARGET LOCK muestra (la apuesta principal del
+  // pilot), y SOLO cuando GOD está ACTIVO. Cruza categorías: si docenas
+  // falla suma 1, si luego columnas falla suma 2, si color acierta baja a 0.
   //
-  // Aquí los AGREGAMOS en un único contador global de la sesión GOD:
-  //   • hits   = suma de wins de todas las categorías GOD
-  //   • misses = suma de losses de todas las categorías GOD
-  //   • CONSEC = el peor consec_errors actual entre las categorías
-  //   • MÁX    = el peor max_consec_errors histórico entre las categorías
+  //   • CONSEC = errores consecutivos actuales del pick de TARGET LOCK
+  //   • MÁX    = peor racha de errores de la sesión GOD
+  //   • hits/misses/% = aciertos del pick de TARGET LOCK en GOD activo
   //
-  // Esto NO requiere cambios en backend — solo agrega lo que ya existe.
-  const _cg = godBet?.counters_god ?? {};
-  const _godAgg = GOD_CATS.reduce(
-    (acc, cat) => {
-      const e = _cg[`god_${cat}`] || {};
-      acc.wins += Number(e.wins ?? 0);
-      acc.losses += Number(e.losses ?? 0);
-      acc.consec = Math.max(acc.consec, Number(e.consec_errors ?? 0));
-      acc.maxConsec = Math.max(acc.maxConsec, Number(e.max_consec_errors ?? 0));
-      return acc;
-    },
-    { wins: 0, losses: 0, consec: 0, maxConsec: 0 }
-  );
-
-  const consecErr = _godAgg.consec;
-  const maxConsecErr = _godAgg.maxConsec;
-  const hits = _godAgg.wins;
-  const misses = _godAgg.losses;
+  // El backend lo calcula una sola vez por spin, sin dependencias de
+  // counters_god ni god_stats. El frontend solo lo lee.
+  const godTarget = godBet?.god_target ?? { wins: 0, losses: 0, consec_errors: 0, max_consec_errors: 0 };
+  const consecErr = Number(godTarget.consec_errors ?? 0);
+  const maxConsecErr = Number(godTarget.max_consec_errors ?? 0);
+  const hits = Number(godTarget.wins ?? 0);
+  const misses = Number(godTarget.losses ?? 0);
   const totalBets = hits + misses;
   const hitRate = totalBets > 0 ? (hits / totalBets) * 100 : 0;
   const errHit = hits > 0 ? misses / hits : misses;

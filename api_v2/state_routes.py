@@ -359,6 +359,13 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
         "ccs_buckets": _pilot_raw.get("ccs_buckets", {}) or {},
         "active_bets": _god_active_bets,
         "failed_reasons": _god_failed,
+        # ★ Contador TARGET LOCK (GOD): cuenta SOLO el pick que TARGET LOCK
+        # muestra, solo cuando GOD activo, cruzando categorias. Fuente unica
+        # para el panel ERRORES del QuantumPilot.
+        "god_target": sess.get("god_target", {
+            "wins": 0, "losses": 0,
+            "consec_errors": 0, "max_consec_errors": 0,
+        }) or {"wins": 0, "losses": 0, "consec_errors": 0, "max_consec_errors": 0},
         "god_stats": {
             "wins": _pilot_raw.get("bets_hits", 0),
             "losses": _pilot_raw.get("bets_misses", 0),
