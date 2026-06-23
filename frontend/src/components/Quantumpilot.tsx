@@ -414,8 +414,11 @@ export function QuantumPilot({ godBet, counters }: Props) {
   // topPick ya tiene la logica de 3 fuentes (override -> pickBet -> activeBets[0]).
   // Antes este counter solo usaba override?.bet_key, lo que causaba que CONSEC/MAX
   // mostraran 0 cuando TARGET LOCK caia a fuente 2 o 3.
-  const errorCounterKey = topPick?.bet_key
-    ? `god_${topPick.bet_key}`
+  // Counter GOD: sigue el pickBet del pilot cuando GOD esta activo.
+  // Backend incrementa god_{pickBet.bet_key} en ese caso.
+  // TARGET LOCK no afecta este counter.
+  const errorCounterKey = (godBet.active && pickBet?.bet_key)
+    ? `god_${pickBet.bet_key}`
     : 'god_primary';
   const godPrimary = (godBet?.counters_god ?? {})[errorCounterKey];
   const consecErr = godPrimary?.consec_errors ?? 0;
