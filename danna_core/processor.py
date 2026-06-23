@@ -494,6 +494,18 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
             decision_local = {}
 
 
+        # Apuesta TOP del pilot (la de TARGET LOCK) del verdict previo,
+        # disponible ANTES de que pilot.evaluate la sobreescriba.
+        # Alimenta el contador GLOBAL de errores consecutivos en GOD activo.
+        _pilot_top_bk = None
+        _god_global_done = False
+        try:
+            _lv_prev = (state.get("pilot") or {}).get("last_verdict") or {}
+            _pb_prev = _lv_prev.get("pick_bet") if isinstance(_lv_prev, dict) else None
+            if isinstance(_pb_prev, dict):
+                _pilot_top_bk = _pb_prev.get("bet_key")
+        except Exception:
+            _pilot_top_bk = None
         for bet_key in bet_keys:
             engine_hit, ui_hit = _hit_with_fallback(bet_key, return_both=True)
             hits_used[bet_key] = ui_hit
@@ -635,6 +647,23 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                             "spin": int(spin),
                         }
                         state["god_last_scored"] = _gls
+                        # CONTADOR GLOBAL (secuencial, cruza categorias): suma SOLO la
+                        # apuesta TOP del pilot, UNA vez por spin, mientras GOD activo.
+                        try:
+                            if (not _god_global_done) and _pilot_top_bk and bet_key == _pilot_top_bk:
+                                _god_global_done = True
+                                _praw = state.setdefault("pilot", {})
+                                _cs = int(_praw.get("current_streak", 0) or 0)
+                                if bool(ui_hit):
+                                    _praw["current_streak"] = max(1, _cs + 1)
+                                else:
+                                    _praw["current_streak"] = min(-1, _cs - 1)
+                                    _cur_miss = max(0, -int(_praw["current_streak"]))
+                                    _mx = int(_praw.get("max_consec_misses_pilot", 0) or 0)
+                                    if _cur_miss > _mx:
+                                        _praw["max_consec_misses_pilot"] = _cur_miss
+                        except Exception:
+                            pass
                         # LOG DIAGNOSTICO TEMPORAL - desfase TARGET LOCK vs counter
                         try:
                             _ls_diag = (state.get("last_suggestion") or {})

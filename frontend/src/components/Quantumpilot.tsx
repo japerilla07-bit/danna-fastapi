@@ -416,17 +416,14 @@ export function QuantumPilot({ godBet, counters }: Props) {
   // mostraran 0 cuando TARGET LOCK caia a fuente 2 o 3.
   // Counter GOD: sigue el pickBet del pilot cuando GOD esta activo.
   // Backend incrementa god_{pickBet.bet_key} en ese caso.
-  // TARGET LOCK no afecta este counter.
+  // ERRORES + SESION GOD: contador GLOBAL del pilot en estado GOD ACTIVO.
+  // god_stats trae consec/max/wins/losses secuenciales (cruzan categorias),
+  // alimentados por la apuesta TOP del pilot solo cuando GOD esta activo.
   const godStats = godBet?.god_stats;
-  // ERRORES + SESION GOD: cuentan SOLO cuando GOD ACTIVO y hay TARGET LOCK.
-  // Fuente: counters_god[god_{topPick.bet_key}] (incrementado por backend en modo GOD).
-  const godEntry = (godBet.active && topPick?.bet_key)
-    ? (godBet?.counters_god ?? {})[`god_${topPick.bet_key}`] ?? null
-    : null;
-  const consecErr = godEntry?.consec_errors ?? 0;
-  const maxConsecErr = godEntry?.max_consec_errors ?? 0;
-  const hits = godEntry?.wins ?? 0;
-  const misses = godEntry?.losses ?? 0;
+  const consecErr = godStats?.consec_errors ?? 0;
+  const maxConsecErr = godStats?.max_consec_errors ?? 0;
+  const hits = godStats?.wins ?? 0;
+  const misses = godStats?.losses ?? 0;
   const totalBets = hits + misses;
   const hitRate = totalBets > 0 ? (hits / totalBets) * 100 : 0;
   const errHit = hits > 0 ? misses / hits : misses;
