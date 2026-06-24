@@ -8,12 +8,15 @@ Endpoints de solo-lectura para el dashboard React.
     GET  /api/state            — Snapshot enriquecido (HUD, radar, top pick, ...)
     GET  /api/sequence         — Lista de spins (con paginacion opcional)
     GET  /api/admin/sessions   — Lista sesiones activas (solo admin)
+    POST /api/admin/god_recount_reset — Resetea contadores GOD de un usuario (solo admin)
 """
 
 import logging
 from typing import Optional
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Cookie, Depends, Query
+from pydantic import BaseModel, Field
 
 from auth import get_user_info, get_spins_remaining
 from core.jwt_utils import decode_token
@@ -509,4 +512,169 @@ def list_active_sessions(user: dict = Depends(require_active_user)):
     return {
         "active_sessions": session_manager.list_active(),
         "active_engines": engine_pool.list_active(),
+    }
+
+
+# ────────────────────────────────────────────────────────────────────
+# POST /api/admin/god_recount_reset
+# ────────────────────────────────────────────────────────────────────
+# Tras la sincronización Fase 3 (engine.py pair_dom + is_god_active
+# unificada con 6 condiciones), los contadores GOD existentes en
+# producción quedaron inflados: se acumularon `consec_errors` y buckets
+# bajo las condiciones laxas (2/4/5 chequeos) de la implementación
+# divergente. Las nuevas mediciones son válidas pero conviven con
+# históricos contaminados.
+#
+# Este endpoint resetea SOLO los campos relacionados a GOD para un
+# usuario específico, preservando spins, bankroll y contadores
+# generales. Pensado para invocación manual por admin tras confirmar
+# con el operador que su sesión está limpia.
+#
+# NO toca:
+#   - state["spins"]                     (histórico de giros)
+#   - state["bankroll"], bankroll_initial (banca y P&L)
+#   - state["counters"]                  (contadores generales del motor)
+#   - state["pilot"]["last_verdict"]     (se regenera en el próximo spin)
+#   - state["pilot"]["operator_override"] (override activo se respeta)
+#   - state["pilot"]["progression_*"]    (nivel L1-L4 actual)
+#   - resto del state["pilot"]           (engine_track, regime_history,
+#                                          override, tqi_history, etc.)
+# ────────────────────────────────────────────────────────────────────
+
+
+class GodRecountResetRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=80,
+                          description="Usuario al que se le resetean los contadores GOD")
+
+
+@router.post("/admin/god_recount_reset")
+def post_god_recount_reset(
+    req: GodRecountResetRequest,
+    user: dict = Depends(require_active_user),
+):
+    # 1) Autorización admin-only (mismo patrón que /admin/sessions)
+    if user.get("plan") != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin")
+
+    target = (req.username or "").strip().lower()
+    if not target:
+        raise HTTPException(status_code=400, detail="username vacío")
+
+    # 2) Validar que el usuario destino exista
+    target_info = get_user_info(target)
+    if target_info is None:
+        raise HTTPException(status_code=404, detail=f"Usuario '{target}' no encontrado")
+
+    # 3) Cargar sesión (session_manager.get crea una vacía si no existe — esto
+    #    es el comportamiento normal del manager y es seguro para reset).
+    sess = session_manager.get(target)
+    if sess is None:
+        raise HTTPException(status_code=404, detail=f"Sesión de '{target}' no disponible")
+
+    # 4) Snapshot de valores ANTES del reset (para auditoría y respuesta)
+    _pilot_pre = sess.get("pilot") or {}
+    if not isinstance(_pilot_pre, dict):
+        _pilot_pre = {}
+
+    before = {
+        "god_target": dict(sess.get("god_target") or {}),
+        "counters_god": dict(sess.get("counters_god") or {}),
+        "pilot_consec_errors": int(_pilot_pre.get("pilot_consec_errors", 0) or 0),
+        "pilot_max_consec_errors": int(_pilot_pre.get("pilot_max_consec_errors", 0) or 0),
+        "pilot_total_errors": int(_pilot_pre.get("pilot_total_errors", 0) or 0),
+        "ccs_buckets_total_go": sum(
+            int(b.get("go_count", 0) or 0)
+            for b in (_pilot_pre.get("ccs_buckets") or {}).values()
+            if isinstance(b, dict)
+        ),
+        "level_buckets_total_go": sum(
+            int(b.get("go_count", 0) or 0)
+            for b in (_pilot_pre.get("level_buckets") or {}).values()
+            if isinstance(b, dict)
+        ),
+    }
+
+    # 5) Aplicar reset atómico. Si algo falla, NO persistir.
+    try:
+        # 5a) god_target → defaults
+        sess["god_target"] = {
+            "wins": 0,
+            "losses": 0,
+            "consec_errors": 0,
+            "max_consec_errors": 0,
+        }
+
+        # 5b) counters_god → vacío (se recrea por categoría en el próximo spin GOD)
+        sess["counters_god"] = {}
+
+        # 5c) Campos GOD dentro de state["pilot"]
+        _pilot_new = sess.setdefault("pilot", {})
+        if not isinstance(_pilot_new, dict):
+            _pilot_new = {}
+            sess["pilot"] = _pilot_new
+
+        _pilot_new["pilot_consec_errors"] = 0
+        _pilot_new["pilot_max_consec_errors"] = 0
+        _pilot_new["pilot_total_errors"] = 0
+
+        # 5d) ccs_buckets → estructura fresca (6 buckets, default 0/0)
+        _pilot_new["ccs_buckets"] = {
+            "70-75": {"go_count": 0, "hits": 0},
+            "75-80": {"go_count": 0, "hits": 0},
+            "80-85": {"go_count": 0, "hits": 0},
+            "85-90": {"go_count": 0, "hits": 0},
+            "90+":   {"go_count": 0, "hits": 0},
+            "<70":   {"go_count": 0, "hits": 0},
+        }
+
+        # 5e) level_buckets → estructura fresca (L1-L4, default 0/0)
+        _pilot_new["level_buckets"] = {
+            "L1": {"go_count": 0, "hits": 0},
+            "L2": {"go_count": 0, "hits": 0},
+            "L3": {"go_count": 0, "hits": 0},
+            "L4": {"go_count": 0, "hits": 0},
+        }
+    except Exception as e:
+        log.error(f"[GOD-RECOUNT-RESET] fallo aplicando reset para '{target}': {e}")
+        raise HTTPException(status_code=500, detail=f"Reset falló: {e}")
+
+    # 6) Persistir a la BD
+    try:
+        session_manager.save(target)
+    except Exception as e:
+        log.error(f"[GOD-RECOUNT-RESET] fallo persistiendo sesión de '{target}': {e}")
+        raise HTTPException(status_code=500, detail=f"Reset aplicado pero NO persistido: {e}")
+
+    log.warning(
+        f"[GOD-RECOUNT-RESET] admin='{user['username']}' reseteó contadores GOD "
+        f"de '{target}'. before={before}"
+    )
+
+    return {
+        "success": True,
+        "target_user": target,
+        "performed_by": user["username"],
+        "performed_at_utc": datetime.now(timezone.utc).isoformat(),
+        "reset_fields": [
+            "god_target",
+            "counters_god",
+            "pilot.pilot_consec_errors",
+            "pilot.pilot_max_consec_errors",
+            "pilot.pilot_total_errors",
+            "pilot.ccs_buckets",
+            "pilot.level_buckets",
+        ],
+        "preserved_fields": [
+            "spins",
+            "bankroll",
+            "bankroll_initial",
+            "counters",
+            "pilot.last_verdict",
+            "pilot.operator_override",
+            "pilot.progression_level",
+            "pilot.engine_track",
+            "pilot.regime_history",
+            "pilot.tqi_history",
+        ],
+        "before_snapshot": before,
     }
