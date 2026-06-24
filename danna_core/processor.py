@@ -115,6 +115,63 @@ def _emit_rerun(on_rerun):
             pass
 
 
+def _compute_hud_data(decision: dict, state: dict) -> dict:
+    """Computa el dict hud_data {state, cond} que is_god_active() espera.
+
+    Replica EXACTAMENTE la fórmula de state_routes._compute_cond:
+      cond = mesa_norm*0.40 + entropy_score*0.25 + consec_score*0.25 + wheel_score*0.10
+      state ∈ {optimal, caution, abort} según cond y chaos.
+
+    Antes este valor solo se computaba dentro del loop de counters_god
+    (cuando había status=BET) y no se persistía. Resultado: las llamadas
+    a is_god_active() recibían hud_data={} → fallaban siempre con
+    HUD=— y Entropy=0/100 → god_target y _god_active_now siempre False.
+
+    Este helper se llama UNA vez al inicio de run_spin_processing y
+    persiste en state["hud_computed"] para todas las lecturas posteriores
+    (god_target block, POST-SPIN GOD-STRICT) e idéntico al cómputo que
+    hace state_routes.py al servir GET /api/state.
+    """
+    try:
+        d = decision or {}
+        ms = d.get("mesa_score") or {}
+        score10 = float(ms.get("score10", 5) or 5)
+        mesa_norm = score10 / 10.0
+
+        chaos_info = d.get("chaos_info") or {}
+        entropy_norm = float(chaos_info.get("entropy_norm", 0.5) or 0.5)
+        chaos_raw = bool(chaos_info.get("active", False))
+        entropy_score = 1.0 - max(0.0, min(1.0, entropy_norm))
+
+        pilot_st = (state or {}).get("pilot") or {}
+        consec = int(pilot_st.get("pilot_consec_errors", 0)
+                     or (state or {}).get("consec_losses", 0) or 0)
+        consec_score = 1.0 - max(0.0, min(1.0, consec / 7.0))
+        chaos_active = chaos_raw and consec >= 4
+
+        wi = (state or {}).get("_wheel_expert_info") or {}
+        wscores = wi.get("sector_scores", {}) or {}
+        top_wheel = max(wscores.values()) if wscores else 0.25
+        wheel_score = max(0.0, min(1.0, (top_wheel - 0.25) / 0.35))
+
+        cond = (mesa_norm * 0.40 + entropy_score * 0.25
+                + consec_score * 0.25 + wheel_score * 0.10)
+        cond = max(0.0, min(1.0, cond))
+
+        if chaos_active or consec >= 6:
+            cond_state = "abort"
+        elif cond >= 0.65:
+            cond_state = "optimal"
+        elif cond >= 0.40:
+            cond_state = "caution"
+        else:
+            cond_state = "abort"
+
+        return {"state": cond_state, "cond": float(cond)}
+    except Exception:
+        return {"state": "caution", "cond": 0.40}
+
+
 def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, on_rerun=None, auth_enabled=False, evals_log_path=None):
     """Procesa un giro de la ruleta. Lógica idéntica al original de app.py."""
     # Default para evals_log_path (igual que EVALS_LOG_PATH del módulo original)
@@ -492,6 +549,15 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                     decision_local = _dl
         except Exception:
             decision_local = {}
+
+        # ★ FIX FASE 3 HOTFIX: persistir hud_computed para que is_god_active()
+        # tenga input válido. Sin esto, el dict {state, cond} llegaba vacío y
+        # las condiciones HUD y Entropy fallaban siempre, dejando god_target
+        # en 0/0 y _god_active_now en False aunque el HUD visualmente fuera
+        # OPTIMAL. Se computa UNA vez por spin, fuera del loop de bets, para
+        # que esté disponible tanto en el god_target block como en el
+        # POST-SPIN GOD-STRICT (paridad con state_routes.py).
+        state["hud_computed"] = _compute_hud_data(decision_local, state)
 
 
         for bet_key in bet_keys:
