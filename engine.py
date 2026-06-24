@@ -4838,6 +4838,24 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
         R = math.sqrt(c*c + s*s) / float(N)
         return float(np.clip(R, 0.0, 1.0))
 
+    def _pair_dominance(counts, k=3):
+        # Detecta si las DOS categorías más frecuentes (de k=3) acumulan
+        # juntas una proporción superior a lo esperado por azar.
+        # 2 de 3 docenas/columnas al azar = 2/3 ≈ 0.667.
+        # Umbral 0.70: si las 2 top cubren ≥70% → sesgo de PAR caliente.
+        # Retorna 0..1 escalando 0.667→0  hasta  1.0→1.
+        tot = float(sum(counts))
+        if tot <= 0:
+            return 0.0
+        srt = sorted(counts, reverse=True)
+        top2 = float(srt[0] + srt[1])
+        frac = top2 / tot                       # 0.667 azar .. 1.0 total
+        thr = 0.70                              # umbral de detección
+        if frac < thr:
+            return 0.0
+        # map: 0.70 → 0,  1.00 → 1
+        return float(np.clip((frac - thr) / (1.0 - thr + 1e-12), 0.0, 1.0))
+
     def _compute_radar_01(arr_nums):
         # Devuelve dict con componentes 0..1
         sc = _stream_color(arr_nums)
@@ -4859,8 +4877,14 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
                 ccnt[c-1] += 1
         thirds = 0.5 * (_entropy_stability(dcnt) + _entropy_stability(ccnt))
 
+        # ★ PAIR DOMINANCE: detecta si DOS docenas o DOS columnas están
+        # calientes juntas (la apuesta de cobertura D1+D3, C2+C3, etc).
+        # Antes el radar solo reaccionaba a la docena/columna #1 dominante.
+        pair_dom = 0.5 * (_pair_dominance(dcnt) + _pair_dominance(ccnt))
+
         wheel = _wheel_cluster(arr_nums)
-        return {"ipd": float(ipd), "energy": float(en), "thirds": float(thirds), "wheel": float(wheel)}
+        return {"ipd": float(ipd), "energy": float(en), "thirds": float(thirds),
+                "wheel": float(wheel), "pair_dom": float(pair_dom)}
 
     # Triple ventana (corto/medio/largo) dentro del mismo window operativo
     w_short = int(params.get('mesa_score_w_short', 12))
@@ -4884,10 +4908,15 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
         'thirds':0.45*rS['thirds']+0.35*rM['thirds']+ 0.20*rL['thirds'],
         'wheel': 0.35*rS['wheel'] +0.35*rM['wheel'] + 0.30*rL['wheel'],
         'energy':0.50*rS['energy']+0.30*rM['energy']+ 0.20*rL['energy'],
+        # pair_dom: priorizar ventana corta/media — un par caliente es
+        # señal de momento, no de clima de largo plazo.
+        'pair_dom': 0.50*rS['pair_dom'] + 0.35*rM['pair_dom'] + 0.15*rL['pair_dom'],
     }
 
-    # Score final 0..1 (winner-takes-all NO aplica aquí; esto es radar de estabilidad global)
-    raw01 = 0.40*mix['ipd'] + 0.30*mix['thirds'] + 0.20*mix['wheel'] + 0.10*mix['energy']
+    # Score final 0..1. Pesos re-balanceados para dar 15% al pair_dom
+    # (detección de dos docenas/columnas calientes), tomado de ipd y thirds.
+    raw01 = (0.32*mix['ipd'] + 0.25*mix['thirds'] + 0.18*mix['wheel']
+             + 0.10*mix['energy'] + 0.15*mix['pair_dom'])
 
     # Penalización suave por cero reciente (turbulencia)
     z_recent = 0

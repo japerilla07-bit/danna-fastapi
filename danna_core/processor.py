@@ -690,15 +690,33 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
             if isinstance(_pb_prev, dict):
                 _target_bk = str(_pb_prev.get("bet_key") or "").strip().lower() or None
 
-            # Estado GOD del SPIN (robusto, independiente de la variable del loop
-            # que puede quedar con un valor viejo si el ultimo bet_key hizo continue).
-            # Mismo criterio que el bloque GOD: _cond_state == "optimal" AND radar >= 7.
-            _cond_now = str(state.get("_cond_state", "") or "").strip().lower()
-            _ms_now = decision_local.get("mesa_score") if isinstance(decision_local, dict) else None
-            if not isinstance(_ms_now, dict):
-                _ms_now = (last_suggestion or {}).get("decision", {}).get("mesa_score") or {}
-            _s10_now = int(_ms_now.get("score10", 0) or 0) if isinstance(_ms_now, dict) else 0
-            _god_active_spin = (_cond_now == "optimal" and _s10_now >= 7)
+            # Estado GOD del SPIN — usa is_god_active() (las 6 condiciones de
+            # Streamlit: HUD, Radar, Entropy, TQI, CCS, Health). Antes solo
+            # evaluaba HUD=OPTIMAL y Radar>=7, lo cual hacía que god_target
+            # incrementara consec_errors bajo condiciones donde Streamlit no
+            # contaría (Entropy/CCS/TQI/Health bajos) → "HUD se bloquea por
+            # acumulación de errores" en la UI mientras god_active=false.
+            if _PILOT_AVAILABLE:
+                _hud_data_gt = state.get("hud_computed") or {}
+                _override_gt = bool(
+                    ((state.get("pilot") or {}).get("operator_override") or {}).get("active", False)
+                )
+                _th_data_gt = state.get("_table_health") if isinstance(state.get("_table_health"), dict) else None
+                _god_active_spin, _gt_failed = _pilot.is_god_active(
+                    hud_data=_hud_data_gt,
+                    decision=decision_local,
+                    verdict=_lv_prev,
+                    operator_override=_override_gt,
+                    table_health=_th_data_gt,
+                )
+            else:
+                # Fallback si el módulo pilot no carga (preserva criterio previo)
+                _cond_now = str(state.get("_cond_state", "") or "").strip().lower()
+                _ms_now = decision_local.get("mesa_score") if isinstance(decision_local, dict) else None
+                if not isinstance(_ms_now, dict):
+                    _ms_now = (last_suggestion or {}).get("decision", {}).get("mesa_score") or {}
+                _s10_now = int(_ms_now.get("score10", 0) or 0) if isinstance(_ms_now, dict) else 0
+                _god_active_spin = (_cond_now == "optimal" and _s10_now >= 7)
 
             # Solo contar si: GOD activo en este spin + hay una apuesta TARGET
             # + esa apuesta fue evaluable (ui_hit no es None).
@@ -724,107 +742,20 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                 pass
 
         # ════════════════════════════════════════════════════════════════
-        # ★★★ PILOT EVALUATE — igual que app.py L8156-8209 ★★★
-        # pilot.evaluate() genera el nuevo verdict (pick_bet, verdict GO/WAIT)
-        # y lo guarda en state["pilot"]["last_verdict"].
-        # record_outcome (más abajo) lo leerá en el PRÓXIMO spin,
-        # exactamente igual que en Streamlit.
+        # ★ PILOT EVALUATE — DELIBERADAMENTE NO VA AQUÍ.
+        # En Streamlit (app.py L8156-8209), pilot.evaluate() corre UNA sola
+        # vez al final del flujo del spin (después de append + record_outcome
+        # + register_spin). El verdict producido queda en state["pilot"][
+        # "last_verdict"] para que el SIGUIENTE spin lo use en record_outcome.
+        # El POST-SPIN REGEN más abajo (~L1148) hace esa única evaluación.
+        #
+        # ANTES (bug): aquí existía un PRE-spin evaluate que sobreescribía
+        # state["pilot"]["last_verdict"] ANTES de que record_outcome leyera
+        # ese campo en la línea ~1025. Resultado: record_outcome recibía un
+        # verdict fresco para ESTE spin en vez del verdict generado en el
+        # spin anterior. Eso desincronizaba progresión, override release y
+        # contadores. Eliminado en sincronización Fase 3 con Streamlit.
         # ════════════════════════════════════════════════════════════════
-                # ════════════════════════════════════════════════════════════════
-        # ★★★ PILOT EVALUATE — igual que app.py L8156-8209 ★★★
-        # ════════════════════════════════════════════════════════════════
-        if _PILOT_AVAILABLE:
-            try:
-                # Construir _decision_for_pilot igual que app.py L8158-8190
-                _decision_for_pilot = dict(decision_local) if isinstance(decision_local, dict) else {}
-
-                # Inyectar HUD state (app.py L8162-8167)
-                _hud_computed = state.get("hud_computed") or {}
-                _hud_cond_str = str(_hud_computed.get("state", "") or state.get("_cond_state", "") or "").upper()
-                _hud_cond_val = float(_hud_computed.get("cond", 0.0) or state.get("_cond_val_cache", 0.0) or 0.0)
-                _decision_for_pilot["_hud_cond_state"] = _hud_cond_str
-                _decision_for_pilot["_hud_table_entropy"] = _hud_cond_val
-                _decision_for_pilot["_hud_entropy_pure"] = _hud_cond_val
-
-                # Inyectar sanciones (app.py L8172-8175)
-                _sanc = state.get("category_sanctions", {}) or {}
-                _decision_for_pilot["_sanctioned_categories"] = [
-                    k for k, v in _sanc.items()
-                    if isinstance(v, dict) and v.get("active")
-                ]
-
-                # Inyectar god_category_stats (app.py L8178-8190)
-                _gc_root = state.get("counters_god", {}) or {}
-                _god_cat_stats = {}
-                for _bk_g in ("color", "paridad", "rango", "docenas", "columnas"):
-                    _gc = _gc_root.get(f"god_{_bk_g}", {}) or {}
-                    _gw = int(_gc.get("wins", 0))
-                    _gl = int(_gc.get("losses", 0))
-                    _gt = _gw + _gl
-                    _god_cat_stats[_bk_g] = {
-                        "wins": _gw, "losses": _gl,
-                        "hit_rate": (_gw / _gt) if _gt > 0 else 0.0,
-                    }
-                _decision_for_pilot["_god_category_stats"] = _god_cat_stats
-
-                _spins_for_pilot = list(state.get("spins", []) or [])
-                # stake_base del pilot está en state["pilot"]["stake_base"] (2500)
-                _ppr_params = state.get("pilot") or {}
-                _stake_base_pilot = float(_ppr_params.get("stake_base", 2500.0) or 2500.0)
-                if _stake_base_pilot <= 0:
-                    _stake_base_pilot = 2500.0
-                _pilot_params = {"stake_base": _stake_base_pilot}
-
-                # Inyectar state como contexto para que PilotState.get()
-                # use state["pilot"] en lugar de st.session_state["pilot"]
-                _pilot.set_state_context(state)
-                try:
-                    _verdict_result = _pilot.evaluate(
-                        _decision_for_pilot,
-                        _spins_for_pilot,
-                        _pilot_params,
-                    )
-                finally:
-                    _pilot.clear_state_context()
-
-                # ★ GOD-STRICT — mismas 4 condiciones que state_routes.py:
-                # 1) HUD=OPTIMAL  2) Radar>=7  3) Entropy>=50  4) CCS>=69
-                # Si alguna falla → verdict GO → STAND_DOWN
-                if isinstance(_verdict_result, dict) and _verdict_result.get("verdict") == "GO":
-                    _god_failed_proc = []
-
-                    # 1) HUD OPTIMAL
-                    if _hud_cond_str != "OPTIMAL":
-                        _god_failed_proc.append(f"HUD={_hud_cond_str or '—'}")
-
-                    # 2) Radar >= 7/10
-                    try:
-                        _ms_proc = (decision_local or {}).get("mesa_score", {})
-                        _s10_proc = float(_ms_proc.get("score10", 0.0) or 0.0)
-                    except Exception:
-                        _s10_proc = 0.0
-                    if _s10_proc < 7.0:
-                        _god_failed_proc.append(f"Radar={int(_s10_proc)}/10")
-
-                    # 3) Entropy >= 50/100
-                    if _hud_cond_val < 0.50:
-                        _god_failed_proc.append(f"Entropy={int(_hud_cond_val*100)}/100")
-
-                    # 4) CCS >= 69
-                    _ccs_pct = int(_verdict_result.get("ccs_pct", 0))
-                    if _ccs_pct < 69:
-                        _god_failed_proc.append(f"CCS={_ccs_pct}/100")
-
-                    if _god_failed_proc:
-                        _logger.warning(f"[GOD-STRICT] GO → STAND_DOWN. Razones: {_god_failed_proc}")
-                        _verdict_result["verdict"] = "STAND_DOWN"
-                        _verdict_result["god_blocked"] = True
-                        _verdict_result["god_block_reason"] = "GOD: " + " · ".join(_god_failed_proc)
-                    else:
-                        _logger.info(f"[GOD-STRICT] GO confirmado. HUD={_hud_cond_str} Radar={_s10_proc}/10 CCS={_ccs_pct}/100")
-
-            except Exception as _eval_err:
-                _logger.warning(f"pilot.evaluate falló: {_eval_err}", exc_info=True)
 
         # CUSUM state snapshot for UI
         try:
@@ -1207,33 +1138,25 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                 finally:
                     _pilot.clear_state_context()
 
-                # Reaplicar GOD-STRICT (mismas 4 condiciones que PRE-spin L736-770)
+                # Reaplicar GOD-STRICT — usa is_god_active() unificada (6 condiciones
+                # de Streamlit: HUD, Radar, Entropy, TQI, CCS, Health). Antes este
+                # bloque tenía las 4 condiciones inline duplicadas con el PRE-spin
+                # (que ya fue eliminado), creando divergencia vs Streamlit y vs
+                # state_routes.py. Ahora hay una sola fuente de verdad.
                 if isinstance(_verdict_post, dict) and _verdict_post.get("verdict") == "GO":
-                    _god_failed_post = []
+                    _override_post = bool(
+                        ((state.get("pilot") or {}).get("operator_override") or {}).get("active", False)
+                    )
+                    _th_data_post = state.get("_table_health") if isinstance(state.get("_table_health"), dict) else None
+                    _god_active_post, _god_failed_post = _pilot.is_god_active(
+                        hud_data=state.get("hud_computed") or {},
+                        decision=_decision_post,
+                        verdict=_verdict_post,
+                        operator_override=_override_post,
+                        table_health=_th_data_post,
+                    )
 
-                    # 1) HUD OPTIMAL
-                    if _hud_cs_post != "OPTIMAL":
-                        _god_failed_post.append(f"HUD={_hud_cs_post or '—'}")
-
-                    # 2) Radar >= 7/10
-                    try:
-                        _ms_post = (_decision_post or {}).get("mesa_score", {}) or {}
-                        _s10_post = float(_ms_post.get("score10", 0.0) or 0.0)
-                    except Exception:
-                        _s10_post = 0.0
-                    if _s10_post < 7.0:
-                        _god_failed_post.append(f"Radar={int(_s10_post)}/10")
-
-                    # 3) Entropy >= 50/100
-                    if _hud_cv_post < 0.50:
-                        _god_failed_post.append(f"Entropy={int(_hud_cv_post*100)}/100")
-
-                    # 4) CCS >= 69
-                    _ccs_post = int(_verdict_post.get("ccs_pct", 0))
-                    if _ccs_post < 69:
-                        _god_failed_post.append(f"CCS={_ccs_post}/100")
-
-                    if _god_failed_post:
+                    if not _god_active_post:
                         _logger.info(
                             f"[GOD-STRICT POST-SPIN] GO → STAND_DOWN. "
                             f"Razones: {_god_failed_post}"
@@ -1248,6 +1171,11 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                         _pilot_raw = state.get("pilot") or {}
                         if isinstance(_pilot_raw, dict):
                             _pilot_raw["last_verdict"] = _verdict_post
+                    # Marcar el verdict con el flag _god_active_now (paridad con
+                    # Streamlit app.py L8362-8370). El frontend / state_routes
+                    # pueden leerlo para mostrar el panel GOD correctamente.
+                    _verdict_post["_god_active_now"] = bool(_god_active_post)
+                    _verdict_post["_god_failed_reasons"] = list(_god_failed_post or [])
     except Exception as _regen_err:
         _logger.warning(f"POST-SPIN REGEN falló: {_regen_err}", exc_info=True)
 

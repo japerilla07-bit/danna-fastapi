@@ -1469,6 +1469,101 @@ def _check_hit(spin: int, bet_key: str, pick: Any) -> bool:
     return False
 
 
+def is_god_active(hud_data: dict, decision: dict, verdict: dict = None,
+                  operator_override: bool = False, table_health: dict = None):
+    """ÚNICA fuente de verdad para 'estamos en GOD ahora'.
+
+    Reglas GOD (las 6 deben cumplirse simultáneamente):
+      1) HUD == OPTIMAL
+      2) Radar (mesa_score.score10) ≥ 7/10
+      3) Table Entropy (hud_data.cond × 100) ≥ 50/100
+      4) TQI / Mesa Saludable (verdict.tqi.score) ≥ 70/100
+      5) CCS del TOP PICK ≥ 69%
+      6) Table Health (medidor lateral, analyze_table_health) ≥ 50/100
+
+    Si operator_override=True, retorna (True, []) sin chequear nada.
+    El operador asumió responsabilidad de su lectura visual.
+
+    Returns:
+        (active: bool, failed_reasons: list[str])
+    """
+    if operator_override:
+        return True, []
+
+    failed = []
+
+    # 1) HUD == OPTIMAL
+    hud_state = str((hud_data or {}).get("state", "")).strip().lower()
+    if hud_state != "optimal":
+        failed.append(f"HUD={hud_state.upper() or '—'}")
+
+    # 2) Radar ≥ 7/10
+    try:
+        _ms = (decision or {}).get("mesa_score") or {}
+        _s10 = float(_ms.get("score10", 0.0) or 0.0)
+        radar = _s10 / 10.0 if _s10 > 1.0 else float(_s10)
+    except Exception:
+        radar = 0.0
+    if radar < 0.70:
+        failed.append(f"Radar={int(round(radar*10))}/10")
+
+    # 3) Table Entropy ≥ 50/100 (cond compuesto del HUD)
+    try:
+        table_entropy = float((hud_data or {}).get("cond", 0.0) or 0.0)
+    except Exception:
+        table_entropy = 0.0
+    if table_entropy < 0.50:
+        failed.append(f"Entropy={int(round(table_entropy*100))}/100")
+
+    # 4) TQI ≥ 70/100
+    tqi = 0
+    try:
+        if isinstance(verdict, dict):
+            _tqi_d = verdict.get("tqi") or {}
+            if isinstance(_tqi_d, dict):
+                tqi = int(_tqi_d.get("score", 0) or 0)
+    except Exception:
+        tqi = 0
+    if tqi < 70:
+        failed.append(f"Mesa={tqi}/100")
+
+    # 5) CCS del TOP PICK ≥ 69%
+    #    El "TARGET LOCK" visual de la card representa la convicción real
+    #    de la apuesta principal. Si el CCS es bajo (< 69%), la mesa puede
+    #    cumplir HUD/Radar/Entropy/TQI pero el pick no tiene fuerza
+    #    estadística suficiente. Bloqueamos GOD en ese caso.
+    top_ccs = 0
+    try:
+        if isinstance(verdict, dict):
+            _pb = verdict.get("pick_bet") or {}
+            if isinstance(_pb, dict):
+                # score viene 0..1; score_pct viene 0..100
+                if "score_pct" in _pb:
+                    top_ccs = int(round(float(_pb.get("score_pct", 0.0) or 0.0)))
+                else:
+                    top_ccs = int(round(float(_pb.get("score", 0.0) or 0.0) * 100.0))
+    except Exception:
+        top_ccs = 0
+    if top_ccs < 69:
+        failed.append(f"CCS={top_ccs}/100")
+
+    # 6) Table Health ≥ 50/100
+    #    El medidor "TABLE ENTROPY" lateral (analyze_table_health del engine).
+    #    Refleja la racha reciente real: arranca 50, +5 win / -4 loss en
+    #    los últimos 15 spins. Si está bajo 50, la mesa viene perdedora
+    #    y NO se debe operar aunque las otras condiciones se cumplan.
+    th_score = 50
+    try:
+        if isinstance(table_health, dict):
+            th_score = int(float(table_health.get("score", 50) or 50))
+    except Exception:
+        th_score = 50
+    if th_score < 50:
+        failed.append(f"Health={th_score}/100")
+
+    return (len(failed) == 0), failed
+
+
 def reset_pilot():
     st.session_state["pilot"] = PilotState._fresh()
 

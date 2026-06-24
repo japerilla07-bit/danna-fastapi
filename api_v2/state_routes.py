@@ -23,6 +23,10 @@ from core.engine_pool import engine_pool
 from danna_core.processor_helpers import _ensure_last_suggestion_current
 from danna_core.helpers import _deep_jsonable
 
+# is_god_active vive en pilot.py — ÚNICA fuente de verdad para las 6
+# condiciones de GOD (HUD, Radar, Entropy, TQI, CCS, Health).
+from pilot import is_god_active
+
 log = logging.getLogger("state_routes")
 router = APIRouter(prefix="/api", tags=["state"])
 
@@ -332,22 +336,29 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
     _ms_god = (payload or {}).get("decision", {}).get("mesa_score", {}) or {}
     god_score10 = int(_ms_god.get("score10", 0) or 0)
 
-    _god_failed = []
-    if _god_cond_state != "optimal":
-        _god_failed.append(f"HUD={_god_cond_state.upper()}")
-    if god_score10 < 7:
-        _god_failed.append(f"Radar={god_score10}/10")
+    # Pre-calcular valores que el bloque _debug expone (mismas semánticas que antes):
     _table_entropy_pct = int(round(_hud_cond_value * 100))
-    if _table_entropy_pct < 50:
-        _god_failed.append(f"Entropy={_table_entropy_pct}/100")
-    _top_ccs = last_verdict.get("ccs_pct", 0)
-    if _top_ccs < 69:
-        _god_failed.append(f"CCS={_top_ccs}/100")
+    _top_ccs = int(last_verdict.get("ccs_pct", 0) or 0)
     _th_cached = sess.get("_table_health", None) or {}
     _table_health_score = int(_th_cached.get("score", 0) or 0)
-    if _table_health_score > 0 and _table_health_score < 50:
-        _god_failed.append(f"Health={_table_health_score}/100")
-    god_active = len(_god_failed) == 0
+
+    # ★ ÚNICA fuente de verdad: pilot.is_god_active() con las 6 condiciones
+    # de Streamlit (HUD, Radar, Entropy, TQI, CCS, Health). Antes esta ruta
+    # tenía 5 condiciones inline (sin TQI), divergentes con processor.py
+    # (que tenía 4) y con Streamlit (que tiene 6). Ahora hay paridad total.
+    _hud_data_sr = {
+        "state": _god_cond_state,
+        "cond": float(_hud_cond_value or 0.0),
+    }
+    _decision_sr = (payload or {}).get("decision", {}) or {}
+    _override_sr = bool((_pilot_raw.get("operator_override") or {}).get("active", False))
+    god_active, _god_failed = is_god_active(
+        hud_data=_hud_data_sr,
+        decision=_decision_sr,
+        verdict=last_verdict,
+        operator_override=_override_sr,
+        table_health=sess.get("_table_health"),
+    )
 
     god_bet_block = {
         "active": god_active,
