@@ -281,7 +281,7 @@ const fmtPctClass = (pct: number): string => {
 
 // ── Componente principal ─────────────────────────────────────────
 
-export function QuantumPilot({ godBet, counters }: Props) {
+export function QuantumPilot({ godBet, counters, bankroll }: Props) {
   const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
   const [override, setOverride] = useState<OverrideState | null>(null);
