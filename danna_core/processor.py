@@ -1248,3 +1248,139 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
         _logger.warning(f"POST-SPIN REGEN falló: {_regen_err}", exc_info=True)
 
     _emit_rerun(on_rerun)
+
+
+# ════════════════════════════════════════════════════════════════════
+# regenerate_verdict_after_override
+# ════════════════════════════════════════════════════════════════════
+def regenerate_verdict_after_override(state, *, engine_instance=None):
+    """
+    Regenera state['pilot']['last_verdict'] tras un cambio de override.
+
+    PROBLEMA QUE RESUELVE:
+    /api/pilot/override solo escribe pilot.raw.override_bet_key/pick pero
+    NO regenera el verdict. Eso dejaba el last_verdict OBSOLETO hasta el
+    próximo spin. Cuando el operador hacía un spin tras activar override,
+    record_outcome leía el verdict viejo (típicamente STAND_DOWN porque
+    GOD-STRICT lo había degradado sin override activo) y salía sin
+    procesar la apuesta. Bankroll, contadores y progresión no se movían.
+
+    Este helper replica el pipeline POST-SPIN REGEN sin procesar un spin
+    nuevo: construye la decision, llama evaluate(), aplica GOD-STRICT y
+    persiste el verdict en state["pilot"]["last_verdict"].
+
+    Retorna el verdict regenerado, o None si falla (no fatal: el override
+    queda activo y el siguiente spin lo absorberá vía 1-spin lag).
+    """
+    if not _PILOT_AVAILABLE:
+        _logger.warning("[OVERRIDE-REGEN] pilot no disponible — omitiendo regen")
+        return None
+
+    try:
+        # 1. Construir decision fresca (mismo helper que POST-SPIN REGEN)
+        regen_payload = _ensure_last_suggestion_current(state, engine_instance=engine_instance)
+        if not isinstance(regen_payload, dict):
+            return None
+
+        decision = regen_payload.get("decision", {}) or {}
+        if not isinstance(decision, dict):
+            return None
+        decision = dict(decision)
+
+        # 2. Inyectar HUD state (igual que POST-SPIN REGEN línea 1153-1163)
+        hud = state.get("hud_computed") or {}
+        hud_cs = str(
+            hud.get("state", "") or state.get("_cond_state", "") or ""
+        ).upper()
+        hud_cv = float(
+            hud.get("cond", 0.0) or state.get("_cond_val_cache", 0.0) or 0.0
+        )
+        decision["_hud_cond_state"] = hud_cs
+        decision["_hud_table_entropy"] = hud_cv
+        decision["_hud_entropy_pure"] = hud_cv
+
+        # 3. Inyectar sanciones (igual que POST-SPIN REGEN línea 1166-1170)
+        sanc = state.get("category_sanctions", {}) or {}
+        decision["_sanctioned_categories"] = [
+            k for k, v in sanc.items()
+            if isinstance(v, dict) and v.get("active")
+        ]
+
+        # 4. Inyectar god_category_stats (igual que POST-SPIN REGEN L1173-1184)
+        gc_root = state.get("counters_god", {}) or {}
+        cat_stats = {}
+        for bk in ("color", "paridad", "rango", "docenas", "columnas"):
+            gc = gc_root.get(f"god_{bk}", {}) or {}
+            gw = int(gc.get("wins", 0))
+            gl = int(gc.get("losses", 0))
+            gt = gw + gl
+            cat_stats[bk] = {
+                "wins": gw, "losses": gl,
+                "hit_rate": (gw / gt) if gt > 0 else 0.0,
+            }
+        decision["_god_category_stats"] = cat_stats
+
+        # 5. Pilot params (mismo source que POST-SPIN REGEN L1187-1193)
+        pp = state.get("pilot") or {}
+        stake_base = float(pp.get("stake_base", 2500.0) or 2500.0)
+        if stake_base <= 0:
+            stake_base = 2500.0
+        params = {"stake_base": stake_base}
+
+        spins = state.get("spins", []) or []
+
+        # 6. Refrescar hud_computed (puede estar stale si no hubo spin)
+        state["hud_computed"] = _compute_hud_data(decision, state)
+
+        # 7. Run evaluate (con override aplicado, evaluate lo respetará vía sticky)
+        _pilot.set_state_context(state)
+        try:
+            verdict_new = _pilot.evaluate(decision, spins, params)
+        finally:
+            _pilot.clear_state_context()
+
+        if not isinstance(verdict_new, dict):
+            return None
+
+        # 8. Aplicar GOD-STRICT (igual que POST-SPIN REGEN L1213-1245).
+        # Ahora SÍ pasamos operator_override=True (porque acabamos de
+        # activar el override) → is_god_active retorna (True, []) →
+        # bypassea las 6 condiciones → verdict GO sobrevive.
+        if verdict_new.get("verdict") == "GO":
+            override_post = bool((state.get("pilot") or {}).get("override_bet_key"))
+            th_data = state.get("_table_health") if isinstance(state.get("_table_health"), dict) else None
+            god_active, god_failed = _pilot.is_god_active(
+                hud_data=state.get("hud_computed") or {},
+                decision=decision,
+                verdict=verdict_new,
+                operator_override=override_post,
+                table_health=th_data,
+            )
+            if not god_active:
+                _logger.info(
+                    f"[OVERRIDE-REGEN] GOD-STRICT degrada GO→STAND_DOWN. "
+                    f"Razones: {god_failed}"
+                )
+                verdict_new["verdict"] = "STAND_DOWN"
+                verdict_new["god_blocked"] = True
+                verdict_new["god_block_reason"] = "GOD: " + " · ".join(god_failed)
+                # Persistir mutación (evaluate ya escribió en last_verdict,
+                # ahora lo sobrescribimos con la versión degradada)
+                pilot_raw = state.get("pilot") or {}
+                if isinstance(pilot_raw, dict):
+                    pilot_raw["last_verdict"] = verdict_new
+            verdict_new["_god_active_now"] = bool(god_active)
+            verdict_new["_god_failed_reasons"] = list(god_failed or [])
+
+        _logger.info(
+            f"[OVERRIDE-REGEN] verdict regenerado: "
+            f"verdict={verdict_new.get('verdict')} "
+            f"bet_key={(verdict_new.get('pick_bet') or {}).get('bet_key')} "
+            f"ccs={verdict_new.get('ccs_pct')}% "
+            f"override_forced_go={verdict_new.get('override_forced_go')}"
+        )
+
+        return verdict_new
+    except Exception as e:
+        _logger.warning(f"[OVERRIDE-REGEN] fallo (no fatal): {e}", exc_info=True)
+        return None

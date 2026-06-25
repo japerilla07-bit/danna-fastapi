@@ -19,6 +19,7 @@ from auth import get_user_info
 from core.jwt_utils import decode_token
 from core.auth_helpers import require_active_user
 from core.session_manager import session_manager
+from core.engine_pool import engine_pool
 
 # pilot.py vive en backend/pilot.py (al lado de main.py)
 from pilot import (
@@ -29,6 +30,11 @@ from pilot import (
     get_operator_override,
     PilotState,
 )
+
+# regenerate_verdict_after_override vive en danna_core/processor.py.
+# Se llama tras cada activación/cambio/limpieza de override para evitar
+# el desync entre pilot.raw.override_bet_key y state.pilot.last_verdict.
+from danna_core.processor import regenerate_verdict_after_override
 
 log = logging.getLogger("pilot_routes")
 router = APIRouter(prefix="/api/pilot", tags=["pilot"])
@@ -56,6 +62,14 @@ def post_override(
     Activa override del operador: el Pilot tomará la apuesta indicada
     como la elegida por el usuario para los próximos giros, hasta que
     acierte (HIT) o agote la progresión (L4 MISS).
+
+    ★ FIX: tras escribir override_bet_key/pick en pilot.raw, regenera
+    INMEDIATAMENTE state.pilot.last_verdict con el override aplicado.
+    Sin esto el verdict quedaba obsoleto (típicamente STAND_DOWN porque
+    GOD-STRICT lo había degradado en POST-SPIN REGEN del spin anterior,
+    cuando override no estaba activo). El próximo spin leía ese verdict
+    obsoleto y record_outcome salía sin procesar la apuesta → bankroll,
+    contadores y progresión no se movían.
     """
     username = user["username"]
     sess = session_manager.get(username)
@@ -76,6 +90,20 @@ def post_override(
     finally:
         clear_state_context(token)
 
+    # ★ Regenerar last_verdict para reflejar el override RECIÉN activado.
+    # Defensivo: si falla, no rompemos el endpoint — el override queda
+    # activo y el siguiente spin lo "absorberá" via 1-spin lag (peor caso,
+    # comportamiento previo al fix).
+    try:
+        engine = engine_pool.get_engine(username)
+        regenerated = regenerate_verdict_after_override(sess, engine_instance=engine)
+        if regenerated is not None:
+            session_manager.save(username)
+        else:
+            log.warning(f"[OVERRIDE] regen retornó None para user={username}")
+    except Exception as e:
+        log.warning(f"[OVERRIDE] regen del verdict falló (no fatal): {e}")
+
     log.info(f"[OVERRIDE] user={username} bet_key={bk} pick={body.pick}")
     return {
         "success": True,
@@ -85,7 +113,12 @@ def post_override(
 
 @router.post("/override/clear")
 def post_override_clear(user: dict = Depends(require_active_user)):
-    """Libera el override manualmente."""
+    """Libera el override manualmente.
+
+    ★ Tras limpiar, también regenera el verdict para que el siguiente spin
+    use la sugerencia del motor (sin override) en lugar del verdict
+    obsoleto que tenía override aplicado.
+    """
     username = user["username"]
     sess = session_manager.get(username)
 
@@ -94,6 +127,15 @@ def post_override_clear(user: dict = Depends(require_active_user)):
         result = clear_operator_override()
     finally:
         clear_state_context(token)
+
+    # Regenerar last_verdict sin override (mismo motivo que /override)
+    try:
+        engine = engine_pool.get_engine(username)
+        regenerated = regenerate_verdict_after_override(sess, engine_instance=engine)
+        if regenerated is not None:
+            session_manager.save(username)
+    except Exception as e:
+        log.warning(f"[OVERRIDE-CLEAR] regen del verdict falló (no fatal): {e}")
 
     log.info(f"[OVERRIDE] user={username} CLEARED")
     return {
