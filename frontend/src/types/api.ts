@@ -328,6 +328,16 @@ export interface PilotVerdict {
   readonly pro_mode: ProModeState;
   readonly god_filter: GodFilterState;
   readonly operator_override: OperatorOverrideInVerdict;
+  /**
+   * True cuando el verdict GO se generó porque el operador activó override
+   * con CCS >= 60% en una mesa CAUTION (caso típico). El motor sin override
+   * habría dado WAIT. El frontend usa este flag para mostrar un badge
+   * "OVERRIDE FORZADO" junto al TARGET LOCK.
+   *
+   * Fuente: pilot.py:evaluate() — Opción C override floor 60%, no bypassea
+   * vetos duros (ABORT/CRITICAL/sanctions) ni filtros PRO/GOD opt-in.
+   */
+  readonly override_forced_go?: boolean;
   readonly n_spins: number;
   readonly tqi: TQI | null;
 }

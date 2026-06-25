@@ -837,6 +837,7 @@ def evaluate(decision: dict, spins: List[int],
     scored.sort(key=lambda x: -x["score"])
 
     override_bk = pilot.raw.get("override_bet_key")
+    override_was_applied = False
     chosen_default = scored[0]
     chosen = chosen_default
 
@@ -848,6 +849,7 @@ def evaluate(decision: dict, spins: List[int],
                 break
         if ovr_match is not None and str(ovr_match.get("bet_key", "")).lower() not in sanctioned_set:
             chosen = ovr_match
+            override_was_applied = True
             ovr_pick = pilot.raw.get("override_pick")
             if ovr_pick is not None:
                 chosen = dict(chosen)
@@ -900,6 +902,54 @@ def evaluate(decision: dict, spins: List[int],
             verdict = "STAND_DOWN"
         else:
             _logger.info(f"[PROGRESSION] REGIME_ENDED ignorado (level={cur_progression}). Manteniendo progresión.")
+
+    # ════════════════════════════════════════════════════════════════
+    # ★ OVERRIDE OPCIÓN C — el operador toma el control
+    # ════════════════════════════════════════════════════════════════
+    # Cuando el operador activó override sobre una categoría con CCS >= 60%
+    # y la mesa no está en estado de bloqueo duro (ABORT/CRITICAL/sanctions),
+    # se FUERZA el verdict a GO ignorando el threshold de Pilot.
+    #
+    # Caso típico que esto resuelve:
+    #   - HUD CAUTION → thr_go sube a 62%
+    #   - Sugerencia override con CCS 60-62%
+    #   - Sin Opción C: verdict=WAIT, no apuesta
+    #   - Con Opción C: verdict=GO con override_forced_go=True
+    #
+    # Lo que NO bypassea:
+    #   - veto_active (HUD ABORT/CRITICAL, todas las cat. sancionadas)
+    #   - REGIME_ENDED L1 → STAND_DOWN ya degradó arriba
+    #   - PRO MODE filter (más abajo) si el operador opt-in a stricter
+    #   - GOD FILTER (más abajo) si el operador opt-in a stricter
+    #
+    # Diverge intencionalmente de Streamlit, a favor del operador. Streamlit
+    # tenía override que solo cambiaba la categoría elegida sin forzar GO
+    # cuando el threshold no se cumplía. Aquí lo hacemos más útil sin
+    # quitarte las salvaguardas duras (vetos, sanciones, modos opt-in).
+    # ════════════════════════════════════════════════════════════════
+    override_forced_go = False
+    OVERRIDE_FLOOR = 0.60
+    if (override_was_applied
+            and not veto_active
+            and chosen_score >= OVERRIDE_FLOOR
+            and verdict != "GO"):
+        _verdict_pre_force = verdict
+        verdict = "GO"
+        override_forced_go = True
+        _logger.info(
+            f"[OVERRIDE-FORCE] verdict {_verdict_pre_force}→GO "
+            f"(CCS={chosen_score*100:.0f}% >= 60%, op_state={op_state}, "
+            f"thr_go_actual={thr_go*100:.0f}%)"
+        )
+    elif override_was_applied and chosen_score < OVERRIDE_FLOOR:
+        _logger.info(
+            f"[OVERRIDE-FLOOR] CCS={chosen_score*100:.0f}% < 60% piso, "
+            f"override no fuerza (verdict={verdict})"
+        )
+    elif override_was_applied and veto_active:
+        _logger.info(
+            f"[OVERRIDE-VETO] override ignorado por veto duro: {veto_reasons}"
+        )
 
     # Modo PRO
     pro_mode_active = bool(pilot.raw.get("pro_mode_active", False))
@@ -957,6 +1007,10 @@ def evaluate(decision: dict, spins: List[int],
         params=p,
         spins_count=len(spins),
     )
+    # ★ OPCIÓN C: marcar el verdict para que el frontend muestre badge
+    # "OVERRIDE FORZADO" cuando el operador empujó el GO sobre el
+    # threshold del Pilot (CCS entre 60% y thr_go).
+    _result["override_forced_go"] = bool(override_forced_go)
     try:
         _tqi = _compute_tqi(decision, spins, pilot)
         _result["tqi"] = _tqi

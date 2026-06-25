@@ -74,6 +74,12 @@ interface GodBetData {
   last_verdict?: {
     verdict: 'GO' | 'WAIT' | 'STAND_DOWN';
     ccs_pct: number;
+    /**
+     * ★ True cuando el operador activó override con CCS≥60% y el motor sin
+     * override habría dado WAIT. Backend lo estampa en pilot.py (Opción C).
+     * El HUD muestra un badge "OVERRIDE FORZADO" cuando es true.
+     */
+    override_forced_go?: boolean;
     pick_bet: {
       bet_key: string;
       label: string;
@@ -112,6 +118,11 @@ interface Bankroll {
   initial: number;
   pnl: number;
   pnl_pct: number;
+  /**
+   * ★ Stake base configurado (default 2500). Lo expone /api/bankroll y se
+   * usa para proyectar la ladder L1-L4 del panel PROGRESIÓN.
+   */
+  stake_base?: number;
 }
 
 interface OverrideState {
@@ -748,6 +759,25 @@ export function QuantumPilot({ godBet, counters }: Props) {
               >
                 {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : 'TARGET LOCK'}
               </span>
+              {/* ★ Badge OVERRIDE FORZADO: el operador empujó el GO sobre
+                 thr_go del Pilot vía Opción C (CCS 60-thr_go% en CAUTION).
+                 Indica visualmente que esta apuesta es decisión MANUAL del
+                 operador, no convicción autónoma del motor. */}
+              {verdict?.override_forced_go ? (
+                <span
+                  className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+                  style={{
+                    letterSpacing: '0.2em',
+                    color: '#fde68a',
+                    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+                    border: '1px solid rgba(251, 191, 36, 0.4)',
+                    textShadow: '0 0 6px rgba(251, 191, 36, 0.45)',
+                  }}
+                  title="Override forzó GO sobre threshold del Pilot (CCS ≥ 60% en mesa CAUTION)"
+                >
+                  OVERRIDE FORZADO
+                </span>
+              ) : null}
               <span
                 className="text-base font-black"
                 style={{
@@ -1021,6 +1051,172 @@ export function QuantumPilot({ godBet, counters }: Props) {
             {totalBets > 0 ? hitRate.toFixed(0) : '0'}%
           </span>
         </div>
+
+        {/* ═══ 5.5. PROGRESIÓN L1→L4 ═══
+            Bloque que muestra el nivel actual + proyección del siguiente
+            escalón en los DOS escenarios posibles del BankrollGuardian:
+              - sigue en la misma "familia" (doble→doble = ×3, simple→simple = ×2)
+              - cambia de familia (doble→simple = ×2, simple→doble = ×6)
+            En L4 muestra ⚠ TECHO y la próxima L1 ya que MISS o HIT en L4
+            siempre resetea a L1. */}
+        {(() => {
+          // Cálculos derivados del state real ─────────────────────────────
+          const stakeBase = Math.max(0, bankroll?.stake_base ?? 2500);
+          const currLevel = Math.max(1, Math.min(4, pickBet?.level ?? 1));
+          const currBetKey = pickBet?.bet_key ?? null;
+          const currStakeTotal = pickBet?.stake_total ?? 0;
+          const isDoubleCat = (bk: string | null): boolean =>
+            bk === 'docenas' || bk === 'columnas';
+          const currIsDouble = currBetKey ? isDoubleCat(currBetKey) : null;
+
+          // Multiplicadores ESPEJO de BankrollGuardian.stake_total_for_pick
+          // (pilot.py:568-577).
+          //   last_was_double, new_is_double   → 3
+          //   last_was_double, new_simple      → 2
+          //   last_simple, new_simple          → 2
+          //   last_simple, new_is_double       → 6
+          const projectNext = (
+            stakeAhora: number,
+            lastIsDouble: boolean | null
+          ): { sameDouble: number; sameSimple: number } => {
+            if (lastIsDouble === null) {
+              // Sin pick activo: proyectar L1 base para ambas familias.
+              return {
+                sameDouble: stakeBase * 2, // L1 docenas/columnas = stake × 2 líneas
+                sameSimple: stakeBase, // L1 simples = stake × 1 línea
+              };
+            }
+            if (lastIsDouble) {
+              return {
+                sameDouble: stakeAhora * 3, // doble → doble
+                sameSimple: stakeAhora * 2, // doble → simple
+              };
+            }
+            return {
+              sameDouble: stakeAhora * 6, // simple → doble
+              sameSimple: stakeAhora * 2, // simple → simple
+            };
+          };
+
+          const fmt = (n: number) =>
+            '$' +
+            Math.round(n)
+              .toString()
+              .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+          const proj = projectNext(currStakeTotal, currIsDouble);
+          const isL4 = currLevel === 4;
+          const hasActiveBet = pickBet !== null && currBetKey !== null;
+          const familyLabel = currIsDouble === null
+            ? '—'
+            : currIsDouble
+            ? 'doble → doble'
+            : 'simple → simple';
+          const familyAltLabel = currIsDouble === null
+            ? '—'
+            : currIsDouble
+            ? 'doble → simple'
+            : 'simple → doble';
+
+          return (
+            <div className="flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-1.5 px-1">
+                <span
+                  className="text-[10px] text-cyan-500/70"
+                  style={{ letterSpacing: '0.3em' }}
+                >
+                  PROGRESIÓN
+                </span>
+                <span
+                  className={`text-[10px] font-mono tracking-wider ${
+                    isL4 ? 'text-rose-300' : 'text-cyan-300/80'
+                  }`}
+                >
+                  L{currLevel} / 4{isL4 ? ' ⚠ TECHO' : ''}
+                </span>
+              </div>
+
+              {/* Bloque principal */}
+              <div
+                className="rounded-md border px-3 py-2 flex flex-col gap-1.5"
+                style={{
+                  borderColor: isL4
+                    ? 'rgba(244, 63, 94, 0.35)'
+                    : 'rgba(34, 211, 238, 0.18)',
+                  backgroundColor: isL4
+                    ? 'rgba(244, 63, 94, 0.05)'
+                    : 'rgba(15, 23, 42, 0.45)',
+                }}
+              >
+                {/* AHORA */}
+                {hasActiveBet ? (
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[9px] uppercase tracking-[0.25em] text-cyan-500/60">
+                      ahora
+                    </span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[10px] text-slate-300/80 uppercase tracking-wider">
+                        {CAT_SHORT[currBetKey ?? ''] ?? currBetKey}
+                      </span>
+                      <span className="text-[10px] text-cyan-300/80 font-mono">
+                        L{currLevel}
+                      </span>
+                      <span
+                        className="text-sm font-mono font-bold"
+                        style={{
+                          color: isL4 ? '#fda4af' : '#67e8f9',
+                          textShadow: isL4
+                            ? '0 0 6px rgba(244, 63, 94, 0.35)'
+                            : '0 0 6px rgba(34, 211, 238, 0.35)',
+                        }}
+                      >
+                        {fmt(currStakeTotal)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-500/70 italic text-center py-0.5">
+                    sin apuesta activa
+                  </div>
+                )}
+
+                {/* Divisor */}
+                <div className="h-px bg-cyan-500/15" />
+
+                {/* SI MISS, PRÓXIMO  /  L4 → reset L1 */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[9px] uppercase tracking-[0.25em] text-cyan-500/60">
+                    {isL4
+                      ? 'si miss o hit → reset L1'
+                      : hasActiveBet
+                      ? `si miss, próximo L${currLevel + 1}`
+                      : 'próxima L1 según categoría'}
+                  </span>
+
+                  <div className="flex flex-col gap-0.5 pl-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400/80">
+                        ├─ {familyLabel}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-200/90">
+                        {fmt(proj.sameDouble)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400/80">
+                        └─ {familyAltLabel}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-200/90">
+                        {fmt(proj.sameSimple)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ═══ 6. EFICIENCIA POR CATEGORÍA ═══ */}
         <div className="flex flex-col">

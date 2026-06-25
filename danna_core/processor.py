@@ -764,9 +764,10 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
             # acumulación de errores" en la UI mientras god_active=false.
             if _PILOT_AVAILABLE:
                 _hud_data_gt = state.get("hud_computed") or {}
-                _override_gt = bool(
-                    ((state.get("pilot") or {}).get("operator_override") or {}).get("active", False)
-                )
+                # FIX OVERRIDE: la estructura real del state guarda override_bet_key
+                # como campo plano en pilot.raw, NO existe pilot.operator_override.
+                # is_god_active() bypassea las 6 condiciones si recibe override=True.
+                _override_gt = bool((state.get("pilot") or {}).get("override_bet_key"))
                 _th_data_gt = state.get("_table_health") if isinstance(state.get("_table_health"), dict) else None
                 _god_active_spin, _gt_failed = _pilot.is_god_active(
                     hud_data=_hud_data_gt,
@@ -1210,9 +1211,10 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                 # (que ya fue eliminado), creando divergencia vs Streamlit y vs
                 # state_routes.py. Ahora hay una sola fuente de verdad.
                 if isinstance(_verdict_post, dict) and _verdict_post.get("verdict") == "GO":
-                    _override_post = bool(
-                        ((state.get("pilot") or {}).get("operator_override") or {}).get("active", False)
-                    )
+                    # FIX OVERRIDE: la estructura real del state guarda override_bet_key
+                    # como campo plano en pilot.raw, NO existe pilot.operator_override.
+                    # is_god_active() bypassea las 6 condiciones si recibe override=True.
+                    _override_post = bool((state.get("pilot") or {}).get("override_bet_key"))
                     _th_data_post = state.get("_table_health") if isinstance(state.get("_table_health"), dict) else None
                     _god_active_post, _god_failed_post = _pilot.is_god_active(
                         hud_data=state.get("hud_computed") or {},

@@ -354,7 +354,10 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
         "cond": float(_hud_cond_value or 0.0),
     }
     _decision_sr = (payload or {}).get("decision", {}) or {}
-    _override_sr = bool((_pilot_raw.get("operator_override") or {}).get("active", False))
+    # FIX OVERRIDE: la estructura real del state guarda override_bet_key
+    # como campo plano en pilot.raw, NO existe pilot.operator_override.
+    # is_god_active() bypassea las 6 condiciones si recibe override=True.
+    _override_sr = bool(_pilot_raw.get("override_bet_key"))
     god_active, _god_failed = is_god_active(
         hud_data=_hud_data_sr,
         decision=_decision_sr,
