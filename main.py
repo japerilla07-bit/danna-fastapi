@@ -164,6 +164,13 @@ try:
 except Exception as e:
     log.error(f"No pude montar api_v2.pilot_routes: {e}")
 
+try:
+    from api_v2.admin_routes import router as admin_router
+    app.include_router(admin_router)
+    log.info("api_v2.admin_routes montado (/api/admin/users, /api/admin/users/approve, ...)")
+except Exception as e:
+    log.error(f"No pude montar api_v2.admin_routes: {e}")
+
 # ── Maintenance del session_manager ─────────────────────────────
 try:
     from core.session_manager import session_manager

@@ -9,6 +9,7 @@
 // Port de render_sidebar() en app.py L4138-4415.
 
 import { useState } from 'react';
+import { AdminPanel } from './AdminPanel';
 
 interface Props {
   user: { username: string; plan: string; spins_remaining: number } | null;
@@ -167,17 +168,7 @@ export function SidebarDrawer({ user, spinsCount, onReset }: Props) {
                 <span>🔴 ADMIN PANEL</span>
                 <span className="sidebar-chevron">{activeSection === 'admin' ? '▾' : '▸'}</span>
               </div>
-              {activeSection === 'admin' && (
-                <div className="sidebar-collapsible-body">
-                  <div className="sidebar-admin-note">
-                    Panel de administración disponible. Acceso completo al sistema.
-                  </div>
-                  <div className="sidebar-kv">
-                    <span className="sidebar-k">PLAN</span>
-                    <span className="sidebar-v" style={{ color: 'var(--red)' }}>ADMIN — ACCESO TOTAL</span>
-                  </div>
-                </div>
-              )}
+              {activeSection === 'admin' && <AdminPanel />}
             </>
           )}
 
