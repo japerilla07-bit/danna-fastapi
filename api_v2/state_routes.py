@@ -347,6 +347,27 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
         log.warning(f"active_bets compute falló: {_e}")
         _god_active_bets = []
 
+    # ── VALIDACION: mejor p crudo del ensemble, SIEMPRE ──────────────
+    # Independiente del estado (BET/PROBE/WAIT) y de si GOD esta activo.
+    # Recorre TODAS las categorias en bet_advice y toma el p mas alto,
+    # junto con la categoria a la que pertenece. Para anotar en cada spin
+    # y validar si el p crudo predice, aunque el paño diga WAIT.
+    _best_p_raw = 0.0
+    _best_p_key = "—"
+    try:
+        _ba_all = (payload or {}).get("decision", {}).get("bet_advice", {}) or {}
+        for _bk_all in ("docenas", "columnas", "color", "paridad", "rango"):
+            _e_all = _ba_all.get(_bk_all, {}) or {}
+            _p_all = float(_e_all.get("p", _e_all.get("top_probability", 0.0)) or 0.0)
+            if _p_all > _best_p_raw:
+                _best_p_raw = _p_all
+                _best_p_key = _bk_all
+        _best_p_raw = round(_best_p_raw, 4)
+    except Exception as _e:
+        log.warning(f"best_p_raw compute falló: {_e}")
+        _best_p_raw = 0.0
+        _best_p_key = "—"
+
     # ★ Fuente de verdad: last_verdict del pilot
     _pilot_raw = sess.get("pilot") or {}
     last_verdict = _pilot_raw.get("last_verdict") if isinstance(_pilot_raw, dict) else None
@@ -399,6 +420,10 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
         "ccs_buckets": _pilot_raw.get("ccs_buckets", {}) or {},
         "active_bets": _god_active_bets,
         "failed_reasons": _god_failed,
+        # VALIDACION: mejor p crudo del ensemble este spin, SIEMPRE presente
+        # (aunque el estado sea WAIT y no haya target). Para anotar y validar.
+        "best_p_raw": _best_p_raw,
+        "best_p_key": _best_p_key,
         # ★ Contador TARGET LOCK (GOD): cuenta SOLO el pick que TARGET LOCK
         # muestra, solo cuando GOD activo, cruzando categorias. Fuente unica
         # para el panel ERRORES del QuantumPilot.

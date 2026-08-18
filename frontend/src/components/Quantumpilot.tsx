@@ -70,6 +70,8 @@ interface GodBetData {
   counters_god: Record<string, any>;
   god_target?: GodTarget;
   active_bets: ActiveBet[];
+  best_p_raw?: number;   // VALIDACION: mejor p crudo del ensemble, siempre presente
+  best_p_key?: string;   // categoria del mejor p
   // ★ god_stats viene DIRECTO de pilot.raw → siempre fresco post-record_outcome
   god_stats?: GodStats;
   last_verdict?: {
@@ -630,6 +632,28 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
               {godBet.radar_score}/10
             </span>
           </div>
+          {/* VALIDACION: chip p crudo del ensemble — SIEMPRE visible (WAIT/BET/
+              PROBE), muestra el mejor p del spin y su categoria. Display puro,
+              no afecta ninguna decision. Para anotar en cada spin. */}
+          <div
+            className="flex flex-col items-center justify-center px-3 py-2.5 rounded-md min-w-[60px]"
+            style={{
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(8, 12, 22, 0.7) 100%)',
+              border: '1px solid rgba(34, 211, 238, 0.15)',
+              boxShadow: 'inset 0 1px 0 rgba(34, 211, 238, 0.06)',
+            }}
+            title={`Mejor p crudo del ensemble (${godBet.best_p_key ?? '—'})`}
+          >
+            <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.25em' }}>
+              P
+            </span>
+            <span
+              className="font-black text-base font-mono"
+              style={{ color: '#67e8f9', textShadow: '0 0 6px rgba(34, 211, 238, 0.4)' }}
+            >
+              {godBet.best_p_raw != null ? (godBet.best_p_raw * 100).toFixed(1) : '—'}%
+            </span>
+          </div>
         </div>
 
         {/* ═══ Mesa CCS bar ═══ */}
@@ -821,19 +845,6 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
                 {topPick.pick_pretty}
               </span>
             </div>
-            {/* VALIDACION: p crudo del ensemble — solo para anotar y validar.
-                No afecta ninguna decision, es display puro. */}
-            {topPick.p_raw != null && (
-              <div className="flex justify-end items-center mt-1">
-                <span
-                  className="text-[10px] font-mono text-cyan-600"
-                  style={{ letterSpacing: '0.15em' }}
-                  title="Probabilidad cruda del ensemble (validacion)"
-                >
-                  p={(topPick.p_raw * 100).toFixed(1)}%
-                </span>
-              </div>
-            )}
           </button>
         ) : (
           <div
