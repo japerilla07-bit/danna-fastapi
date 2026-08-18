@@ -139,13 +139,24 @@ def _compute_hud_data(decision: dict, state: dict) -> dict:
         mesa_norm = score10 / 10.0
 
         chaos_info = d.get("chaos_info") or {}
-        entropy_norm = float(chaos_info.get("entropy_norm", 0.5) or 0.5)
+        # FIX: "entropy_norm" nunca se escribe en chaos_info (solo "entropy_rel").
+        # Antes esto caía siempre al default 0.5 (constante muerta). Ahora usa
+        # entropy_rel como fuente real antes de caer al default.
+        entropy_norm = float(chaos_info.get("entropy_norm", chaos_info.get("entropy_rel", 0.5)) or 0.5)
         chaos_raw = bool(chaos_info.get("active", False))
         entropy_score = 1.0 - max(0.0, min(1.0, entropy_norm))
 
         pilot_st = (state or {}).get("pilot") or {}
-        consec = int(pilot_st.get("pilot_consec_errors", 0)
-                     or (state or {}).get("consec_losses", 0) or 0)
+        # FIX: "0 or X" en Python descarta un 0 legitimo (racha recien reseteada
+        # por un acierto) y cae al contador de un subsistema distinto
+        # ("Guardian Docena", state["consec_losses"]), causando ABORT falso
+        # justo despues de acertar. Ahora se usa pilot_consec_errors siempre
+        # que la clave exista, y solo se cae al fallback si no existe en absoluto.
+        _pce = pilot_st.get("pilot_consec_errors", None)
+        if _pce is not None:
+            consec = int(_pce)
+        else:
+            consec = int((state or {}).get("consec_losses", 0) or 0)
         consec_score = 1.0 - max(0.0, min(1.0, consec / 7.0))
         chaos_active = chaos_raw and consec >= 4
 
@@ -167,9 +178,24 @@ def _compute_hud_data(decision: dict, state: dict) -> dict:
         else:
             cond_state = "abort"
 
-        return {"state": cond_state, "cond": float(cond)}
+        return {
+            "state": cond_state, "cond": float(cond),
+            # FASE 2 (aditivo): componentes individuales del HUD, para poder
+            # loguear y validar cada uno por separado contra resultados reales
+            # en vez de solo el score combinado. No afecta cond ni cond_state.
+            "mesa_norm": float(mesa_norm),
+            "entropy_norm": float(entropy_norm),
+            "entropy_score": float(entropy_score),
+            "consec": int(consec),
+            "consec_score": float(consec_score),
+            "wheel_score": float(wheel_score),
+        }
     except Exception:
-        return {"state": "caution", "cond": 0.40}
+        return {
+            "state": "caution", "cond": 0.40,
+            "mesa_norm": 0.5, "entropy_norm": 0.5, "entropy_score": 0.5,
+            "consec": 0, "consec_score": 1.0, "wheel_score": 0.0,
+        }
 
 
 def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, on_rerun=None, auth_enabled=False, evals_log_path=None):
@@ -635,13 +661,21 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                 # Componentes para _cond_state
                 _mesa_norm = _s10_god / 10.0
                 _chaos = decision_local.get("chaos_info") if isinstance(decision_local, dict) else {}
-                _ent_norm = float((_chaos or {}).get("entropy_norm", 0.5) or 0.5)
+                # FIX: mismo bug que en _compute_hud_data — entropy_norm nunca
+                # se escribe, cae a entropy_rel (la clave real) antes del default.
+                _ent_norm = float((_chaos or {}).get("entropy_norm", (_chaos or {}).get("entropy_rel", 0.5)) or 0.5)
                 _chaos_raw = bool((_chaos or {}).get("active", False))
                 _ent_score = 1.0 - max(0.0, min(1.0, _ent_norm))
 
                 _pilot_st = state.get("pilot") or {}
-                _consec = int(_pilot_st.get("pilot_consec_errors", 0)
-                              or state.get("consec_losses", 0) or 0)
+                # FIX: mismo bug que en _compute_hud_data — un 0 legitimo
+                # (racha recien reseteada) no debe caer al contador ajeno de
+                # Guardian Docena. Esto determina la activacion real de GOD.
+                _pce_god = _pilot_st.get("pilot_consec_errors", None)
+                if _pce_god is not None:
+                    _consec = int(_pce_god)
+                else:
+                    _consec = int(state.get("consec_losses", 0) or 0)
                 _consec_score = 1.0 - max(0.0, min(1.0, _consec / 7.0))
                 _chaos_active = _chaos_raw and _consec >= 4
 
@@ -669,6 +703,18 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
                 # PROGRESSION (líneas ~670+) pueda aplicar GOD-STRICT
                 # condición #3 (Table Entropy ≥ 50/100).
                 state["_cond_val_cache"] = float(_cond_val)
+
+                # FASE 2 (aditivo): mismos componentes individuales que en
+                # _compute_hud_data, pero calculados en este punto del flujo
+                # de activacion de GOD. Clave nueva, no reemplaza nada.
+                state["_god_cond_components"] = {
+                    "mesa_norm": float(_mesa_norm),
+                    "entropy_norm": float(_ent_norm),
+                    "entropy_score": float(_ent_score),
+                    "consec": int(_consec),
+                    "consec_score": float(_consec_score),
+                    "wheel_score": float(_wheel_score),
+                }
 
                 _god_active = (_god_cond == "optimal" and _s10_god >= 7)
 

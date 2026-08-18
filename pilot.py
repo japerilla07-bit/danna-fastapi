@@ -324,7 +324,8 @@ class MotorReader:
         score10 = float(ms.get("score10", 5) or 5)
         mesa_norm = score10 / 10.0
         ci = decision.get("chaos_info", {})
-        entropy_norm = float(ci.get("entropy_norm", 0.5) or 0.5)
+        # FIX: mismo bug de entropy_norm nunca escrita — fallback a entropy_rel.
+        entropy_norm = float(ci.get("entropy_norm", ci.get("entropy_rel", 0.5)) or 0.5)
         entropy_score = 1.0 - max(0.0, min(1.0, entropy_norm))
         consec_ratio = max(0.0, min(1.0, consec_losses / 7.0))
         consec_score = 1.0 - consec_ratio
@@ -342,6 +343,15 @@ class MotorReader:
         ci = decision.get("chaos_info", {})
         if isinstance(ci, dict):
             v = ci.get("entropy_norm")
+            if v is not None:
+                try:
+                    return float(min(1.0, max(0.0, float(v))))
+                except Exception:
+                    pass
+            # FIX: entropy_norm nunca se escribe; entropy_rel si se escribe,
+            # pero solo dentro de chaos_info (nunca en mesa_score, ver abajo).
+            # Sin este fallback, esta funcion siempre devolvia 0.5.
+            v = ci.get("entropy_rel")
             if v is not None:
                 try:
                     return float(min(1.0, max(0.0, float(v))))
