@@ -271,7 +271,7 @@ def _build_bet_advice(decision_action: str, primary_bet: dict, suggestion_analys
     probe_conf_th = _safe_float(params.get("probe_conf_th", 0.40), 0.40)
     bet_advice = {}
 
-    def add(k, label, pick, p, conf, status, reason):
+    def add(k, label, pick, p, conf, status, reason, p1=None, p2=None):
         bet_advice[k] = {
             "label": label,
             "pick": pick,
@@ -280,6 +280,12 @@ def _build_bet_advice(decision_action: str, primary_bet: dict, suggestion_analys
             "status": status,
             "reason": reason,
         }
+        # VALIDACION (aditivo): p de cada grupo individual para docenas/columnas.
+        # No afecta 'p' (la suma) ni ninguna decision — solo se expone para medir.
+        if p1 is not None:
+            bet_advice[k]["p1"] = _safe_float(p1, 0.0)
+        if p2 is not None:
+            bet_advice[k]["p2"] = _safe_float(p2, 0.0)
 
     primary_key = (primary_bet or {}).get("bet_key", None)
 
@@ -289,33 +295,39 @@ def _build_bet_advice(decision_action: str, primary_bet: dict, suggestion_analys
             pick = list_safe_list_like(mc.get("selection", []))
             p = _safe_float(mc.get("p_win", 0.0), 0.0)
             base = _baseline_for_bet("max_conf", len(pick) if isinstance(pick, list) else 1)
-            return pick, p, base
+            return pick, p, base, None
 
         if k in ("docenas", "columnas"):
             pick, p, opts, _probs = _get_top2_group3_from_analysis(k, suggestion_analysis)
             base = _baseline_for_bet(k, selection_size=2 if len(opts) >= 2 else 1)
-            return pick, p, base
+            return pick, p, base, _probs
 
         pick, p = _get_top_from_analysis(k, suggestion_analysis)
         base = _baseline_for_bet(k)
-        return pick, p, base
+        return pick, p, base, None
 
     if decision_action in ("WAIT", "OBSERVE"):
         for k in ["docenas", "columnas", "color", "paridad", "rango", "max_conf"]:
-            pick, p, base = _pick_p_base_for(k)
+            pick, p, base, _probs = _pick_p_base_for(k)
 
             edge = p - base
             conf = max(0.0, min(1.0, edge / max(EPS, 1.0 - base)))
 
+            _p1 = _probs[0] if isinstance(_probs, (list, tuple)) and len(_probs) >= 1 else None
+            _p2 = _probs[1] if isinstance(_probs, (list, tuple)) and len(_probs) >= 2 else None
+
             # En WAIT/OBSERVE: siempre WAIT (no se fuerza PROBE/BET), pero el pick debe verse correctamente (TOP-2 en group_3)
-            add(k, k.capitalize(), pick, p, conf, "WAIT", "Modo WAIT/OBSERVE")
+            add(k, k.capitalize(), pick, p, conf, "WAIT", "Modo WAIT/OBSERVE", p1=_p1, p2=_p2)
         return bet_advice
 
     for k in ["docenas", "columnas", "color", "paridad", "rango", "max_conf"]:
-        pick, p, base = _pick_p_base_for(k)
+        pick, p, base, _probs = _pick_p_base_for(k)
 
         edge = p - base
         conf = max(0.0, min(1.0, edge / max(EPS, 1.0 - base)))
+
+        _p1 = _probs[0] if isinstance(_probs, (list, tuple)) and len(_probs) >= 1 else None
+        _p2 = _probs[1] if isinstance(_probs, (list, tuple)) and len(_probs) >= 2 else None
 
         if k == primary_key:
             status = "BET" if decision_action == "EXPLOIT" else "PROBE"
@@ -328,6 +340,6 @@ def _build_bet_advice(decision_action: str, primary_bet: dict, suggestion_analys
                 status = "WAIT"
                 reason = "No supera umbral"
 
-        add(k, k.capitalize(), pick, p, conf, status, reason)
+        add(k, k.capitalize(), pick, p, conf, status, reason, p1=_p1, p2=_p2)
 
     return bet_advice

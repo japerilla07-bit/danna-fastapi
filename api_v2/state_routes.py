@@ -354,6 +354,8 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
     # y validar si el p crudo predice, aunque el paño diga WAIT.
     _best_p_raw = 0.0
     _best_p_key = "—"
+    _best_p1 = None
+    _best_p2 = None
     try:
         _ba_all = (payload or {}).get("decision", {}).get("bet_advice", {}) or {}
         for _bk_all in ("docenas", "columnas", "color", "paridad", "rango"):
@@ -362,11 +364,17 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
             if _p_all > _best_p_raw:
                 _best_p_raw = _p_all
                 _best_p_key = _bk_all
+                _best_p1 = _e_all.get("p1")
+                _best_p2 = _e_all.get("p2")
         _best_p_raw = round(_best_p_raw, 4)
+        _best_p1 = round(float(_best_p1), 4) if _best_p1 is not None else None
+        _best_p2 = round(float(_best_p2), 4) if _best_p2 is not None else None
     except Exception as _e:
         log.warning(f"best_p_raw compute falló: {_e}")
         _best_p_raw = 0.0
         _best_p_key = "—"
+        _best_p1 = None
+        _best_p2 = None
 
     # ★ Fuente de verdad: last_verdict del pilot
     _pilot_raw = sess.get("pilot") or {}
@@ -424,6 +432,8 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
         # (aunque el estado sea WAIT y no haya target). Para anotar y validar.
         "best_p_raw": _best_p_raw,
         "best_p_key": _best_p_key,
+        "best_p1": _best_p1,   # grupo individual mas fuerte (rango real)
+        "best_p2": _best_p2,   # segundo grupo
         # ★ Contador TARGET LOCK (GOD): cuenta SOLO el pick que TARGET LOCK
         # muestra, solo cuando GOD activo, cruzando categorias. Fuente unica
         # para el panel ERRORES del QuantumPilot.
