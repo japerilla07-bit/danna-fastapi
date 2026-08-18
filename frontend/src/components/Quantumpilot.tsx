@@ -653,6 +653,12 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
             >
               {godBet.best_p_raw != null ? (godBet.best_p_raw * 100).toFixed(1) : '—'}%
             </span>
+            <span className="text-[9px] font-mono text-cyan-700" style={{ letterSpacing: '0.1em' }}>
+              {({
+                docenas: 'DOC', columnas: 'COL', color: 'CLR',
+                paridad: 'PAR', rango: 'RNG',
+              } as Record<string, string>)[godBet.best_p_key ?? ''] ?? (godBet.best_p_key ?? '—').toUpperCase()}
+            </span>
           </div>
         </div>
 
