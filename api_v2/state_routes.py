@@ -169,11 +169,22 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
             score10   = float(ms.get("score10", 5) or 5)
             mesa_norm = score10 / 10.0
             chaos_info     = decision.get("chaos_info") or {}
-            entropy_norm   = float(chaos_info.get("entropy_norm", 0.5) or 0.5)
+            # FIX (3ra ocurrencia, misma causa que processor.py/pilot.py):
+            # "entropy_norm" nunca se escribe en chaos_info, solo "entropy_rel".
+            # Antes esto caia siempre al default 0.5 (constante muerta).
+            entropy_norm   = float(chaos_info.get("entropy_norm", chaos_info.get("entropy_rel", 0.5)) or 0.5)
             chaos_raw      = bool(chaos_info.get("active", False))
             entropy_score  = 1.0 - max(0.0, min(1.0, entropy_norm))
             pilot_st  = sess_d.get("pilot") or {}
-            consec    = int(pilot_st.get("pilot_consec_errors", 0) or sess_d.get("consec_losses", 0) or 0)
+            # FIX (3ra ocurrencia): "0 or X" descarta un 0 legitimo (racha
+            # recien reseteada por un acierto) y cae al contador de un
+            # subsistema distinto ("Guardian Docena"), causando ABORT falso
+            # justo despues de acertar.
+            _pce_sr = pilot_st.get("pilot_consec_errors", None)
+            if _pce_sr is not None:
+                consec = int(_pce_sr)
+            else:
+                consec = int(sess_d.get("consec_losses", 0) or 0)
             consec_score = 1.0 - max(0.0, min(1.0, consec / 7.0))
             chaos_active = chaos_raw and consec >= 4
             wi           = sess_d.get("_wheel_expert_info") or {}
@@ -279,6 +290,11 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
                 "bet_key": _bk,
                 "pick_pretty": _format_pick_for_god(_bk, _pick_raw),
                 "conf_pct": _conf_pct,
+                # VALIDACION: p crudo del ensemble (FreqDecay+Markov+NaiveBayes+
+                # LSTM+WheelExpert) antes de cualquier scoring. Se expone para
+                # poder validar si predice mejor que el conf_pct procesado.
+                # Aditivo: no cambia conf_pct ni ningun campo existente.
+                "p_raw": round(_p_win, 4),
             })
 
         # ★ FIX DE COHERENCIA TARGET LOCK ↔ RECORD_OUTCOME ★
@@ -304,6 +320,12 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
             except Exception:
                 _pilot_conf_pct = 0
 
+            # VALIDACION: p crudo del pick del Pilot (mismo proposito que arriba)
+            try:
+                _pilot_p_raw = round(float(_pick_bet_early.get("p", _pick_bet_early.get("top_probability", 0.0)) or 0.0), 4)
+            except Exception:
+                _pilot_p_raw = 0.0
+
             # Quitar cualquier ocurrencia existente del bet_key del Pilot
             _god_active_bets = [
                 b for b in _god_active_bets
@@ -316,6 +338,7 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
                 "bet_key": _pilot_bk,
                 "pick_pretty": _pilot_pick_pretty,
                 "conf_pct": _pilot_conf_pct,
+                "p_raw": _pilot_p_raw,
             })
         else:
             # Sin pick_bet del Pilot: ordenar normal por conf_pct

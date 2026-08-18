@@ -45,6 +45,7 @@ interface ActiveBet {
   bet_key: string;
   pick_pretty: string;
   conf_pct: number;
+  p_raw?: number;   // VALIDACION: p crudo del ensemble (0-1), aditivo
 }
 
 interface GodStats {
@@ -322,6 +323,7 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
         bet_key: pickBet.bet_key,
         pick_pretty: pickBet.pick_pretty,
         conf_pct: Math.round(pickBet.score_pct ?? 0),
+        p_raw: (pickBet as any).p_raw,
       };
     }
     if (godBet.active && activeBets.length > 0) {
@@ -819,6 +821,19 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
                 {topPick.pick_pretty}
               </span>
             </div>
+            {/* VALIDACION: p crudo del ensemble — solo para anotar y validar.
+                No afecta ninguna decision, es display puro. */}
+            {topPick.p_raw != null && (
+              <div className="flex justify-end items-center mt-1">
+                <span
+                  className="text-[10px] font-mono text-cyan-600"
+                  style={{ letterSpacing: '0.15em' }}
+                  title="Probabilidad cruda del ensemble (validacion)"
+                >
+                  p={(topPick.p_raw * 100).toFixed(1)}%
+                </span>
+              </div>
+            )}
           </button>
         ) : (
           <div
