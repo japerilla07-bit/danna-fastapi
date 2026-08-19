@@ -367,7 +367,15 @@ class WheelExpertPremium:
         mean_x = float(np.mean(np.cos(angles)))
         mean_y = float(np.mean(np.sin(angles)))
         R      = math.sqrt(mean_x**2 + mean_y**2)
-        detected     = R > 0.38
+        # FIX: 0.38 estaba por debajo de lo que produce el azar. Con n=8 muestras
+        # uniformes la longitud resultante media ya vale ~0.31, y P(R>0.38)=0.325:
+        # se detectaba 'firma de crupier' en 1 de cada 3 spins sobre ruido puro.
+        # Valor critico del test de Rayleigh: R_crit = sqrt(-ln(alpha)/n).
+        # Con alpha=0.05 y n=8 -> 0.6119 (simulacion: percentil 95 = 0.6023).
+        _n_sig       = max(3, len(recent))
+        _alpha_sig   = 0.05
+        _r_crit      = math.sqrt(-math.log(_alpha_sig) / float(_n_sig))
+        detected     = R > _r_crit
         center_angle = math.atan2(mean_y, mean_x) % (2*math.pi)
         center_idx   = int(round(center_angle/(2*math.pi)*37)) % 37
         return {"detected": detected, "strength": float(np.clip(R,0,1)),
@@ -431,12 +439,27 @@ class WheelExpertPremium:
 
     # 5. EnsembleVoter
     def register_outcome(self, predicted_sector: str, actual: int) -> None:
+        # FIX (baseline del peso adaptativo):
+        #  1) Los 4 sectores SE SOLAPAN (44 numeros sobre 37; 'zero' es subconjunto
+        #     de 'voisins'), asi que 44/(4*37)=0.2973 no es la probabilidad de
+        #     acierto de NINGUN sector. La real depende solo del tamano:
+        #     voisins 17/37=0.4595, tiers 12/37=0.3243, orphelins 8/37=0.2162.
+        #     Con el baseline fijo el peso subia siempre que el sector activo era
+        #     'voisins' y bajaba con 'orphelins', acertara o no.
+        #  2) recent_hr promedia los ULTIMOS 20 resultados, predichos por sectores
+        #     distintos. Comparar esa tasa contra el baseline de un unico sector
+        #     vuelve a descuadrar la resta. Guardamos el baseline junto a cada
+        #     acierto y comparamos dos tasas homogeneas.
         actual_sectors = [s for s, nums in _WHEEL_SECTORS.items() if actual in nums]
         hit = predicted_sector in actual_sectors
-        self._hit_history.append(hit)
+        _pred_size = len(_WHEEL_SECTORS.get(predicted_sector, []))
+        _base = (float(_pred_size) / 37.0) if _pred_size else 0.25
+        self._hit_history.append((bool(hit), float(_base)))
         if len(self._hit_history) >= 10:
-            recent_hr = float(sum(list(self._hit_history)[-20:])) / min(20, len(self._hit_history))
-            expected  = sum(len(v) for v in _WHEEL_SECTORS.values()) / (4*37)
+            _win = list(self._hit_history)[-20:]
+            _n   = max(1, len(_win))
+            recent_hr = float(sum(1.0 for h, _bs in _win if h)) / _n
+            expected  = float(sum(_bs for _h, _bs in _win)) / _n
             edge  = recent_hr - expected
             delta = self._eta * edge
             self._weight = float(np.clip(self._weight+delta, self._weight_min, self._weight_max))
@@ -4861,11 +4884,20 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
             return 0.0
         srt = sorted(counts, reverse=True)
         top2 = float(srt[0] + srt[1])
-        frac = top2 / tot                       # 0.667 azar .. 1.0 total
-        thr = 0.70                              # umbral de detección
+        frac = top2 / tot
+        # FIX: 0.667 NO es la media de frac en una mesa justa; ese es el valor
+        # esperado de cada grupo, no del maximo de dos de tres. Con ventanas
+        # cortas el top-2 captura mucho mas por pura aritmetica de muestreo:
+        # media de frac bajo H0 = 0.803 (n=12), 0.764 (n=24), 0.729 (n=60).
+        # El umbral fijo 0.70 quedaba POR DEBAJO de esa media en toda ventana
+        # de 12 a 120, asi que se disparaba el 93-97% del tiempo sobre ruido.
+        # Correcto: umbral dependiente de n = percentil 95 de la nula.
+        # Ajuste por simulacion (60k muestras/ventana): 2/3 + 0.95/sqrt(n).
+        thr = 2.0/3.0 + 0.95 / math.sqrt(max(1.0, tot))
+        thr = float(min(0.97, max(0.70, thr)))
         if frac < thr:
             return 0.0
-        # map: 0.70 → 0,  1.00 → 1
+        # map: thr -> 0,  1.00 -> 1
         return float(np.clip((frac - thr) / (1.0 - thr + 1e-12), 0.0, 1.0))
 
     def _compute_radar_01(arr_nums):
