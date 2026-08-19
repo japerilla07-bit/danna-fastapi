@@ -356,16 +356,49 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
     _best_p_key = "—"
     _best_p1 = None
     _best_p2 = None
+    _best_g1 = "—"
+    _best_g2 = "—"
     try:
         _ba_all = (payload or {}).get("decision", {}).get("bet_advice", {}) or {}
+        # suggestion_analysis: fuente real de top_2_suggestions (p1/p2 por grupo).
+        # Se busca en TODAS las rutas posibles para no depender de la forma del payload.
+        _sa_all = (payload or {}).get("suggestion_analysis", {}) or {}
+        if not _sa_all:
+            _sa_all = (payload or {}).get("decision", {}).get("suggestion_analysis", {}) or {}
+        if not _sa_all:
+            _ls_sess = sess.get("last_suggestion", {}) if isinstance(sess, dict) else {}
+            _sa_all = (_ls_sess or {}).get("suggestion_analysis", {}) or {}
+
         for _bk_all in ("docenas", "columnas", "color", "paridad", "rango"):
             _e_all = _ba_all.get(_bk_all, {}) or {}
             _p_all = float(_e_all.get("p", _e_all.get("top_probability", 0.0)) or 0.0)
             if _p_all > _best_p_raw:
                 _best_p_raw = _p_all
                 _best_p_key = _bk_all
-                _best_p1 = _e_all.get("p1")
-                _best_p2 = _e_all.get("p2")
+
+        # Para la categoria ganadora, calcular p1/p2 directo de suggestion_analysis.
+        # Esto NO depende de que bet_advice traiga p1/p2 (robusto ante cualquier
+        # ruta de construccion de bet_advice).
+        if _best_p_key in ("docenas", "columnas"):
+            try:
+                _cat = _sa_all.get(_best_p_key, {}) if isinstance(_sa_all, dict) else {}
+                _top2 = _cat.get("top_2_suggestions", []) if isinstance(_cat, dict) else []
+                if isinstance(_top2, (list, tuple)) and len(_top2) >= 2:
+                    if isinstance(_top2[0], (list, tuple)) and len(_top2[0]) >= 2:
+                        _best_g1 = str(_top2[0][0])
+                        _best_p1 = float(_top2[0][1])
+                    if isinstance(_top2[1], (list, tuple)) and len(_top2[1]) >= 2:
+                        _best_g2 = str(_top2[1][0])
+                        _best_p2 = float(_top2[1][1])
+            except Exception:
+                _best_p1 = None
+                _best_p2 = None
+        # Fallback: si suggestion_analysis no tenia top_2, intentar bet_advice
+        if _best_p1 is None:
+            _e_win = _ba_all.get(_best_p_key, {}) or {}
+            _best_p1 = _e_win.get("p1")
+            _best_p2 = _e_win.get("p2")
+
         _best_p_raw = round(_best_p_raw, 4)
         _best_p1 = round(float(_best_p1), 4) if _best_p1 is not None else None
         _best_p2 = round(float(_best_p2), 4) if _best_p2 is not None else None
@@ -434,6 +467,8 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
         "best_p_key": _best_p_key,
         "best_p1": _best_p1,   # grupo individual mas fuerte (rango real)
         "best_p2": _best_p2,   # segundo grupo
+        "best_g1": _best_g1,   # etiqueta del grupo 1 (ej. D2, C1)
+        "best_g2": _best_g2,   # etiqueta del grupo 2 (ej. D3, C3)
         # ★ Contador TARGET LOCK (GOD): cuenta SOLO el pick que TARGET LOCK
         # muestra, solo cuando GOD activo, cruzando categorias. Fuente unica
         # para el panel ERRORES del QuantumPilot.

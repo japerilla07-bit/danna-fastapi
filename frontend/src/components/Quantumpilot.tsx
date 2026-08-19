@@ -74,6 +74,8 @@ interface GodBetData {
   best_p_key?: string;   // categoria del mejor p
   best_p1?: number;      // grupo individual mas fuerte (rango real)
   best_p2?: number;      // segundo grupo
+  best_g1?: string;      // etiqueta del grupo 1
+  best_g2?: string;      // etiqueta del grupo 2
   // ★ god_stats viene DIRECTO de pilot.raw → siempre fresco post-record_outcome
   god_stats?: GodStats;
   last_verdict?: {
@@ -638,13 +640,13 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
               PROBE), muestra el mejor p del spin y su categoria. Display puro,
               no afecta ninguna decision. Para anotar en cada spin. */}
           <div
-            className="flex flex-col items-center justify-center px-3 py-2.5 rounded-md min-w-[68px]"
+            className="flex flex-col items-center justify-center px-3 py-2 rounded-md min-w-[82px]"
             style={{
               background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(8, 12, 22, 0.7) 100%)',
               border: '1px solid rgba(34, 211, 238, 0.15)',
               boxShadow: 'inset 0 1px 0 rgba(34, 211, 238, 0.06)',
             }}
-            title={`p1 (grupo fuerte) · p2 (2do grupo) · suma — categoria ${godBet.best_p_key ?? '—'}`}
+            title={`Grupos individuales de ${godBet.best_p_key ?? '—'} y su suma`}
           >
             <span className="text-[9px] text-gray-500" style={{ letterSpacing: '0.15em' }}>
               {({
@@ -652,15 +654,17 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
                 paridad: 'PAR', rango: 'RNG',
               } as Record<string, string>)[godBet.best_p_key ?? ''] ?? (godBet.best_p_key ?? 'P').toUpperCase()}
             </span>
-            {/* p1 · p2 individuales (rango real) */}
-            <span className="text-[10px] font-mono text-cyan-500">
-              {godBet.best_p1 != null ? (godBet.best_p1 * 100).toFixed(1) : '—'}
-              {' · '}
-              {godBet.best_p2 != null ? (godBet.best_p2 * 100).toFixed(1) : '—'}
+            {/* grupo 1 individual: etiqueta + prob */}
+            <span className="text-[10px] font-mono text-cyan-400 leading-tight">
+              {(godBet.best_g1 ?? '—')} {godBet.best_p1 != null ? (godBet.best_p1 * 100).toFixed(1) : '—'}
+            </span>
+            {/* grupo 2 individual: etiqueta + prob */}
+            <span className="text-[10px] font-mono text-cyan-500 leading-tight">
+              {(godBet.best_g2 ?? '—')} {godBet.best_p2 != null ? (godBet.best_p2 * 100).toFixed(1) : '—'}
             </span>
             {/* suma (lo que apuesta el motor) */}
             <span
-              className="font-black text-sm font-mono"
+              className="font-black text-xs font-mono mt-0.5"
               style={{ color: '#67e8f9', textShadow: '0 0 6px rgba(34, 211, 238, 0.4)' }}
             >
               Σ{godBet.best_p_raw != null ? (godBet.best_p_raw * 100).toFixed(1) : '—'}%
