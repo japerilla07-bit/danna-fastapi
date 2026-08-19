@@ -666,7 +666,6 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
               Σ{godBet.best_p_raw != null ? (godBet.best_p_raw * 100).toFixed(1) : '—'}%
             </span>
           </div>
-          </div>
         </div>
 
         {/* ═══ Mesa CCS bar ═══ */}
