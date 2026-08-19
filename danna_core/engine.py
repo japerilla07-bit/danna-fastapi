@@ -476,11 +476,11 @@ class WheelExpertPremium:
                     "dealer_sig": {"detected": False, "strength": 0.0},
                     "scatter": {"peak_scatter": 0, "confidence": 0.0},
                     "sector_comp": {}, "adaptive_w": self._weight}
-        window = int(params.get("wheel_window", 20))
+        window = int(params.get("wheel_window", 14))
         decay  = float(params.get("wheel_decay", 0.78))
         radius = int(params.get("wheel_radius", 3))
         sig_w  = int(params.get("wheel_sig_window", 8))
-        scat_w = int(params.get("wheel_scatter_window", 30))
+        scat_w = int(params.get("wheel_scatter_window", 14))
         sector_scores = self._detect_sector_scores(s, window=window, decay=decay)
         active_sector = max(sector_scores, key=lambda x: sector_scores[x])
         dealer_sig    = self._dealer_signature(s, sig_window=sig_w)
@@ -4633,14 +4633,17 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
     chaos = chaos or {}
     prev = prev if isinstance(prev, dict) else None
 
-    min_spins = int(params.get("mesa_score_min_spins", 15))
-    window = int(params.get("mesa_score_window", 60))
+    # OPERACION EN VIVO: la lectura de patron usa como maximo los ultimos 14 spins.
+    # Ventanas mas largas mezclan crupieres/sesiones distintas que el sistema no ve.
+    min_spins = int(params.get("mesa_score_min_spins", 10))
+    window = int(params.get("mesa_score_window", 14))
     update_every = int(params.get("mesa_score_update_every", 1))
     ema_alpha = float(params.get("mesa_score_ema_alpha", 0.35))  # weight of new raw
     ema_alpha = max(0.05, min(0.80, ema_alpha))
 
     min_spins = max(10, min(500, min_spins))
-    window = max(30, min(500, window))
+    # FIX: el suelo de 30 anulaba el default de 14 (operacion en vivo).
+    window = max(7, min(500, window))
     update_every = max(1, min(50, update_every))
 
     s = _clean_spins(spins or [])
@@ -4931,12 +4934,12 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
                 "wheel": float(wheel), "pair_dom": float(pair_dom)}
 
     # Triple ventana (corto/medio/largo) dentro del mismo window operativo
-    w_short = int(params.get('mesa_score_w_short', 12))
-    w_mid   = int(params.get('mesa_score_w_mid', 24))
-    w_long  = int(params.get('mesa_score_w_long', max(30, window)))
-    w_short = max(6, min(60, w_short))
-    w_mid   = max(12, min(120, w_mid))
-    w_long  = max(24, min(500, w_long))
+    w_short = int(params.get('mesa_score_w_short', 7))
+    w_mid   = int(params.get('mesa_score_w_mid', 14))
+    w_long  = int(params.get('mesa_score_w_long', 14))
+    w_short = max(5, min(60, w_short))
+    w_mid   = max(7, min(120, w_mid))
+    w_long  = max(7, min(500, w_long))
 
     arr_short = w[-w_short:] if len(w) >= w_short else w
     arr_mid   = w[-w_mid:]   if len(w) >= w_mid else w
@@ -5078,12 +5081,23 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
         # Crea hasta 2 alertas: dominancia y alternancia (escoge la más fuerte si ambas pasan umbral)
         alerts_local = []
 
-        s_dom = _dom_strength(dom, dom_base, 0.90)
+        # FIX: mismo problema en binarios. En mesa justa el maximo de 2 grupos
+        # supera 0.65 el 45% de las veces con 7 spins. Percentil 95 de la nula:
+        # 0.5 + 0.977/sqrt(n).
+        _dom_base_n = 0.5 + 0.977 / math.sqrt(max(1.0, float(total)))
+        _dom_base_n = float(min(0.97, max(dom_base, _dom_base_n)))
+        s_dom = _dom_strength(dom, _dom_base_n, min(0.99, _dom_base_n + 0.12))
         if s_dom >= 6:
             title = _dom_label_binary(name, a_label, b_label, cnt_a, cnt_b, total, dom)
             alerts_local.append({"key": name.lower(), "kind": "dominancia", "strength": int(s_dom), "title": title})
 
-        s_alt = _alt_strength(alt_rate, 0.80, 0.95)
+        # FIX: 0.80 fijo. Con la ventana corta (7 spins -> 6 transiciones) la
+        # alternancia alcanza 0.80 el 10.9% de las veces en mesa justa, y era
+        # el canal que mas falsos positivos generaba. Percentil 95 de la nula
+        # para m transiciones: 0.5 + 1.645*0.5/sqrt(m).
+        _m_tr = max(1, trans)
+        _alt_crit = float(min(0.99, max(0.60, 0.5 + 0.8225 / math.sqrt(float(_m_tr)))))
+        s_alt = _alt_strength(alt_rate, _alt_crit, min(0.999, _alt_crit + 0.10))
         if s_alt >= 6:
             title = _alt_label_binary(name, a_label, b_label, trans, alt_rate)
             alerts_local.append({"key": name.lower(), "kind": "alternancia", "strength": int(s_alt), "title": title})
@@ -5116,7 +5130,13 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
         best_i = int(max(range(3), key=lambda i: counts[i]))
         dom = counts[best_i] / float(total)
 
-        s = _dom_strength(dom, base, 0.72)
+        # FIX: el umbral fijo 0.50 no depende de n. En mesa justa el maximo de
+        # las 3 docenas supera 0.50 el 31% de las veces con 13 spins y solo el
+        # 1.6% con 60 -> la misma regla era laxa en corto y muda en largo.
+        # Umbral honesto = percentil 95 de la nula: 1/3 + 1.035/sqrt(n).
+        _base_n = 1.0/3.0 + 1.035 / math.sqrt(max(1.0, float(total)))
+        _base_n = float(min(0.95, max(base, _base_n)))
+        s = _dom_strength(dom, _base_n, min(0.98, _base_n + 0.22))
         if s < 6:
             return None
         pick = best_i + 1
@@ -5143,9 +5163,13 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
 
     # Rueda (cluster) (corto+medio mezclado)
     wheel_now = float(_wheel_cluster(arr_short))
-    if wheel_now >= 0.60:
+    # FIX: umbral fijo 0.60 sustituido por el valor critico de Rayleigh para el
+    # tamano real de la ventana: R_crit = sqrt(-ln(0.05)/n).
+    _n_wc = max(1, len([1 for _x in arr_short if 0 <= int(_x) <= 36]))
+    _wc_crit = float(min(0.90, max(0.30, math.sqrt(-math.log(0.05) / float(_n_wc)))))
+    if wheel_now >= _wc_crit:
         # escala 6..10
-        s = int(_clamp(6 + round(4 * (wheel_now - 0.60) / max(1e-9, (0.90 - 0.60))), 6, 10))
+        s = int(_clamp(6 + round(4 * (wheel_now - _wc_crit) / max(1e-9, (0.95 - _wc_crit))), 6, 10))
         alerts.append({"key": "wheel", "kind": "cluster", "strength": int(s),
                        "title": "Rueda patronando: MISMA ZONA (vecinos/sector)"})
 
@@ -5217,8 +5241,41 @@ def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, par
 
     iron_detail = label
 
+    # DESCRIPTIVO (aditivo): conteos reales de la ventana operativa. Esto NO es
+    # una senal ni afirma significancia — es lo que hay en la mesa ahora mismo,
+    # para que el panel siempre pueda mostrar algo verdadero aunque ninguna
+    # alerta estadistica supere su umbral. Las alertas siguen en 'alerts'.
+    _desc_arr = list(arr_mid)
+    _dc = [0, 0, 0]; _cc = [0, 0, 0]; _rojo = 0; _negro = 0; _cero = 0
+    for _n0 in _desc_arr:
+        try:
+            _n = int(_n0)
+        except Exception:
+            continue
+        if _n == 0:
+            _cero += 1
+            continue
+        _d = docena_of(_n); _c = columna_of(_n)
+        if 1 <= _d <= 3: _dc[_d-1] += 1
+        if 1 <= _c <= 3: _cc[_c-1] += 1
+        if _n in _REDS: _rojo += 1
+        else: _negro += 1
+    _dtot = max(1, sum(_dc)); _ctot = max(1, sum(_cc))
+    descriptive = {
+        "n": int(len(_desc_arr)),
+        "docenas": {"counts": [int(x) for x in _dc],
+                    "pct": [round(100.0*x/_dtot, 1) for x in _dc],
+                    "top": int(1 + max(range(3), key=lambda i: _dc[i]))},
+        "columnas": {"counts": [int(x) for x in _cc],
+                     "pct": [round(100.0*x/_ctot, 1) for x in _cc],
+                     "top": int(1 + max(range(3), key=lambda i: _cc[i]))},
+        "color": {"rojo": int(_rojo), "negro": int(_negro), "cero": int(_cero)},
+        "wheel_cluster": round(float(_wheel_cluster(_desc_arr)), 3),
+    }
+
     return {
         "enabled": True,
+        "descriptive": descriptive,
         "score": float(np.clip(score, 0.0, 100.0)),
         "raw": float(np.clip(score_raw, 0.0, 100.0)),
         "score10": int(score10),
