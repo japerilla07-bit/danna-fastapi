@@ -44,8 +44,15 @@ try:
 except Exception:  # pragma: no cover
     np = None
 
-# Motor (mismo módulo que usa app.py)
-import engine as engine_module
+# Motor.
+# FIX: antes hacia , que resolvia a
+# backend/engine.py (raiz). El resto del sistema usa danna_core.engine.
+# Eran DOS modulos distintos cargados a la vez, con estado global separado
+# (cusum, nb_model, loss_state) y con el codigo divergido entre si.
+# Al sacar backend/engine.py del repo, este import reventaba y tumbaba
+# la cadena processor -> state_routes -> router, dando 404 en /api/state.
+# Ahora apunta al mismo modulo que todos: una sola fuente de verdad.
+from danna_core import engine as engine_module
 
 # Lógica extraída en Sesiones A y B1
 from danna_core.helpers import (
