@@ -323,7 +323,10 @@ class MotorReader:
         ms = decision.get("mesa_score", {})
         score10 = float(ms.get("score10", 5) or 5)
         mesa_norm = score10 / 10.0
-        ci = decision.get("chaos_info", {})
+        # FIX (clave equivocada): el motor exporta decision["chaos"] (engine.py
+        # ~6829), no "chaos_info". Buscar la clave inexistente devolvia {} y
+        # dejaba ORDEN congelado en 50.
+        ci = decision.get("chaos") or decision.get("chaos_info") or {}
         # FIX: mismo bug de entropy_norm nunca escrita — fallback a entropy_rel.
         # FIX (truthiness): `... or 0.5` descarta un 0.0 legitimo (concentracion
         # maxima del pano). Mismo patron del bug de consec_losses.
@@ -345,7 +348,10 @@ class MotorReader:
     def get_entropy_norm(decision: dict) -> float:
         if not isinstance(decision, dict):
             return 0.5
-        ci = decision.get("chaos_info", {})
+        # FIX (clave equivocada): el motor exporta decision["chaos"] (engine.py
+        # ~6829), no "chaos_info". Buscar la clave inexistente devolvia {} y
+        # dejaba ORDEN congelado en 50.
+        ci = decision.get("chaos") or decision.get("chaos_info") or {}
         if isinstance(ci, dict):
             v = ci.get("entropy_norm")
             if v is not None:
@@ -766,7 +772,9 @@ def _record_tqi(pilot: PilotState, tqi: dict, decision: dict, spins_count: int):
     try:
         hist = pilot.raw.get("tqi_history", []) or []
         mesa = decision.get("mesa_score", {}) if isinstance(decision, dict) else {}
-        chaos = decision.get("chaos_info", {}) if isinstance(decision, dict) else {}
+        # FIX (clave equivocada): el motor exporta decision["chaos"]
+        chaos = ((decision.get("chaos") or decision.get("chaos_info") or {})
+                 if isinstance(decision, dict) else {})
         op_state = str(decision.get("_hud_cond_state", "") or "").upper()
         if not op_state:
             op_state = str(decision.get("operational_state", "") or "").upper()

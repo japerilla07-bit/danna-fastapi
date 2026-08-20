@@ -169,7 +169,10 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
             ms        = decision.get("mesa_score") or {}
             score10   = float(ms.get("score10", 5) or 5)
             mesa_norm = score10 / 10.0
-            chaos_info     = decision.get("chaos_info") or {}
+            # FIX CRITICO (clave equivocada): el motor exporta el bloque como
+            # decision["chaos"] (engine.py ~6829), no "chaos_info". Buscar la
+            # clave inexistente devolvia {} y congelaba ORDEN en 50.
+            chaos_info     = decision.get("chaos") or decision.get("chaos_info") or {}
             # FIX (3ra ocurrencia, misma causa que processor.py/pilot.py):
             # "entropy_norm" nunca se escribe en chaos_info, solo "entropy_rel".
             # Antes esto caia siempre al default 0.5 (constante muerta).

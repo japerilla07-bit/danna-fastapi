@@ -138,11 +138,22 @@ def _compute_hud_data(decision: dict, state: dict) -> dict:
         score10 = float(ms.get("score10", 5) or 5)
         mesa_norm = score10 / 10.0
 
-        chaos_info = d.get("chaos_info") or {}
+        # FIX CRITICO (clave equivocada): el motor exporta este bloque como
+        # payload["decision"]["chaos"] (engine.py ~6829), NO como "chaos_info".
+        # Buscar "chaos_info" devolvia {} SIEMPRE, y por eso entropy_norm caia
+        # al 0.5 por defecto y el chip ORDEN quedaba congelado en 50.
+        # Todo el subsistema de caos (entropy_rel, drift_level, active) llevaba
+        # sin llegar nunca a la interfaz por este error de una palabra.
+        chaos_info = d.get("chaos") or d.get("chaos_info") or {}
         # FIX: "entropy_norm" nunca se escribe en chaos_info (solo "entropy_rel").
         # Antes esto caía siempre al default 0.5 (constante muerta). Ahora usa
         # entropy_rel como fuente real antes de caer al default.
-        entropy_norm = float(chaos_info.get("entropy_norm", chaos_info.get("entropy_rel", 0.5)) or 0.5)
+        # FIX (truthiness): `... or 0.5` descarta un 0.0 legitimo, que es justo la
+        # concentracion maxima del pano. Mismo patron del bug de consec_losses.
+        _en = chaos_info.get("entropy_norm", None)
+        if _en is None:
+            _en = chaos_info.get("entropy_rel", None)
+        entropy_norm = float(_en) if _en is not None else 0.5
         chaos_raw = bool(chaos_info.get("active", False))
         entropy_score = 1.0 - max(0.0, min(1.0, entropy_norm))
 
@@ -660,10 +671,15 @@ def run_spin_processing(state, spin: int, notes: str, *, engine_instance=None, o
 
                 # Componentes para _cond_state
                 _mesa_norm = _s10_god / 10.0
-                _chaos = decision_local.get("chaos_info") if isinstance(decision_local, dict) else {}
+                # FIX (misma clave equivocada que en _compute_hud_data)
+                _chaos = ((decision_local.get("chaos") or decision_local.get("chaos_info"))
+                          if isinstance(decision_local, dict) else {})
                 # FIX: mismo bug que en _compute_hud_data — entropy_norm nunca
                 # se escribe, cae a entropy_rel (la clave real) antes del default.
-                _ent_norm = float((_chaos or {}).get("entropy_norm", (_chaos or {}).get("entropy_rel", 0.5)) or 0.5)
+                _en2 = (_chaos or {}).get("entropy_norm", None)
+                if _en2 is None:
+                    _en2 = (_chaos or {}).get("entropy_rel", None)
+                _ent_norm = float(_en2) if _en2 is not None else 0.5
                 _chaos_raw = bool((_chaos or {}).get("active", False))
                 _ent_score = 1.0 - max(0.0, min(1.0, _ent_norm))
 
