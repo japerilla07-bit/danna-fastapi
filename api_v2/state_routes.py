@@ -29,6 +29,7 @@ from danna_core.helpers import _deep_jsonable
 # is_god_active vive en pilot.py — ÚNICA fuente de verdad para las 6
 # condiciones de GOD (HUD, Radar, Entropy, TQI, CCS, Health).
 from pilot import is_god_active
+from danna_core.engine import compute_chaos_index
 
 log = logging.getLogger("state_routes")
 router = APIRouter(prefix="/api", tags=["state"])
@@ -172,7 +173,13 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
             # FIX (3ra ocurrencia, misma causa que processor.py/pilot.py):
             # "entropy_norm" nunca se escribe en chaos_info, solo "entropy_rel".
             # Antes esto caia siempre al default 0.5 (constante muerta).
-            entropy_norm   = float(chaos_info.get("entropy_norm", chaos_info.get("entropy_rel", 0.5)) or 0.5)
+            # FIX (truthiness): `... or 0.5` descarta un 0.0 legitimo, que es
+            # justo la concentracion maxima del pano. Mismo patron del bug de
+            # consec_losses. Se resuelve con un chequeo explicito de None.
+            _en_sr = chaos_info.get("entropy_norm", None)
+            if _en_sr is None:
+                _en_sr = chaos_info.get("entropy_rel", None)
+            entropy_norm   = float(_en_sr) if _en_sr is not None else 0.5
             chaos_raw      = bool(chaos_info.get("active", False))
             entropy_score  = 1.0 - max(0.0, min(1.0, entropy_norm))
             pilot_st  = sess_d.get("pilot") or {}
@@ -547,6 +554,15 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
             log.warning(f"table_health recalc falló: {_the}")
             table_health_block = {"status": "CALIBRANDO", "score": 50, "hit_rate": 0, "trend": [50] * 15, "color": "gray", "msg": "Recopilando datos..."}
 
+    # INDICE DE CAOS: dispersion de la bola sobre la ventana operativa.
+    # Siempre devuelve valor (nunca calla). No predice: describe.
+    try:
+        chaos_index_block = compute_chaos_index(list(sess.get("spins", []) or []), window=14)
+    except Exception as _cie:
+        log.warning(f"chaos_index falló: {_cie}")
+        chaos_index_block = {"enabled": False, "n": 0, "estado": "CALIBRANDO",
+                             "score": 50, "pano": {}, "rueda": {}, "detalle": {}}
+
     return _deep_jsonable({
         "meta": {
             "user_id": username,
@@ -581,6 +597,7 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
         "error_hist": error_hist_block,
         "ledger": ledger_block,
         "table_health": table_health_block,
+        "chaos_index": chaos_index_block,
     })
 
 

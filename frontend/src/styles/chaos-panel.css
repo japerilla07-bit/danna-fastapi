@@ -1,0 +1,133 @@
+/* ChaosPanel — dispersión de mesa.
+   Añadir al CSS global. Reutiliza .panel / .panel-head existentes. */
+
+.chaos-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 3px solid var(--chaos-accent, #3b4a5a);
+}
+
+.chaos-panel.chaos-caos   { --chaos-accent: #2dd4bf; }
+.chaos-panel.chaos-mixto  { --chaos-accent: #64748b; }
+.chaos-panel.chaos-orden  { --chaos-accent: #f59e0b; }
+.chaos-panel.chaos-cal    { --chaos-accent: #475569; }
+
+.chaos-panel .panel-head { display: flex; align-items: center; gap: 8px; }
+.chaos-n {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: .08em;
+  opacity: .55;
+  text-transform: uppercase;
+}
+
+/* ── Veredicto ── */
+.chaos-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--chaos-accent) 10%, transparent);
+}
+.chaos-estado {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: var(--chaos-accent);
+  line-height: 1.1;
+}
+.chaos-sub { font-size: 11px; opacity: .7; }
+
+/* ── Ejes ── */
+.chaos-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) { .chaos-axes { grid-template-columns: 1fr; } }
+
+.chaos-axis { display: flex; flex-direction: column; gap: 5px; }
+.chaos-axis-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 10px; letter-spacing: .1em;
+}
+.chaos-axis-head .k { font-weight: 700; opacity: .8; }
+.chaos-axis-head .v { font-variant-numeric: tabular-nums; opacity: .55; }
+
+.chaos-bar-track {
+  position: relative;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .07);
+  overflow: hidden;
+}
+.chaos-bar-median {
+  position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: rgba(255, 255, 255, .3); z-index: 2;
+}
+.chaos-bar-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 4px;
+  transition: width .35s ease;
+}
+.chaos-bar-fill.cold { background: #2dd4bf; }
+.chaos-bar-fill.mid  { background: #64748b; }
+.chaos-bar-fill.warm { background: #f59e0b; }
+.chaos-bar-fill.hot  { background: #ef4444; }
+
+.chaos-bar-foot {
+  display: flex; justify-content: space-between;
+  font-size: 10px; margin-top: 3px;
+}
+.chaos-bar-pct { font-variant-numeric: tabular-nums; opacity: .6; }
+.chaos-bar-label { font-weight: 600; opacity: .85; letter-spacing: .04em; }
+
+/* ── Detalle por grupo ── */
+.chaos-detail { display: flex; flex-direction: column; gap: 6px; }
+.chaos-row { display: flex; align-items: flex-end; gap: 8px; }
+.chaos-row-name {
+  flex: 0 0 62px;
+  font-size: 10px; letter-spacing: .06em; opacity: .6;
+  padding-bottom: 3px;
+}
+.chaos-row-cells { display: flex; gap: 4px; flex: 1; }
+
+.chaos-cell {
+  position: relative; flex: 1;
+  min-height: 30px;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center; gap: 1px;
+  padding: 3px 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .04);
+  overflow: hidden;
+}
+.chaos-cell.top { background: rgba(255, 255, 255, .09); }
+.chaos-cell-bar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: color-mix(in srgb, var(--chaos-accent) 28%, transparent);
+  transition: height .3s ease;
+}
+.chaos-cell-k, .chaos-cell-v { position: relative; z-index: 1; }
+.chaos-cell-k { font-size: 9px; opacity: .55; letter-spacing: .04em; }
+.chaos-cell-v {
+  font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Pie ── */
+.chaos-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 9px; opacity: .45; letter-spacing: .04em;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chaos-bar-fill, .chaos-cell-bar { transition: none; }
+}
+
+/* ── TableEntropy reformulada: fila separadora para EFICACIA 15 ── */
+.entropy-row-sep {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}

@@ -1,12 +1,11 @@
 // LoginPage — Premium cyber (v2).
-// Misma identidad visual que el AppPage: red neuronal + telemetría + Michroma.
+// Misma identidad visual que el AppPage: red neuronal + Michroma.
 
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api';
 import { NeuralBackground } from '@/components/NeuralBackground';
-import { Telemetry } from '@/components/Telemetry';
 import '@/styles/login.css';
 
 export function LoginPage() {
@@ -36,7 +35,6 @@ export function LoginPage() {
   return (
     <>
       <NeuralBackground />
-      <Telemetry />
 
       <div className="login-wrap">
         <div className="login-card">

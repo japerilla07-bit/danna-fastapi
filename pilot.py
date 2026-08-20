@@ -325,7 +325,12 @@ class MotorReader:
         mesa_norm = score10 / 10.0
         ci = decision.get("chaos_info", {})
         # FIX: mismo bug de entropy_norm nunca escrita — fallback a entropy_rel.
-        entropy_norm = float(ci.get("entropy_norm", ci.get("entropy_rel", 0.5)) or 0.5)
+        # FIX (truthiness): `... or 0.5` descarta un 0.0 legitimo (concentracion
+        # maxima del pano). Mismo patron del bug de consec_losses.
+        _en_pl = ci.get("entropy_norm", None)
+        if _en_pl is None:
+            _en_pl = ci.get("entropy_rel", None)
+        entropy_norm = float(_en_pl) if _en_pl is not None else 0.5
         entropy_score = 1.0 - max(0.0, min(1.0, entropy_norm))
         consec_ratio = max(0.0, min(1.0, consec_losses / 7.0))
         consec_score = 1.0 - consec_ratio
@@ -1537,13 +1542,18 @@ def is_god_active(hud_data: dict, decision: dict, verdict: dict = None,
                   operator_override: bool = False, table_health: dict = None):
     """ÚNICA fuente de verdad para 'estamos en GOD ahora'.
 
-    Reglas GOD (las 6 deben cumplirse simultáneamente):
-      1) HUD == OPTIMAL
-      2) Radar (mesa_score.score10) ≥ 7/10
-      3) Table Entropy (hud_data.cond × 100) ≥ 50/100
-      4) TQI / Mesa Saludable (verdict.tqi.score) ≥ 70/100
-      5) CCS del TOP PICK ≥ 69%
-      6) Table Health (medidor lateral, analyze_table_health) ≥ 50/100
+    Reglas GOD (las 5 deben cumplirse simultáneamente):
+      1) HUD == OPTIMAL   (equivale a hud_data.cond >= 0.65)
+      2) Radar (mesa_score.score10) >= 7/10
+      3) TQI / Mesa Saludable (verdict.tqi.score) >= 70/100
+      4) CCS del TOP PICK >= 69%
+      5) Table Health (medidor lateral, analyze_table_health) >= 50/100
+
+    FIX: antes habia una 6a condicion, 'Table Entropy (hud_data.cond x 100)
+    >= 50/100'. Era imposible de fallar: la condicion 1 exige cond >= 0.65,
+    que ya implica cond >= 0.50. Media la MISMA variable dos veces con un
+    umbral mas laxo, asi que nunca podia bloquear nada. Eliminada para que
+    el conteo de filtros que ve el operador sea real.
 
     Si operator_override=True, retorna (True, []) sin chequear nada.
     El operador asumió responsabilidad de su lectura visual.
@@ -1571,15 +1581,11 @@ def is_god_active(hud_data: dict, decision: dict, verdict: dict = None,
     if radar < 0.70:
         failed.append(f"Radar={int(round(radar*10))}/10")
 
-    # 3) Table Entropy ≥ 50/100 (cond compuesto del HUD)
-    try:
-        table_entropy = float((hud_data or {}).get("cond", 0.0) or 0.0)
-    except Exception:
-        table_entropy = 0.0
-    if table_entropy < 0.50:
-        failed.append(f"Entropy={int(round(table_entropy*100))}/100")
+    # (condicion 'Table Entropy >= 0.50' ELIMINADA — ver FIX en el docstring:
+    #  era hud_data.cond, la misma variable de la condicion 1, con umbral
+    #  mas bajo, por lo que jamas podia fallar.)
 
-    # 4) TQI ≥ 70/100
+    # 3) TQI ≥ 70/100
     tqi = 0
     try:
         if isinstance(verdict, dict):
@@ -1591,7 +1597,7 @@ def is_god_active(hud_data: dict, decision: dict, verdict: dict = None,
     if tqi < 70:
         failed.append(f"Mesa={tqi}/100")
 
-    # 5) CCS del TOP PICK ≥ 69%
+    # 4) CCS del TOP PICK ≥ 69%
     #    El "TARGET LOCK" visual de la card representa la convicción real
     #    de la apuesta principal. Si el CCS es bajo (< 69%), la mesa puede
     #    cumplir HUD/Radar/Entropy/TQI pero el pick no tiene fuerza
@@ -1611,7 +1617,7 @@ def is_god_active(hud_data: dict, decision: dict, verdict: dict = None,
     if top_ccs < 69:
         failed.append(f"CCS={top_ccs}/100")
 
-    # 6) Table Health ≥ 50/100
+    # 5) Table Health ≥ 50/100
     #    El medidor "TABLE ENTROPY" lateral (analyze_table_health del engine).
     #    Refleja la racha reciente real: arranca 50, +5 win / -4 loss en
     #    los últimos 15 spins. Si está bajo 50, la mesa viene perdedora

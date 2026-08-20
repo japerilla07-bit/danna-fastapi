@@ -423,7 +423,12 @@ class WheelExpertPremium:
                 p[int(nn)] += strength * 0.35 * w_d
         sc_conf = float(scatter.get("confidence",0.0))
         sc_peak = int(scatter.get("peak_scatter",0))
-        if sc_conf > 0.22 and len(spins) >= 2 and sc_peak > 0:
+        # FIX: 0.22 fijo. Con ventana 30 el pico nunca lo alcanza (P=0.0004,
+        # submodelo muerto); con ventana 14 se dispara el 16.6% sobre ruido.
+        # Umbral honesto = percentil 95 de la nula para el nº real de distancias.
+        _n_d     = max(1, len(spins) - 1)
+        _sc_crit = float(min(0.50, max(0.15, 0.60 / math.sqrt(float(_n_d)))))
+        if sc_conf > _sc_crit and len(spins) >= 2 and sc_peak > 0:
             try:
                 last_idx = _EU_WHEEL_INDEX.get(int(spins[-1]), -1)
                 if last_idx >= 0:
@@ -4625,6 +4630,135 @@ def _debug_gate_update(decision: dict, name: str, updates: dict) -> None:
         pass
 
 
+# ==========================================================================
+# INDICE DE CAOS / DISPERSION  (siempre devuelve valor, nunca calla)
+# ==========================================================================
+# Definicion operativa de CAOS: dispersion de la bola. No hay patron, los
+# sectores no se repiten, y docenas/columnas/color/paridad/rango salen
+# repartidos. ORDEN es lo contrario: concentracion.
+#
+# Se miden DOS ejes independientes, porque son fenomenos distintos:
+#   PANO  -> chi2 agregado de docenas+columnas+color+paridad+rango
+#   RUEDA -> R (longitud resultante circular) sobre el orden fisico EU
+# Una mesa puede estar dispersa en el pano y concentrada en la rueda
+# (un sector repitiendo) o al reves.
+#
+# Cada eje se reporta como PERCENTIL contra la distribucion de una mesa
+# perfectamente justa (300.000 simulaciones, ventana 14). Percentil 90 =
+# "mas concentrada que el 90% de las ventanas normales". Asi el numero
+# siempre significa algo y nunca afirma que exista un sesgo real.
+_CHAOS_NULL_QS   = [1, 5, 10, 25, 50, 75, 90, 95, 99]
+_CHAOS_NULL_CHI2 = [1.143, 2.000, 2.667, 4.143, 6.286, 9.000, 12.286, 14.571, 19.500]
+_CHAOS_NULL_R    = [0.0270, 0.0612, 0.0879, 0.1451, 0.2246, 0.3167, 0.4044, 0.4588, 0.5599]
+
+
+def _chaos_pct(value: float, table: list) -> float:
+    """Percentil aproximado de `value` contra la nula tabulada (interpolado)."""
+    try:
+        v = float(value)
+    except Exception:
+        return 50.0
+    if v <= table[0]:
+        return float(_CHAOS_NULL_QS[0])
+    if v >= table[-1]:
+        return 99.5
+    for k in range(1, len(table)):
+        if v <= table[k]:
+            lo_v, hi_v = table[k-1], table[k]
+            lo_q, hi_q = _CHAOS_NULL_QS[k-1], _CHAOS_NULL_QS[k]
+            if hi_v <= lo_v:
+                return float(hi_q)
+            return float(lo_q + (hi_q - lo_q) * (v - lo_v) / (hi_v - lo_v))
+    return 99.5
+
+
+def _chaos_label(pct: float) -> str:
+    if pct < 25.0:  return "DISPERSO"
+    if pct < 75.0:  return "NEUTRO"
+    if pct < 90.0:  return "CONCENTRADO"
+    return "MUY CONCENTRADO"
+
+
+def compute_chaos_index(spins, window: int = 14) -> dict:
+    """Indice de caos/orden sobre la ventana operativa. SIEMPRE devuelve valor.
+
+    No predice nada: describe cuanta dispersion hay AHORA en la mesa y como
+    de rara es esa dispersion comparada con una mesa justa.
+    """
+    try:
+        arr = [int(x) for x in (spins or []) if 0 <= int(x) <= 36]
+    except Exception:
+        arr = []
+    arr = arr[-int(max(4, window)):]
+    n = len(arr)
+
+    if n < 4:
+        return {"enabled": False, "n": n, "estado": "CALIBRANDO",
+                "score": 50, "pano": {}, "rueda": {}, "detalle": {}}
+
+    doc = [0, 0, 0]; col = [0, 0, 0]
+    color = [0, 0]; par = [0, 0]; rango = [0, 0]
+    cero = 0; ang = []
+
+    for x in arr:
+        ang.append(_EU_WHEEL_INDEX.get(x, 0) * 2.0 * math.pi / 37.0)
+        if x == 0:
+            cero += 1
+            continue
+        doc[(x - 1) // 12] += 1
+        _m = x % 3
+        col[0 if _m == 1 else (1 if _m == 2 else 2)] += 1
+        color[0 if x in _REDS else 1] += 1
+        par[0 if x % 2 == 0 else 1] += 1
+        rango[0 if x <= 18 else 1] += 1
+
+    def _chi(cnt):
+        t = float(sum(cnt))
+        if t <= 0:
+            return 0.0
+        e = t / float(len(cnt))
+        return float(sum((c - e) ** 2 / e for c in cnt))
+
+    chi2 = _chi(doc) + _chi(col) + _chi(color) + _chi(par) + _chi(rango)
+
+    _a = np.array(ang, dtype=float)
+    R = float(math.hypot(float(np.cos(_a).mean()), float(np.sin(_a).mean()))) if len(_a) else 0.0
+
+    pct_pano  = _chaos_pct(chi2, _CHAOS_NULL_CHI2)
+    pct_rueda = _chaos_pct(R,   _CHAOS_NULL_R)
+    pct_max   = max(pct_pano, pct_rueda)
+
+    if pct_max < 40.0:
+        estado = "CAOS"
+    elif pct_max >= 85.0:
+        estado = "ORDEN"
+    else:
+        estado = "MIXTO"
+
+    def _pc(cnt):
+        t = max(1, sum(cnt))
+        return [round(100.0 * c / t, 1) for c in cnt]
+
+    return {
+        "enabled": True,
+        "n": int(n),
+        "estado": estado,
+        "score": int(round(pct_max)),
+        "pano":  {"chi2": round(chi2, 2), "pct": round(pct_pano, 1),
+                  "label": _chaos_label(pct_pano)},
+        "rueda": {"R": round(R, 3), "pct": round(pct_rueda, 1),
+                  "label": _chaos_label(pct_rueda)},
+        "detalle": {
+            "docenas":  {"counts": doc,   "pct": _pc(doc)},
+            "columnas": {"counts": col,   "pct": _pc(col)},
+            "color":    {"counts": color, "pct": _pc(color)},
+            "paridad":  {"counts": par,   "pct": _pc(par)},
+            "rango":    {"counts": rango, "pct": _pc(rango)},
+            "cero": int(cero),
+        },
+    }
+
+
 def compute_mesa_score_simple(spins: list, p_fused=None, chaos: dict = None, params: dict = None, prev: dict = None) -> dict:
     """Simple, explainable MesaScore (0..100) for live table selection.
     Default: window=60, min=30, update_every=5, EMA(0.7 prev / 0.3 new).
@@ -5773,11 +5907,15 @@ def _compute_table_gate(raw_action: str, mesa_score: dict, drift_state: dict, pa
     except Exception:
         zmax = 0.0
     try:
-        z_warn = float(params.get("z_warn", params.get("zmax_warn", 3.0)))
+        # FIX: |z|max es el MAXIMO de 37 comparaciones. z=3.0 es raro para un
+        # numero fijado de antemano, pero se alcanza el 10-12% del tiempo al
+        # tomar el maximo de 37 en una rueda perfecta. Bonferroni: alpha/37.
+        # alpha global 0.05 -> |z|=3.205 ; alpha 0.01 -> |z|=3.642.
+        z_warn = float(params.get("z_warn", params.get("zmax_warn", 3.21)))
     except Exception:
         z_warn = 3.0
     try:
-        z_critical = float(params.get("z_critical", params.get("zmax_critical", 4.0)))
+        z_critical = float(params.get("z_critical", params.get("zmax_critical", 3.65)))
     except Exception:
         z_critical = 4.0
     try:
@@ -6312,11 +6450,48 @@ def get_decision(analysis: dict, cfl_metrics: dict, spins: List[int], params: di
             s_clean = _clean_spins(spins or [])
             # Entropía relativa: 1.0 ~ casi uniforme
             try:
-                H_rel = float(_shannon_entropy(p_fused) / (math.log(37.0) + EPS))
+                # FIX: _shannon_entropy devuelve BITS (np.log2). El maximo es
+                # log2(37)=5.2095, no ln(37)=3.6109. Dividir por el logaritmo
+                # natural inflaba H_rel un factor 1/ln2 = 1.4427 y lo saturaba
+                # en 1.0 el 100% del tiempo -> entropy_score = 1-H_rel = 0 fijo.
+                H_rel = float(_shannon_entropy(p_fused) / (math.log2(37.0) + EPS))
             except Exception:
                 H_rel = 0.0
             H_rel = float(np.clip(H_rel, 0.0, 1.0))
             chaos_info["entropy_rel"] = H_rel
+
+            # REFORMULACION: "entropy_norm" es el campo que leen las TRES copias
+            # de la formula del HUD (processor.py, pilot.py, state_routes.py)
+            # para calcular entropy_score = 1 - entropy_norm, el 25% del COND
+            # que en pantalla se muestra como el chip "ORDEN".
+            #
+            # Nunca se escribia -> ORDEN caia siempre al default 0.50 y quedaba
+            # congelado. Y aunque se escribiera, H_rel (entropia de p_fused sobre
+            # 37 casillas) vive en [0.94, 1.00]: no tiene rango util y ademas mide
+            # la incertidumbre del MODELO, no la dispersion de la MESA.
+            #
+            # Ahora se escribe con la dispersion real del pano medida por
+            # compute_chaos_index: percentil del chi2 agregado de docenas +
+            # columnas + color + paridad + rango contra una mesa justa.
+            #   entropy_norm = 1 - pct/100   (1.0 = totalmente disperso)
+            #   entropy_score = 1 - entropy_norm = pct/100  (1.0 = concentrado)
+            # Bajo mesa justa el percentil es uniforme, asi que ORDEN sigue
+            # promediando 0.50 (no desplaza los umbrales existentes) pero por
+            # fin RECORRE todo el rango 0-1 en vez de estar clavado.
+            try:
+                _ci_pano = compute_chaos_index(s_clean, window=int(params.get("chaos_pano_window", 14)))
+                _pano_pct = float((_ci_pano.get("pano") or {}).get("pct", 50.0))
+                # SUELO 0.005 DELIBERADO, no cosmetico: las tres copias de la
+                # formula leen este campo con `... or 0.5`, y en Python 0.0 es
+                # falso -> un entropy_norm de 0.0 (concentracion maxima, el caso
+                # que mas importa detectar) caeria silenciosamente al 0.5 neutro.
+                # Es el mismo bug de truthiness que ya aparecio con consec_losses.
+                chaos_info["entropy_norm"] = float(np.clip(1.0 - _pano_pct / 100.0, 0.005, 1.0))
+                chaos_info["pano_pct"]     = round(_pano_pct, 1)
+                chaos_info["rueda_pct"]    = round(float((_ci_pano.get("rueda") or {}).get("pct", 50.0)), 1)
+                chaos_info["dispersion"]   = str(_ci_pano.get("estado", "MIXTO"))
+            except Exception:
+                chaos_info["entropy_norm"] = 0.5
 
             # Drift nivel (usa calculate_drift_level existente)
             try:
@@ -6344,7 +6519,10 @@ def get_decision(analysis: dict, cfl_metrics: dict, spins: List[int], params: di
             except Exception:
                 chaos_info["guardian_miss_streak"] = 0
 
-            ent_hi = float(params.get("chaos_entropy_rel_hi", 0.97))
+            # FIX: con la normalizacion correcta H_rel vive en [0.94, 1.00] para
+            # un p_fused de ruleta. El umbral 0.97 se cruzaba el 86-100% del
+            # tiempo, o sea CHAOS permanente. Percentil util medido: ~0.995.
+            ent_hi = float(params.get("chaos_entropy_rel_hi", 0.995))
             drift_warn = float(params.get("chaos_drift_warn", 0.25))
             L_chaos = int(params.get("chaos_consec_losses", 5))
             G_chaos = int(params.get("chaos_guardian_miss", 9))
@@ -6426,11 +6604,12 @@ def get_decision(analysis: dict, cfl_metrics: dict, spins: List[int], params: di
     except Exception:
         _zmax = 0.0
     try:
-        _z_warn = float((params or {}).get("z_warn", (params or {}).get("zmax_warn", 3.0)))
+        # FIX (misma correccion Bonferroni que en _compute_table_gate)
+        _z_warn = float((params or {}).get("z_warn", (params or {}).get("zmax_warn", 3.21)))
     except Exception:
         _z_warn = 3.0
     try:
-        _z_critical = float((params or {}).get("z_critical", (params or {}).get("zmax_critical", 4.0)))
+        _z_critical = float((params or {}).get("z_critical", (params or {}).get("zmax_critical", 3.65)))
     except Exception:
         _z_critical = 4.0
     try:

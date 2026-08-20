@@ -4,7 +4,7 @@
 // Estado de la migración:
 //   ✅ PIEZA 1 — HUD top bar
 //   ✅ PIEZA 2 — OPTIMAL state strip
-//   ✅ PIEZA 3 — Control de Misión + Live Bet + Paño + Wheel + Entropy + Radar + WarTerminal
+//   ✅ PIEZA 3 — Control de Misión + Live Bet + Paño + Wheel + Entropy + Radar + Dispersión + WarTerminal
 //   ⏳ PIEZA 4 — GOD modal flotante + Capital Allocation + Bankroll + Ledger
 
 import { useState } from 'react';
@@ -28,7 +28,7 @@ import { RadarCard } from '@/components/RadarCard';
 import { CategoryTable } from '@/components/CategoryTable';
 import { GodBetPanel } from '@/components/GodBetPanel';
 import { NeuralBackground } from '@/components/NeuralBackground';
-import { Telemetry } from '@/components/Telemetry';
+import { ChaosPanel } from '@/components/ChaosPanel';
 
 import { QuantumPilot } from '@/components/Quantumpilot';
 import { SidebarDrawer } from '@/components/SidebarDrawer';
@@ -39,6 +39,7 @@ import '@/styles/mission.css';
 import '@/styles/quantum-pilot.css';
 import '@/styles/sidebar.css';
 import '@/styles/app.css';
+import '@/styles/chaos-panel.css';
 
 interface PendingBet {
   kind: string;
@@ -114,7 +115,6 @@ export function AppPage() {
   return (
     <>
       <NeuralBackground />
-      <Telemetry />
 
       {/* Sidebar drawer (botón hamburguesa) */}
       <SidebarDrawer
@@ -214,10 +214,14 @@ export function AppPage() {
             />
           </div>
 
-          {/* DERECHA: Table Entropy + Radar */}
+          {/* DERECHA: Table Entropy + Radar + Dispersión */}
           <div className="col-right">
-            <TableEntropy tableHealth={(data as any).table_health ?? null} />
+            <TableEntropy
+              chaosIndex={(data as any).chaos_index ?? null}
+              tableHealth={(data as any).table_health ?? null}
+            />
             <RadarCard payload={data.payload} />
+            <ChaosPanel chaosIndex={(data as any).chaos_index ?? null} />
           </div>
 
         </div>
