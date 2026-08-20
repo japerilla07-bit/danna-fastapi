@@ -1,7 +1,13 @@
 // RadarCard — Indicador circular del Radar.
 // Port de app.py L7573-7578:
 //   score = decision.mesa_score.score10  (0-10, calculado por el motor)
-//   TOP   = decision.primary_bet.label + pick + score_pct
+//   PICK  = decision.primary_bet.label + pick + score_pct
+//
+// OJO — "PICK" es la SUGERENCIA del motor para el PRÓXIMO spin, NO lo que más
+// ha salido. Puede contradecir al panel de DISPERSIÓN (que muestra lo que ya
+// ocurrió) y es normal: si el motor predice reversión, tras 11 rojos sugiere
+// negro. Antes esta etiqueta decía "TOP", que se leía como "lo más frecuente"
+// y hacía que ambos paneles parecieran incoherentes.
 
 import type { EnginePayload } from '@/types/api';
 
@@ -32,12 +38,15 @@ export function RadarCard({ payload }: Props) {
       </div>
       <div className="radar-label">RADAR</div>
       <div className="radar-info">
-        <div className="head">⊙ TOP:</div>
+        <div className="head" title="Sugerencia del motor para el próximo spin — no es lo más frecuente">
+          ⊙ PICK:
+        </div>
         <div>{label}:</div>
         <div className="pick">{pick}</div>
         {scorePct > 0 && (
           <div className="num">({Math.round(scorePct)}%)</div>
         )}
+        <div className="radar-note">predicción, no frecuencia</div>
       </div>
     </div>
   );
