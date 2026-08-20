@@ -1,151 +1,133 @@
-/* ChaosPanel — card compacta para la columna derecha (~200-260px).
-   Misma familia visual que .entropy-card / .radar-card.
-   Pegar al final de la hoja global. */
+/* ChaosPanel — dispersión de mesa.
+   Añadir al CSS global. Reutiliza .panel / .panel-head existentes. */
 
-.cx-card {
-  --cx: #64748b;
+.chaos-panel {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  padding: 12px 10px 10px;
-  text-align: center;
+  gap: 12px;
+  border-left: 3px solid var(--chaos-accent, #3b4a5a);
 }
 
-.cx-card.cx-good { --cx: #2dd4bf; }  /* CAOS  — disperso */
-.cx-card.cx-mid  { --cx: #64748b; }  /* MIXTO — normal   */
-.cx-card.cx-bad  { --cx: #f59e0b; }  /* ORDEN — concentrado */
-.cx-card.cx-cal  { --cx: #475569; }  /* CALIBRANDO */
+.chaos-panel.chaos-caos   { --chaos-accent: #2dd4bf; }
+.chaos-panel.chaos-mixto  { --chaos-accent: #64748b; }
+.chaos-panel.chaos-orden  { --chaos-accent: #f59e0b; }
+.chaos-panel.chaos-cal    { --chaos-accent: #475569; }
 
-/* ── Cabecera ── */
-.cx-title {
+.chaos-panel .panel-head { display: flex; align-items: center; gap: 8px; }
+.chaos-n {
+  margin-left: auto;
   font-size: 10px;
-  letter-spacing: .18em;
-  opacity: .6;
-  white-space: nowrap;
+  letter-spacing: .08em;
+  opacity: .55;
+  text-transform: uppercase;
 }
-.cx-icon {
-  font-size: 15px;
-  color: var(--cx);
-  margin-top: 4px;
-  line-height: 1;
+
+/* ── Veredicto ── */
+.chaos-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--chaos-accent) 10%, transparent);
 }
-.cx-estado {
-  font-size: 17px;
+.chaos-estado {
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: .1em;
-  color: var(--cx);
-  line-height: 1.15;
-  margin-top: 4px;
-  white-space: nowrap;
+  letter-spacing: .12em;
+  color: var(--chaos-accent);
+  line-height: 1.1;
 }
-.cx-sub {
-  font-size: 9px;
-  opacity: .5;
-  margin-bottom: 10px;
-  line-height: 1.3;
-}
+.chaos-sub { font-size: 11px; opacity: .7; }
 
 /* ── Ejes ── */
-.cx-axis { margin-bottom: 7px; text-align: left; }
+.chaos-axes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) { .chaos-axes { grid-template-columns: 1fr; } }
 
-.cx-axis-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 9px;
-  letter-spacing: .1em;
-  margin-bottom: 3px;
+.chaos-axis { display: flex; flex-direction: column; gap: 5px; }
+.chaos-axis-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 10px; letter-spacing: .1em;
 }
-.cx-axis-k { opacity: .55; }
-.cx-axis-p {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.cx-axis-p.cold { color: #2dd4bf; }
-.cx-axis-p.mid  { color: #94a3b8; }
-.cx-axis-p.warm { color: #f59e0b; }
-.cx-axis-p.hot  { color: #ef4444; }
+.chaos-axis-head .k { font-weight: 700; opacity: .8; }
+.chaos-axis-head .v { font-variant-numeric: tabular-nums; opacity: .55; }
 
-.cx-bar {
+.chaos-bar-track {
   position: relative;
-  height: 4px;
-  border-radius: 3px;
+  height: 7px;
+  border-radius: 4px;
   background: rgba(255, 255, 255, .07);
   overflow: hidden;
 }
-.cx-bar-mid {
+.chaos-bar-median {
   position: absolute; left: 50%; top: 0; bottom: 0;
-  width: 1px; background: rgba(255, 255, 255, .25); z-index: 2;
+  width: 1px; background: rgba(255, 255, 255, .3); z-index: 2;
 }
-.cx-bar-fill {
+.chaos-bar-fill {
   position: absolute; left: 0; top: 0; bottom: 0;
-  border-radius: 3px;
+  border-radius: 4px;
   transition: width .35s ease;
 }
-.cx-bar-fill.cold { background: #2dd4bf; }
-.cx-bar-fill.mid  { background: #64748b; }
-.cx-bar-fill.warm { background: #f59e0b; }
-.cx-bar-fill.hot  { background: #ef4444; }
+.chaos-bar-fill.cold { background: #2dd4bf; }
+.chaos-bar-fill.mid  { background: #64748b; }
+.chaos-bar-fill.warm { background: #f59e0b; }
+.chaos-bar-fill.hot  { background: #ef4444; }
 
-/* ── Separador ── */
-.cx-sep {
-  height: 1px;
-  background: rgba(255, 255, 255, .07);
-  margin: 6px 0 8px;
+.chaos-bar-foot {
+  display: flex; justify-content: space-between;
+  font-size: 10px; margin-top: 3px;
 }
+.chaos-bar-pct { font-variant-numeric: tabular-nums; opacity: .6; }
+.chaos-bar-label { font-weight: 600; opacity: .85; letter-spacing: .04em; }
 
-/* ── Filas de conteo ── */
-.cx-rows { display: flex; flex-direction: column; gap: 3px; }
-
-.cx-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* ── Detalle por grupo ── */
+.chaos-detail { display: flex; flex-direction: column; gap: 6px; }
+.chaos-row { display: flex; align-items: flex-end; gap: 8px; }
+.chaos-row-name {
+  flex: 0 0 62px;
+  font-size: 10px; letter-spacing: .06em; opacity: .6;
+  padding-bottom: 3px;
 }
-.cx-row-k {
-  flex: 0 0 26px;
-  font-size: 9px;
-  letter-spacing: .08em;
-  opacity: .45;
-  text-align: left;
-}
-.cx-row-v { display: flex; gap: 3px; flex: 1; }
+.chaos-row-cells { display: flex; gap: 4px; flex: 1; }
 
-.cx-cell {
-  flex: 1;
-  min-width: 0;
-  padding: 2px 0;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, .05);
-  font-size: 11px;
-  font-weight: 700;
+.chaos-cell {
+  position: relative; flex: 1;
+  min-height: 30px;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center; gap: 1px;
+  padding: 3px 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .04);
+  overflow: hidden;
+}
+.chaos-cell.top { background: rgba(255, 255, 255, .09); }
+.chaos-cell-bar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: color-mix(in srgb, var(--chaos-accent) 28%, transparent);
+  transition: height .3s ease;
+}
+.chaos-cell-k, .chaos-cell-v { position: relative; z-index: 1; }
+.chaos-cell-k { font-size: 9px; opacity: .55; letter-spacing: .04em; }
+.chaos-cell-v {
+  font-size: 13px; font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 1.3;
-}
-.cx-cell.top {
-  background: color-mix(in srgb, var(--cx) 22%, transparent);
-  color: var(--cx);
 }
 
 /* ── Pie ── */
-.cx-badge {
-  margin-top: 9px;
-  padding-top: 7px;
+.chaos-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 9px; opacity: .45; letter-spacing: .04em;
+  padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, .06);
-  font-size: 8px;
-  letter-spacing: .1em;
-  opacity: .4;
-  white-space: nowrap;
 }
 
-/* ── TableEntropy: fila separadora de EFICACIA 15 ── */
+@media (prefers-reduced-motion: reduce) {
+  .chaos-bar-fill, .chaos-cell-bar { transition: none; }
+}
+
+/* ── TableEntropy reformulada: fila separadora para EFICACIA 15 ── */
 .entropy-row-sep {
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, .08);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cx-bar-fill { transition: none; }
 }
