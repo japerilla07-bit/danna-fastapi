@@ -5,6 +5,7 @@
 //
 // Lógica:
 //   - cond = mesa × 0.40 + entropy × 0.25 + consec × 0.25 + wheel × 0.10
+//   - entropy_norm sale de decision.chaos (ver FIX abajo)
 //   - state: cond ≥ 0.65 → OPTIMAL, ≥ 0.40 → CAUTION, < 0.40 → ABORT
 //   - Override: chaos_active OR consec ≥ 6 → ABORT
 //   - Override texto: consec ≥ 4 → warning
@@ -57,9 +58,14 @@ function computeOperationalCondition(
     const mesa_norm = score10 / 10.0;
 
     // Entropía (25%)
-    const chaos_info = (decision.chaos_info && typeof decision.chaos_info === 'object')
-      ? decision.chaos_info
-      : {};
+    // FIX CRITICO (clave equivocada): el motor exporta este bloque como
+    // payload.decision.chaos (engine.py ~6829), NO como "chaos_info".
+    // Leer la clave inexistente devolvia {} SIEMPRE -> entropy_norm caia al
+    // default 0.5 y el chip ORDEN quedaba congelado en 50 permanentemente.
+    // Mismo bug que habia en processor.py, pilot.py y state_routes.py.
+    // Se deja "chaos_info" como fallback por si algun dia se exporta asi.
+    const _chaos_raw = (decision as any).chaos ?? (decision as any).chaos_info;
+    const chaos_info = (_chaos_raw && typeof _chaos_raw === 'object') ? _chaos_raw : {};
     const entropy_norm = numFrom(chaos_info, 'entropy_norm', 0.5);
     const chaos_active_raw = !!chaos_info.active;
     const entropy_score = 1.0 - clamp01(entropy_norm);
