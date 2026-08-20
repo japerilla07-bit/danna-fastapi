@@ -46,6 +46,7 @@ function computeOperationalCondition(
   payload: EnginePayload | null,
   pilotConsec: number = 0,
   wheelTopScore: number = 0.25,
+  chaosIndex: any = null,
 ): OperationalData {
   try {
     const decision = (payload && typeof payload === 'object' && payload.decision) || {};
@@ -57,18 +58,35 @@ function computeOperationalCondition(
     const score10 = numFrom(ms, 'score10', 5);
     const mesa_norm = score10 / 10.0;
 
-    // Entropía (25%)
-    // FIX CRITICO (clave equivocada): el motor exporta este bloque como
-    // payload.decision.chaos (engine.py ~6829), NO como "chaos_info".
-    // Leer la clave inexistente devolvia {} SIEMPRE -> entropy_norm caia al
-    // default 0.5 y el chip ORDEN quedaba congelado en 50 permanentemente.
-    // Mismo bug que habia en processor.py, pilot.py y state_routes.py.
-    // Se deja "chaos_info" como fallback por si algun dia se exporta asi.
+    // Entropía (25%) — el chip ORDEN.
+    //
+    // FUENTE PRIMARIA: data.chaos_index, que state_routes calcula directamente
+    // con engine.compute_chaos_index() sobre los spins de sesion. Es la unica
+    // ruta verificada de punta a punta (es la que alimenta el ChaosPanel, y ese
+    // si muestra numeros reales). ORDEN = percentil de concentracion del paño.
+    //
+    // FUENTE SECUNDARIA: decision.chaos (el motor lo exporta con esa clave en
+    // engine.py ~6829, NO como "chaos_info" — ese era el bug que tenian los 7
+    // lectores). Se conserva como respaldo, pero depende de que el bloque de
+    // caos del motor se ejecute (esta gateado por chaos_enabled), asi que no
+    // es fiable como unica fuente.
+    //
+    // Si ninguna esta disponible -> 0.5 neutro, que es lo que hacia que este
+    // chip llevara congelado en 50 permanentemente.
     const _chaos_raw = (decision as any).chaos ?? (decision as any).chaos_info;
     const chaos_info = (_chaos_raw && typeof _chaos_raw === 'object') ? _chaos_raw : {};
-    const entropy_norm = numFrom(chaos_info, 'entropy_norm', 0.5);
+
+    const _panoPct = (chaosIndex && chaosIndex.pano && chaosIndex.pano.pct != null)
+      ? Number(chaosIndex.pano.pct)
+      : null;
+
+    let entropy_score: number;
+    if (_panoPct != null && isFinite(_panoPct)) {
+      entropy_score = clamp01(_panoPct / 100.0);          // primaria
+    } else {
+      entropy_score = 1.0 - clamp01(numFrom(chaos_info, 'entropy_norm', 0.5));
+    }
     const chaos_active_raw = !!chaos_info.active;
-    const entropy_score = 1.0 - clamp01(entropy_norm);
 
     // Consecutivos (25%) — usar pilotConsec (no consec_losses del guardián legacy)
     const consec = Math.max(0, Math.floor(pilotConsec));
@@ -133,10 +151,16 @@ interface Props {
   payload: EnginePayload | null;
   pilotConsec?: number;       // pilot_consec_errors del state
   wheelTopScore?: number;     // top wheel score (default 0.25 → wheel_score=0)
+  chaosIndex?: any;           // data.chaos_index — fuente primaria de ORDEN
 }
 
-export function OptimalStrip({ payload, pilotConsec = 0, wheelTopScore = 0.25 }: Props) {
-  const data = computeOperationalCondition(payload, pilotConsec, wheelTopScore);
+export function OptimalStrip({
+  payload,
+  pilotConsec = 0,
+  wheelTopScore = 0.25,
+  chaosIndex = null,
+}: Props) {
+  const data = computeOperationalCondition(payload, pilotConsec, wheelTopScore, chaosIndex);
   const { state, cond, chaos_active, consec, mesa_norm, entropy_score, consec_score, wheel_score } = data;
 
   const meta = LABELS[state];

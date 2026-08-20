@@ -160,6 +160,7 @@ export function AppPage() {
           payload={data.payload}
           pilotConsec={pilotConsec}
           wheelTopScore={wheelTopScore}
+          chaosIndex={(data as any).chaos_index ?? null}
           // TODO[Fase1-audit]: OptimalStrip no declara la prop `hudComputed`
           // en su interface Props. Antes pasaba silencioso por el cast
           // `(data as any).hud_computed`. Tres opciones:
