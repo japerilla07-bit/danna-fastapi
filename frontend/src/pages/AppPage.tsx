@@ -150,6 +150,36 @@ export function AppPage() {
     return vals.length > 0 ? Math.max(...vals) : 0.25;
   })();
 
+  // ── COND y ENTROPÍA: se calculan aquí con la MISMA fórmula que usan
+  // OptimalStrip y TableEntropy. NO vienen del API: `_debug` no existe en la
+  // raíz del payload (está anidado), y por eso el primer CSV salía con esas
+  // tres columnas vacías. Al calcularlas aquí, el CSV registra exactamente
+  // los números que se ven en pantalla — que es lo que Gunner anotaba a mano.
+  const condCalc = (() => {
+    const dec: any = (data.payload as any)?.decision ?? {};
+    const score10 = Number(dec?.mesa_score?.score10 ?? 5);
+    const mesaNorm = score10 / 10;
+    const ci: any = (data as any).chaos_index ?? {};
+    const panoPct = Number(ci?.pano?.pct);
+    const entropyScore = Number.isFinite(panoPct) ? Math.max(0, Math.min(1, panoPct / 100)) : 0.5;
+    const consec = Math.max(0, Math.floor(pilotConsec));
+    const consecScore = 1 - Math.max(0, Math.min(1, consec / 7));
+    const wheelScore = Math.max(0, Math.min(1, (wheelTopScore - 0.25) / 0.35));
+    const c = mesaNorm * 0.4 + entropyScore * 0.25 + consecScore * 0.25 + wheelScore * 0.1;
+    return Math.round(Math.max(0, Math.min(1, c)) * 100);
+  })();
+
+  // TABLE ENTROPY = 100 − el percentil más alto de los dos ejes (igual que la card)
+  const entropyCalc = (() => {
+    const ci: any = (data as any).chaos_index ?? {};
+    const a = Number(ci?.pano?.pct);
+    const b = Number(ci?.rueda?.pct);
+    if (!Number.isFinite(a) && !Number.isFinite(b)) return null;
+    const mx = Math.max(Number.isFinite(a) ? a : 0, Number.isFinite(b) ? b : 0);
+    return Math.round(Math.max(0, Math.min(100, 100 - mx)));
+  })();
+
+
   return (
     <>
       <NeuralBackground />
@@ -167,6 +197,11 @@ export function AppPage() {
         payload={data.payload}
         bankroll={data.bankroll}
         counters={(data.counters ?? {}) as any}
+        spinsCount={data.sequence.count}
+        pdHud={condCalc}
+        pdEntropy={entropyCalc}
+        pdDocHit={lastHits.doc}
+        pdColHit={lastHits.col}
       />
 
       <div className="app-wrap">
@@ -228,9 +263,9 @@ export function AppPage() {
                   Array.isArray(data.sequence.spins) && data.sequence.spins.length > 0
                     ? Number(data.sequence.spins[data.sequence.spins.length - 1])
                     : null,
-                hud: (data as any)._debug?.hud_cond ?? null,
+                hud: condCalc,
                 hudState: String((data as any).god_bet?.cond_state ?? ''),
-                entropy: (data as any)._debug?.table_entropy ?? null,
+                entropy: entropyCalc,
                 radar: (data.payload as any)?.decision?.mesa_score?.score10 ?? null,
                 wheel: (data as any).wheel_info?.adaptive_w ?? null,
                 panoPct: (data as any).chaos_index?.pano?.pct ?? null,
@@ -242,11 +277,13 @@ export function AppPage() {
                 p2: (data.payload as any)?.decision?.bet_advice?.docenas?.p2 ?? null,
                 docPick: String((data.payload as any)?.decision?.bet_advice?.docenas?.pick ?? ''),
                 docState: String((data.payload as any)?.decision?.bet_advice?.docenas?.status ?? ''),
-                docHit: lastHits.doc,
+                docW: Number((data.counters as any)?.docenas?.wins ?? 0),
+                docL: Number((data.counters as any)?.docenas?.losses ?? 0),
                 colPick: String((data.payload as any)?.decision?.bet_advice?.columnas?.pick ?? ''),
                 colState: String((data.payload as any)?.decision?.bet_advice?.columnas?.status ?? ''),
-                colHit: lastHits.col,
-                cond: (data as any)._debug?.hud_cond ?? null,
+                colW: Number((data.counters as any)?.columnas?.wins ?? 0),
+                colL: Number((data.counters as any)?.columnas?.losses ?? 0),
+                cond: condCalc,
                 condState: String((data as any).god_bet?.cond_state ?? ''),
               }}
             />

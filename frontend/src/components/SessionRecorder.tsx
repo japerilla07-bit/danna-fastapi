@@ -45,10 +45,14 @@ export interface Fila {
   doc_pick: string;
   doc_state: string;
   doc_result: string;
+  doc_w: number;
+  doc_l: number;
 
   col_pick: string;
   col_state: string;
   col_result: string;
+  col_w: number;
+  col_l: number;
 
   cond: number | null;
   cond_state: string;
@@ -77,10 +81,12 @@ export interface Snapshot {
   p2: number | null;
   docPick: string;
   docState: string;
-  docHit: boolean | null;
+  docW: number;
+  docL: number;
   colPick: string;
   colState: string;
-  colHit: boolean | null;
+  colW: number;
+  colL: number;
   cond: number | null;
   condState: string;
 }
@@ -138,6 +144,21 @@ const COLS: Array<[keyof Fila, string]> = [
   ['gatillo_hud', 'gatillo_hud'],
 ];
 
+/** Deriva acierto/error comparando los contadores de cada fila con la anterior. */
+function derivar(filas: Fila[]): Fila[] {
+  return filas.map((f: Fila, i: number) => {
+    if (i === 0) return f;
+    const a = filas[i - 1];
+    const dw = f.doc_w - a.doc_w, dl = f.doc_l - a.doc_l;
+    const cw = f.col_w - a.col_w, cl = f.col_l - a.col_l;
+    return {
+      ...f,
+      doc_result: dw > 0 ? 'acierto' : dl > 0 ? 'error' : '',
+      col_result: cw > 0 ? 'acierto' : cl > 0 ? 'error' : '',
+    };
+  });
+}
+
 function aCSV(filas: Fila[]): string {
   const esc = (v: unknown) => {
     const s = v === null || v === undefined ? '' : String(v);
@@ -187,11 +208,20 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
         p2: snap.p2,
         doc_pick: snap.docPick,
         doc_state: snap.docState,
-        // el resultado SIEMPRE, aunque el estado fuera wait o probe
-        doc_result: snap.docHit === null ? '' : snap.docHit ? 'acierto' : 'error',
+        // FIX: antes se recibía un booleano ya derivado en AppPage comparando
+        // contadores al cambiar spinsCount. Había carrera — el payload podía
+        // traer el spin nuevo con los contadores aún sin actualizar, y 8 de
+        // cada 10 filas salían vacías. Ahora se guardan los contadores CRUDOS
+        // y el resultado se deriva al exportar, comparando fila con fila. Sin
+        // carrera posible: si el contador subió entre dos filas, hubo evento.
+        doc_result: '',
+        doc_w: snap.docW,
+        doc_l: snap.docL,
         col_pick: snap.colPick,
         col_state: snap.colState,
-        col_result: snap.colHit === null ? '' : snap.colHit ? 'acierto' : 'error',
+        col_result: '',
+        col_w: snap.colW,
+        col_l: snap.colL,
         cond: snap.cond,
         cond_state: snap.condState,
         d_hud: dh,
@@ -207,7 +237,7 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
   }, [snap, thrEnt, thrHud, thrHudNivel]);
 
   function descargar() {
-    const csv = '\uFEFF' + aCSV(filas); // BOM para que Excel lea los acentos
+    const csv = '\uFEFF' + aCSV(derivar(filas)); // BOM para que Excel lea los acentos
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -225,8 +255,9 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
   }
 
   // ── resumen rápido en pantalla ──
-  const evDoc = filas.filter((f: Fila) => f.doc_result !== '');
-  const evCol = filas.filter((f: Fila) => f.col_result !== '');
+  const der = derivar(filas);
+  const evDoc = der.filter((f: Fila) => f.doc_result !== '');
+  const evCol = der.filter((f: Fila) => f.col_result !== '');
   const acDoc = evDoc.filter((f: Fila) => f.doc_result === 'acierto').length;
   const acCol = evCol.filter((f: Fila) => f.col_result === 'acierto').length;
   const conG = evDoc.filter((f: Fila) => f.gatillo_ent === 1);

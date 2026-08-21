@@ -7,7 +7,7 @@
 //   2. TARGET LOCK (top pick) — clickeable para marcar como apuesta del usuario
 //   3. OTRAS SUGERENCIAS ACTIVAS — lista clickeable
 //   4. SALDO + P&L  /  ERRORES (consec · max · err/hit)
-//   5. SESIÓN GOD (hits/total + HR%)
+//   5. CONCIENCIA SITUACIONAL — PilotDelta (W/R 14, anclaje, Δ)
 //   6. EFICIENCIA POR CATEGORÍA (strip horizontal)
 //
 // Tracker de override:
@@ -19,6 +19,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
 
 // ── Tipos ─────────────────────────────────────────────────────────
+
+import { PilotDelta } from '@/components/PilotDelta';
+import '@/styles/pilot-delta.css';
 
 const GOD_CATS = ['color', 'paridad', 'rango', 'docenas', 'columnas'] as const;
 type GodCat = typeof GOD_CATS[number];
@@ -142,6 +145,16 @@ interface Props {
   payload: EnginePayload | null;
   bankroll: Bankroll;
   counters: Record<string, CounterEntry>;
+  /** ── PilotDelta (sustituye al bloque SESIÓN GOD) ────────────────────── */
+  /** Nº de giros de la sesión — dispara el registro de una fila nueva. */
+  spinsCount?: number;
+  /** HUD tal como se anota en el Excel (el COND ×100). */
+  pdHud?: number | null;
+  /** Entropía tal como se anota (la card TABLE ENTROPY). */
+  pdEntropy?: number | null;
+  /** Resultado del último giro en docenas / columnas. */
+  pdDocHit?: boolean | null;
+  pdColHit?: boolean | null;
 }
 
 // ── Hook draggable ────────────────────────────────────────────────
@@ -288,7 +301,16 @@ const fmtPctClass = (pct: number): string => {
 
 // ── Componente principal ─────────────────────────────────────────
 
-export function QuantumPilot({ godBet, counters, bankroll }: Props) {
+export function QuantumPilot({
+  godBet,
+  counters,
+  bankroll,
+  spinsCount = 0,
+  pdHud = null,
+  pdEntropy = null,
+  pdDocHit = null,
+  pdColHit = null,
+}: Props) {
   const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
   const [override, setOverride] = useState<OverrideState | null>(null);
@@ -437,8 +459,9 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
   const maxConsecErr = Number(godTarget.max_consec_errors ?? 0);
   const hits = Number(godTarget.wins ?? 0);
   const misses = Number(godTarget.losses ?? 0);
-  const totalBets = hits + misses;
-  const hitRate = totalBets > 0 ? (hits / totalBets) * 100 : 0;
+  // `totalBets` y `hitRate` alimentaban el bloque SESIÓN GOD, sustituido por
+  // PilotDelta. Eliminadas para no dejar variables sin usar (rompe el build
+  // si tsconfig tiene noUnusedLocals). `errHit` sigue viva en el bloque ERRORES.
   const errHit = hits > 0 ? misses / hits : misses;
 
   // ── Minimizado
@@ -1053,46 +1076,19 @@ export function QuantumPilot({ godBet, counters, bankroll }: Props) {
           </div>
         </div>
 
-        {/* ═══ 5. SESIÓN GOD ═══ */}
-        <div
-          className="flex items-center justify-center gap-3 py-2 rounded-md"
-          style={{
-            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 12, 22, 0.5) 100%)',
-            border: '1px solid rgba(34, 211, 238, 0.12)',
-          }}
-        >
-          <span
-            className="text-[10px] text-gray-500"
-            style={{ letterSpacing: '0.3em' }}
-          >
-            SESIÓN GOD
-          </span>
-          <span
-            className="font-bold text-white text-[13px]"
-            style={{ textShadow: '0 0 4px rgba(255, 255, 255, 0.3)' }}
-          >
-            {hits}/{totalBets}
-          </span>
-          <span
-            className="font-black text-[15px]"
-            style={{
-              color:
-                hitRate >= 70
-                  ? '#4ade80'
-                  : hitRate >= 50
-                  ? '#fbbf24'
-                  : hitRate >= 30
-                  ? '#fb923c'
-                  : '#f87171',
-              textShadow:
-                hitRate >= 50
-                  ? '0 0 8px rgba(74, 222, 128, 0.5)'
-                  : '0 0 4px rgba(251, 146, 60, 0.3)',
-            }}
-          >
-            {totalBets > 0 ? hitRate.toFixed(0) : '0'}%
-          </span>
-        </div>
+        {/* ═══ 5. CONCIENCIA SITUACIONAL (sustituye a SESIÓN GOD) ═══
+             Tres bloques de lectura rápida:
+               A · W/R 14, secuencia A/E, diagnóstico de mesa
+               B · anclaje (Max−Min de HUD y Entropía en 5 giros)
+               C · Δ contra el giro anterior + acción recomendada
+             Solo lectura: no cambia ninguna decisión del motor.        ═══ */}
+        <PilotDelta
+          spinsCount={spinsCount}
+          hud={pdHud}
+          entropy={pdEntropy}
+          docHit={pdDocHit}
+          colHit={pdColHit}
+        />
 
         {/* ═══ 5.5. PROGRESIÓN L1→L4 ═══
             Bloque que muestra el nivel actual + proyección del siguiente
