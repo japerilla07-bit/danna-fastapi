@@ -3,7 +3,7 @@
 // Replica la UI del deploy original (Streamlit) sobre React.
 //
 // Bloques:
-//   1. Header verdict (EN ESPERA / GOD ACTIVO) + HUD + RADAR + CCS%
+//   1. Header verdict (CON PICK / EN ESPERA) + HUD + RADAR + CCS%
 //   2. TARGET LOCK (top pick) — clickeable para marcar como apuesta del usuario
 //   3. OTRAS SUGERENCIAS ACTIVAS — lista clickeable
 //   4. SALDO + P&L  /  ERRORES (consec · max · err/hit)
@@ -303,6 +303,7 @@ const fmtPctClass = (pct: number): string => {
 
 export function QuantumPilot({
   godBet,
+  payload,
   counters,
   bankroll,
   spinsCount = 0,
@@ -362,9 +363,32 @@ export function QuantumPilot({
 
   // OTRAS SUGERENCIAS = active_bets del motor (excluyendo la del TARGET LOCK).
   // Estas son info ambient — pueden mostrarse aunque GOD no esté apostando.
-  const otherBets = activeBets.filter(
-    (b) => !topPick || b.bet_key !== topPick.bet_key
-  );
+  // FIX: antes salían de godBet.active_bets, que solo existe con GOD activo —
+  // por eso el panel se quedaba vacío la mayor parte del tiempo. Ahora salen de
+  // payload.decision.bet_advice, que SIEMPRE está: todas las categorías del
+  // paño, ordenadas por probabilidad descendente, da igual que el estado sea
+  // BET, PROBE o WAIT. El estado se muestra como etiqueta, no como filtro.
+  const otherBets = (() => {
+    const adv: any = (payload as any)?.decision?.bet_advice ?? {};
+    const filas = Object.keys(adv)
+      .map((k: string) => {
+        const a: any = adv[k] ?? {};
+        const pk = Array.isArray(a.pick) ? a.pick.join(', ') : String(a.pick ?? '');
+        return {
+          bet_key: k,
+          label: String(a.label ?? k),
+          pick: a.pick,
+          pick_pretty: pk,
+          p: Number(a.p ?? 0),
+          conf_pct: Math.round(Number(a.p ?? 0) * 100),
+          status: String(a.status ?? 'WAIT').toUpperCase(),
+        };
+      })
+      .filter((b) => b.pick !== null && b.pick !== undefined && b.pick !== '')
+      .filter((b) => !topPick || b.bet_key !== topPick.bet_key)
+      .sort((a, b) => b.p - a.p);
+    return filas as any[];
+  })();
 
   // ── Sincronizar override desde backend al montar y cuando cambie el verdict
   useEffect(() => {
@@ -504,7 +528,7 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-96 rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[480px] max-w-[95vw] max-h-[92vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
         left: pos.x,
         top: pos.y,
@@ -578,7 +602,11 @@ export function QuantumPilot({
         }}
       />
 
-      <div className="relative z-10 flex flex-col p-4 gap-3">
+      {/* FIX "no cabe": el panel se salia por abajo de la ventana y el
+          Bloque C quedaba cortado. Ahora el contenedor tiene max-h-[92vh]
+          y este cuerpo scrollea (min-h-0 es obligatorio para que flex-1
+          permita encoger dentro de un flex column). El header queda fijo. */}
+      <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col p-4 gap-3 pilot-scroll">
         {/* ═══ 1. Estado verdict ═══ */}
         <div className="flex items-stretch gap-2">
           <div
@@ -611,7 +639,9 @@ export function QuantumPilot({
                   : '0 0 12px rgba(251, 191, 36, 0.6), 0 0 4px rgba(251, 191, 36, 0.8)',
               }}
             >
-              {godBet.active ? 'GOD ACTIVO' : 'EN ESPERA'}
+              {/* GOD retirado del panel: el operador ya no ve ese modo.
+                  El estado ahora refleja si hay un pick activo o no. */}
+              {topPick ? 'CON PICK' : 'EN ESPERA'}
             </span>
           </div>
           <div
@@ -984,6 +1014,28 @@ export function QuantumPilot({
                       }}
                     >
                       {CAT_SHORT[b.bet_key] ?? b.bet_key.slice(0, 3).toUpperCase()}
+                    </span>
+                    {/* Estado del paño: etiqueta informativa, NO filtro.
+                        Todas las sugerencias se muestran siempre. */}
+                    <span
+                      className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+                      style={{
+                        letterSpacing: '0.08em',
+                        background:
+                          b.status === 'BET'
+                            ? 'rgba(34, 197, 94, 0.18)'
+                            : b.status === 'PROBE'
+                            ? 'rgba(251, 191, 36, 0.18)'
+                            : 'rgba(100, 116, 139, 0.18)',
+                        color:
+                          b.status === 'BET'
+                            ? '#4ade80'
+                            : b.status === 'PROBE'
+                            ? '#fbbf24'
+                            : '#94a3b8',
+                      }}
+                    >
+                      {b.status}
                     </span>
                     <span
                       className="flex-1 text-[12px] font-bold text-white text-center truncate"

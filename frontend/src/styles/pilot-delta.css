@@ -130,3 +130,15 @@
 @media (prefers-reduced-motion: reduce) {
   .pd-blink { animation: none; outline: 2px solid #ef4444; }
 }
+
+/* ── Scroll del Quantum Pilot ─────────────────────────────────────────────
+   El panel está limitado a 92vh; el cuerpo scrollea cuando el contenido no
+   cabe (antes se salía por abajo y el Bloque C quedaba cortado). */
+.pilot-scroll { scrollbar-width: thin; scrollbar-color: rgba(34,211,238,.35) transparent; }
+.pilot-scroll::-webkit-scrollbar { width: 7px; }
+.pilot-scroll::-webkit-scrollbar-track { background: transparent; }
+.pilot-scroll::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, .3);
+  border-radius: 4px;
+}
+.pilot-scroll::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, .55); }

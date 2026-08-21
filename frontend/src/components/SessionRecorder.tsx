@@ -54,6 +54,9 @@ export interface Fila {
   col_w: number;
   col_l: number;
 
+  /** número que salió en el giro siguiente — contra el que se evaluó el pick */
+  spin_evaluado?: number | null;
+
   cond: number | null;
   cond_state: string;
 
@@ -130,6 +133,7 @@ const COLS: Array<[keyof Fila, string]> = [
   ['p', 'valor p'],
   ['p1', 'p_1'],
   ['p2', 'p_2'],
+  ['spin_evaluado', 'spin_evaluado'],
   ['doc_pick', 'doc_pick'],
   ['doc_state', 'estado doc'],
   ['doc_result', 'doc_result'],
@@ -144,17 +148,52 @@ const COLS: Array<[keyof Fila, string]> = [
   ['gatillo_hud', 'gatillo_hud'],
 ];
 
-/** Deriva acierto/error comparando los contadores de cada fila con la anterior. */
+/** Convierte un pick de texto en el conjunto de números que cubre. */
+function numerosDe(pick: string): number[] {
+  const out = new Set<number>();
+  const t = (pick || '').toLowerCase();
+  // docenas: "1-12", "13-24", "25-36"
+  if (/\b1\s*-\s*12\b/.test(t)) for (let n = 1; n <= 12; n++) out.add(n);
+  if (/\b13\s*-\s*24\b/.test(t)) for (let n = 13; n <= 24; n++) out.add(n);
+  if (/\b25\s*-\s*36\b/.test(t)) for (let n = 25; n <= 36; n++) out.add(n);
+  // columnas: "columna 1|2|3" o "col 1"
+  for (const m of t.matchAll(/col(?:umna)?\s*([123])/g)) {
+    const c = Number(m[1]);
+    for (let n = 1; n <= 36; n++) if (n % 3 === c % 3) out.add(n);
+  }
+  return [...out];
+}
+
+/** Deriva acierto/error comparando el pick de cada fila con el spin SIGUIENTE.
+ *
+ *  FIX: antes se derivaba de los contadores acumulados (wins/losses). No
+ *  funcionaba — salían 0 de 7 filas — porque esos contadores no se mueven de
+ *  forma fiable en el payload que llega al frontend.
+ *
+ *  Este método no depende de ninguna fontanería: el pick ("13-24 / 25-36") se
+ *  convierte al conjunto de números que cubre y se compara con el número que
+ *  salió en el giro siguiente. Es exactamente lo que se hacía a mano en Excel.
+ *
+ *  ALINEACIÓN: el pick de la fila i es la sugerencia PARA el giro i+1, así que
+ *  se evalúa contra el spin de la fila i+1. La última fila queda sin resultado
+ *  hasta que llegue el giro siguiente.
+ */
 function derivar(filas: Fila[]): Fila[] {
   return filas.map((f: Fila, i: number) => {
-    if (i === 0) return f;
-    const a = filas[i - 1];
-    const dw = f.doc_w - a.doc_w, dl = f.doc_l - a.doc_l;
-    const cw = f.col_w - a.col_w, cl = f.col_l - a.col_l;
+    const sig = filas[i + 1];
+    if (!sig || sig.spin === null || sig.spin === undefined) return f;
+    const n = Number(sig.spin);
+    if (!Number.isFinite(n)) return f;
+    const evalPick = (pick: string) => {
+      const nums = numerosDe(pick);
+      if (nums.length === 0) return '';
+      return nums.includes(n) ? 'acierto' : 'error';
+    };
     return {
       ...f,
-      doc_result: dw > 0 ? 'acierto' : dl > 0 ? 'error' : '',
-      col_result: cw > 0 ? 'acierto' : cl > 0 ? 'error' : '',
+      doc_result: evalPick(f.doc_pick),
+      col_result: evalPick(f.col_pick),
+      spin_evaluado: n,
     };
   });
 }
@@ -222,6 +261,7 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
         col_result: '',
         col_w: snap.colW,
         col_l: snap.colL,
+        spin_evaluado: null,
         cond: snap.cond,
         cond_state: snap.condState,
         d_hud: dh,
