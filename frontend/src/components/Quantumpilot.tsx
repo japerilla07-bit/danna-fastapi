@@ -8,6 +8,7 @@
 //   3. OTRAS SUGERENCIAS ACTIVAS — lista clickeable
 //   4. SALDO + P&L  /  ERRORES (consec · max · err/hit)
 //   5. CONCIENCIA SITUACIONAL — PilotDelta (W/R 14, anclaje, Δ)
+//      (PROGRESIÓN L1→L4 eliminada)
 //   6. EFICIENCIA POR CATEGORÍA (strip horizontal)
 //
 // Tracker de override:
@@ -368,26 +369,51 @@ export function QuantumPilot({
   // payload.decision.bet_advice, que SIEMPRE está: todas las categorías del
   // paño, ordenadas por probabilidad descendente, da igual que el estado sea
   // BET, PROBE o WAIT. El estado se muestra como etiqueta, no como filtro.
-  const otherBets = (() => {
-    const adv: any = (payload as any)?.decision?.bet_advice ?? {};
+  // SUGERENCIAS DEL PAÑO — todas, siempre, ordenadas por probabilidad.
+  //
+  // Antes salían de godBet.active_bets (solo existe con GOD activo) y el panel
+  // quedaba vacío casi siempre. Ahora se busca bet_advice recorriendo varias
+  // rutas posibles del payload, porque su ubicación no es estable entre
+  // versiones. `otherSrc` deja constancia de cuál funcionó, y se muestra en la
+  // cabecera del bloque para poder diagnosticarlo sin adivinar.
+  const { otherBets, otherSrc } = (() => {
+    const pl: any = payload ?? {};
+    const rutas: Array<[string, any]> = [
+      ['decision.bet_advice', pl?.decision?.bet_advice],
+      ['bet_advice', pl?.bet_advice],
+      ['decision.advice', pl?.decision?.advice],
+      ['payload.decision.bet_advice', pl?.payload?.decision?.bet_advice],
+    ];
+    let adv: any = null;
+    let src = 'no encontrado';
+    for (const [nombre, val] of rutas) {
+      if (val && typeof val === 'object' && Object.keys(val).length > 0) {
+        adv = val;
+        src = nombre;
+        break;
+      }
+    }
+    if (!adv) return { otherBets: [] as any[], otherSrc: src };
+
     const filas = Object.keys(adv)
       .map((k: string) => {
         const a: any = adv[k] ?? {};
-        const pk = Array.isArray(a.pick) ? a.pick.join(', ') : String(a.pick ?? '');
+        const raw = a.pick ?? a.selection ?? a.value ?? null;
+        const pk = Array.isArray(raw) ? raw.join(', ') : (raw === null ? '' : String(raw));
+        const pr = Number(a.p ?? a.prob ?? a.conf_score ?? 0);
         return {
           bet_key: k,
           label: String(a.label ?? k),
-          pick: a.pick,
+          pick: raw,
           pick_pretty: pk,
-          p: Number(a.p ?? 0),
-          conf_pct: Math.round(Number(a.p ?? 0) * 100),
-          status: String(a.status ?? 'WAIT').toUpperCase(),
+          p: pr,
+          conf_pct: Math.round(pr * 100),
+          status: String(a.status ?? a.final_action ?? 'WAIT').toUpperCase(),
         };
       })
-      .filter((b) => b.pick !== null && b.pick !== undefined && b.pick !== '')
-      .filter((b) => !topPick || b.bet_key !== topPick.bet_key)
+      .filter((b) => b.pick_pretty !== '' && b.pick_pretty !== '—')
       .sort((a, b) => b.p - a.p);
-    return filas as any[];
+    return { otherBets: filas as any[], otherSrc: `${src} · ${filas.length}` };
   })();
 
   // ── Sincronizar override desde backend al montar y cuando cambie el verdict
@@ -572,7 +598,7 @@ export function QuantumPilot({
             ⚡
           </span>
           <span
-            className="font-bold text-[13px]"
+            className="font-bold text-[15px]"
             style={{
               letterSpacing: '0.25em',
               color: godBet.active ? '#fca5a5' : '#67e8f9',
@@ -624,7 +650,7 @@ export function QuantumPilot({
             }}
           >
             <span
-              className="text-[10px] text-gray-400"
+              className="text-[12px] text-gray-400"
               style={{ letterSpacing: '0.3em' }}
             >
               ESTADO
@@ -652,11 +678,11 @@ export function QuantumPilot({
               boxShadow: 'inset 0 1px 0 rgba(34, 211, 238, 0.06)',
             }}
           >
-            <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.25em' }}>
+            <span className="text-[12px] text-gray-500" style={{ letterSpacing: '0.25em' }}>
               HUD
             </span>
             <span
-              className="font-bold text-[11px] truncate max-w-[64px]"
+              className="font-bold text-[13px] truncate max-w-[64px]"
               style={{
                 color: '#67e8f9',
                 textShadow: '0 0 6px rgba(34, 211, 238, 0.5)',
@@ -673,7 +699,7 @@ export function QuantumPilot({
               boxShadow: 'inset 0 1px 0 rgba(34, 211, 238, 0.06)',
             }}
           >
-            <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.25em' }}>
+            <span className="text-[12px] text-gray-500" style={{ letterSpacing: '0.25em' }}>
               RADAR
             </span>
             <span
@@ -701,18 +727,18 @@ export function QuantumPilot({
             }}
             title={`Grupos individuales de ${godBet.best_p_key ?? '—'} y su suma`}
           >
-            <span className="text-[9px] text-gray-500" style={{ letterSpacing: '0.15em' }}>
+            <span className="text-[11px] text-gray-500" style={{ letterSpacing: '0.15em' }}>
               {({
                 docenas: 'DOC', columnas: 'COL', color: 'CLR',
                 paridad: 'PAR', rango: 'RNG',
               } as Record<string, string>)[godBet.best_p_key ?? ''] ?? (godBet.best_p_key ?? 'P').toUpperCase()}
             </span>
             {/* grupo 1 individual: etiqueta + prob */}
-            <span className="text-[10px] font-mono text-cyan-400 leading-tight">
+            <span className="text-[12px] font-mono text-cyan-400 leading-tight">
               {(godBet.best_g1 ?? '—')} {godBet.best_p1 != null ? (godBet.best_p1 * 100).toFixed(1) : '—'}
             </span>
             {/* grupo 2 individual: etiqueta + prob */}
-            <span className="text-[10px] font-mono text-cyan-500 leading-tight">
+            <span className="text-[12px] font-mono text-cyan-500 leading-tight">
               {(godBet.best_g2 ?? '—')} {godBet.best_p2 != null ? (godBet.best_p2 * 100).toFixed(1) : '—'}
             </span>
             {/* suma (lo que apuesta el motor) */}
@@ -734,7 +760,7 @@ export function QuantumPilot({
             boxShadow: 'inset 0 1px 0 rgba(34, 211, 238, 0.05)',
           }}
         >
-          <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.25em' }}>
+          <span className="text-[12px] text-gray-500" style={{ letterSpacing: '0.25em' }}>
             MESA
           </span>
           <div
@@ -764,7 +790,7 @@ export function QuantumPilot({
             />
           </div>
           <span
-            className={`text-[11px] font-bold ${fmtPctClass(ccsPct)}`}
+            className={`text-[13px] font-bold ${fmtPctClass(ccsPct)}`}
             style={{
               textShadow:
                 ccsPct >= 69
@@ -837,7 +863,7 @@ export function QuantumPilot({
 
             <div className="flex justify-between items-center mb-1.5 relative">
               <span
-                className="text-[10px] font-bold px-2 py-0.5 rounded"
+                className="text-[12px] font-bold px-2 py-0.5 rounded"
                 style={{
                   letterSpacing: '0.25em',
                   background:
@@ -860,7 +886,7 @@ export function QuantumPilot({
                  operador, no convicción autónoma del motor. */}
               {verdict?.override_forced_go ? (
                 <span
-                  className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                   style={{
                     letterSpacing: '0.2em',
                     color: '#fde68a',
@@ -895,7 +921,7 @@ export function QuantumPilot({
             </div>
             <div className="flex justify-between items-end mt-1 relative">
               <span
-                className="text-[11px] text-gray-500"
+                className="text-[13px] text-gray-500"
                 style={{ letterSpacing: '0.25em' }}
               >
                 {CAT_LABEL[topPick.bet_key] ?? topPick.bet_key.toUpperCase()}
@@ -924,7 +950,7 @@ export function QuantumPilot({
             }}
           >
             <span
-              className="text-[11px] text-gray-600 font-bold"
+              className="text-[13px] text-gray-600 font-bold"
               style={{ letterSpacing: '0.3em' }}
             >
               SIN TARGET — ESPERANDO
@@ -948,15 +974,18 @@ export function QuantumPilot({
             }}
           >
             <span
-              className="text-[10px] text-cyan-500/80"
+              className="text-[12px] text-cyan-500/80"
               style={{ letterSpacing: '0.25em' }}
             >
-              ▼ OTRAS SUGERENCIAS ACTIVAS
+              ▼ SUGERENCIAS DEL PAÑO
+            </span>
+            <span className="text-[11px] text-gray-600" style={{ letterSpacing: '0.05em' }}>
+              {otherSrc}
             </span>
             {override && (
               <button
                 onClick={clearOverride}
-                className="text-[10px] hover:opacity-80 transition-opacity"
+                className="text-[12px] hover:opacity-80 transition-opacity"
                 style={{
                   color: '#fbbf24',
                   letterSpacing: '0.2em',
@@ -969,7 +998,7 @@ export function QuantumPilot({
           </div>
           <div className="flex flex-col p-1.5 gap-1">
             {otherBets.length === 0 ? (
-              <div className="text-center py-3 text-[11px] text-gray-600 italic">
+              <div className="text-center py-3 text-[13px] text-gray-600 italic">
                 — sin BETs activos en este giro —
               </div>
             ) : (
@@ -1007,7 +1036,7 @@ export function QuantumPilot({
                     }}
                   >
                     <span
-                      className="text-[11px] font-bold w-10"
+                      className="text-[13px] font-bold w-10"
                       style={{
                         color: isActive ? '#fcd34d' : '#94a3b8',
                         letterSpacing: '0.1em',
@@ -1018,7 +1047,7 @@ export function QuantumPilot({
                     {/* Estado del paño: etiqueta informativa, NO filtro.
                         Todas las sugerencias se muestran siempre. */}
                     <span
-                      className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                       style={{
                         letterSpacing: '0.08em',
                         background:
@@ -1038,7 +1067,7 @@ export function QuantumPilot({
                       {b.status}
                     </span>
                     <span
-                      className="flex-1 text-[12px] font-bold text-white text-center truncate"
+                      className="flex-1 text-[14px] font-bold text-white text-center truncate"
                       style={{
                         textShadow: isActive
                           ? '0 0 6px rgba(251, 191, 36, 0.5)'
@@ -1048,7 +1077,7 @@ export function QuantumPilot({
                       {b.pick_pretty}
                     </span>
                     <span
-                      className="text-[11px] font-bold w-12 text-right"
+                      className="text-[13px] font-bold w-12 text-right"
                       style={{
                         color:
                           b.conf_pct >= 80
@@ -1083,14 +1112,14 @@ export function QuantumPilot({
           }}
         >
           <span
-            className="text-[10px] text-gray-500"
+            className="text-[12px] text-gray-500"
             style={{ letterSpacing: '0.3em' }}
           >
             ERRORES
           </span>
           <div className="flex items-baseline gap-4">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[10px] text-gray-500">CONSEC</span>
+              <span className="text-[12px] text-gray-500">CONSEC</span>
               <span
                 className="font-bold text-base"
                 style={{
@@ -1105,7 +1134,7 @@ export function QuantumPilot({
               </span>
             </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[10px] text-gray-500">MÁX</span>
+              <span className="text-[12px] text-gray-500">MÁX</span>
               <span
                 className="font-bold text-white text-base"
                 style={{ textShadow: '0 0 4px rgba(255, 255, 255, 0.3)' }}
@@ -1114,7 +1143,7 @@ export function QuantumPilot({
               </span>
             </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[10px] text-gray-500">ERR/HIT</span>
+              <span className="text-[12px] text-gray-500">ERR/HIT</span>
               <span
                 className="font-bold text-base"
                 style={{
@@ -1142,176 +1171,14 @@ export function QuantumPilot({
           colHit={pdColHit}
         />
 
-        {/* ═══ 5.5. PROGRESIÓN L1→L4 ═══
-            Bloque que muestra el nivel actual + proyección del siguiente
-            escalón en los DOS escenarios posibles del BankrollGuardian:
-              - sigue en la misma "familia" (doble→doble = ×3, simple→simple = ×2)
-              - cambia de familia (doble→simple = ×2, simple→doble = ×6)
-            En L4 muestra ⚠ TECHO y la próxima L1 ya que MISS o HIT en L4
-            siempre resetea a L1. */}
-        {(() => {
-          // Cálculos derivados del state real ─────────────────────────────
-          const stakeBase = Math.max(0, bankroll?.stake_base ?? 2500);
-          const currLevel = Math.max(1, Math.min(4, pickBet?.level ?? 1));
-          const currBetKey = pickBet?.bet_key ?? null;
-          const currStakeTotal = pickBet?.stake_total ?? 0;
-          const isDoubleCat = (bk: string | null): boolean =>
-            bk === 'docenas' || bk === 'columnas';
-          const currIsDouble = currBetKey ? isDoubleCat(currBetKey) : null;
-
-          // Multiplicadores ESPEJO de BankrollGuardian.stake_total_for_pick
-          // (pilot.py:568-577).
-          //   last_was_double, new_is_double   → 3
-          //   last_was_double, new_simple      → 2
-          //   last_simple, new_simple          → 2
-          //   last_simple, new_is_double       → 6
-          const projectNext = (
-            stakeAhora: number,
-            lastIsDouble: boolean | null
-          ): { sameDouble: number; sameSimple: number } => {
-            if (lastIsDouble === null) {
-              // Sin pick activo: proyectar L1 base para ambas familias.
-              return {
-                sameDouble: stakeBase * 2, // L1 docenas/columnas = stake × 2 líneas
-                sameSimple: stakeBase, // L1 simples = stake × 1 línea
-              };
-            }
-            if (lastIsDouble) {
-              return {
-                sameDouble: stakeAhora * 3, // doble → doble
-                sameSimple: stakeAhora * 2, // doble → simple
-              };
-            }
-            return {
-              sameDouble: stakeAhora * 6, // simple → doble
-              sameSimple: stakeAhora * 2, // simple → simple
-            };
-          };
-
-          const fmt = (n: number) =>
-            '$' +
-            Math.round(n)
-              .toString()
-              .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-          const proj = projectNext(currStakeTotal, currIsDouble);
-          const isL4 = currLevel === 4;
-          const hasActiveBet = pickBet !== null && currBetKey !== null;
-          const familyLabel = currIsDouble === null
-            ? '—'
-            : currIsDouble
-            ? 'doble → doble'
-            : 'simple → simple';
-          const familyAltLabel = currIsDouble === null
-            ? '—'
-            : currIsDouble
-            ? 'doble → simple'
-            : 'simple → doble';
-
-          return (
-            <div className="flex flex-col">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-1.5 px-1">
-                <span
-                  className="text-[10px] text-cyan-500/70"
-                  style={{ letterSpacing: '0.3em' }}
-                >
-                  PROGRESIÓN
-                </span>
-                <span
-                  className={`text-[10px] font-mono tracking-wider ${
-                    isL4 ? 'text-rose-300' : 'text-cyan-300/80'
-                  }`}
-                >
-                  L{currLevel} / 4{isL4 ? ' ⚠ TECHO' : ''}
-                </span>
-              </div>
-
-              {/* Bloque principal */}
-              <div
-                className="rounded-md border px-3 py-2 flex flex-col gap-1.5"
-                style={{
-                  borderColor: isL4
-                    ? 'rgba(244, 63, 94, 0.35)'
-                    : 'rgba(34, 211, 238, 0.18)',
-                  backgroundColor: isL4
-                    ? 'rgba(244, 63, 94, 0.05)'
-                    : 'rgba(15, 23, 42, 0.45)',
-                }}
-              >
-                {/* AHORA */}
-                {hasActiveBet ? (
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[9px] uppercase tracking-[0.25em] text-cyan-500/60">
-                      ahora
-                    </span>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[10px] text-slate-300/80 uppercase tracking-wider">
-                        {CAT_SHORT[currBetKey ?? ''] ?? currBetKey}
-                      </span>
-                      <span className="text-[10px] text-cyan-300/80 font-mono">
-                        L{currLevel}
-                      </span>
-                      <span
-                        className="text-sm font-mono font-bold"
-                        style={{
-                          color: isL4 ? '#fda4af' : '#67e8f9',
-                          textShadow: isL4
-                            ? '0 0 6px rgba(244, 63, 94, 0.35)'
-                            : '0 0 6px rgba(34, 211, 238, 0.35)',
-                        }}
-                      >
-                        {fmt(currStakeTotal)}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-[10px] text-slate-500/70 italic text-center py-0.5">
-                    sin apuesta activa
-                  </div>
-                )}
-
-                {/* Divisor */}
-                <div className="h-px bg-cyan-500/15" />
-
-                {/* SI MISS, PRÓXIMO  /  L4 → reset L1 */}
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-[0.25em] text-cyan-500/60">
-                    {isL4
-                      ? 'si miss o hit → reset L1'
-                      : hasActiveBet
-                      ? `si miss, próximo L${currLevel + 1}`
-                      : 'próxima L1 según categoría'}
-                  </span>
-
-                  <div className="flex flex-col gap-0.5 pl-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400/80">
-                        ├─ {familyLabel}
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-200/90">
-                        {fmt(proj.sameDouble)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400/80">
-                        └─ {familyAltLabel}
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-200/90">
-                        {fmt(proj.sameSimple)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        {/* PROGRESIÓN L1→L4 eliminada: arrastraba un bug conocido y ya no
+            es funcional para la operación. Si algún día vuelve, está en
+            Quantumpilot_PRE3.tsx.bak. */}
 
         {/* ═══ 6. EFICIENCIA POR CATEGORÍA ═══ */}
         <div className="flex flex-col">
           <span
-            className="text-[10px] text-cyan-500/70 mb-1.5 px-1"
+            className="text-[12px] text-cyan-500/70 mb-1.5 px-1"
             style={{ letterSpacing: '0.3em' }}
           >
             EFICIENCIA POR CATEGORÍA
@@ -1351,7 +1218,7 @@ export function QuantumPilot({
                   }}
                 >
                   <span
-                    className="text-[10px] font-bold"
+                    className="text-[12px] font-bold"
                     style={{
                       color: isOver ? '#fcd34d' : '#94a3b8',
                       letterSpacing: '0.1em',
@@ -1359,11 +1226,11 @@ export function QuantumPilot({
                   >
                     {CAT_SHORT[cat]}
                   </span>
-                  <span className="text-[10px] text-gray-500">
+                  <span className="text-[12px] text-gray-500">
                     {w}/{n}
                   </span>
                   <span
-                    className="text-[12px] font-black"
+                    className="text-[14px] font-black"
                     style={{
                       color: hrColor,
                       textShadow:
