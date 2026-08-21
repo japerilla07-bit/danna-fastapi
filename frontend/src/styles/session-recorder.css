@@ -1,0 +1,98 @@
+/* SessionRecorder — registro de sesión y botón de descarga.
+   Pensado para la columna izquierda, junto a SessionPanel.
+   Pegar al final de la hoja global. */
+
+.sr {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 10px 9px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .02);
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sr-title { font-size: 9px; letter-spacing: .16em; opacity: .55; }
+.sr-n { font-size: 9px; opacity: .35; }
+
+/* ── Resumen ── */
+.sr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+.sr-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .04);
+  border-left: 3px solid #38bdf8;
+}
+.sr-k { font-size: 8px; letter-spacing: .1em; opacity: .45; }
+.sr-v { font-size: 17px; font-weight: 800; line-height: 1.1; color: #38bdf8; }
+.sr-s { font-size: 9px; opacity: .4; }
+
+/* ── Gatillo ── */
+.sr-gat {
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+}
+.sr-gat-t { font-size: 8px; letter-spacing: .12em; opacity: .38; }
+.sr-gat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 10px;
+  opacity: .8;
+}
+.sr-gat-row b { font-size: 13px; margin-left: 3px; }
+.sr-gat-row i { font-style: normal; font-size: 9px; opacity: .4; margin-left: 3px; }
+
+/* ── Botones ── */
+.sr-btns { display: flex; gap: 6px; }
+
+.sr-btn {
+  flex: 1;
+  padding: 7px 6px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.sr-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+.sr-dl {
+  flex: 2;
+  background: rgba(34, 197, 94, .14);
+  border-color: rgba(34, 197, 94, .4);
+  color: #22c55e;
+}
+.sr-dl:not(:disabled):hover { background: rgba(34, 197, 94, .24); }
+
+.sr-rm {
+  background: rgba(239, 68, 68, .10);
+  border-color: rgba(239, 68, 68, .3);
+  color: #f87171;
+}
+.sr-rm:not(:disabled):hover { background: rgba(239, 68, 68, .2); }
+
+.sr-note {
+  font-size: 8px;
+  opacity: .3;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sr-btn { transition: none; }
+}

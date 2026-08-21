@@ -1,0 +1,132 @@
+/* PilotDelta — HUD de conciencia situacional.
+   Lectura en menos de 5 segundos: bloques separados, contraste alto,
+   la alerta roja domina visualmente sobre todo lo demás.
+   Pegar al final de la hoja global. */
+
+.pd {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-block {
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 6px;
+  padding: 8px 9px;
+  background: rgba(255, 255, 255, .02);
+}
+
+.pd-btitle {
+  font-size: 8px;
+  letter-spacing: .16em;
+  opacity: .4;
+  margin-bottom: 7px;
+}
+
+.pd-row { display: flex; gap: 6px; }
+
+.pd-chip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .05);
+  border-left: 3px solid transparent;
+}
+.pd-k { font-size: 8px; letter-spacing: .1em; opacity: .5; }
+.pd-v { font-size: 15px; font-weight: 800; line-height: 1.15; }
+
+.pd-chip.pd-ok   { border-left-color: #22c55e; }
+.pd-chip.pd-ok   .pd-v { color: #22c55e; }
+.pd-chip.pd-mid  { border-left-color: #eab308; }
+.pd-chip.pd-mid  .pd-v { color: #eab308; }
+.pd-chip.pd-bad  { border-left-color: #ef4444; }
+.pd-chip.pd-bad  .pd-v { color: #ef4444; }
+.pd-chip.pd-na   { border-left-color: #475569; }
+.pd-chip.pd-na   .pd-v { color: #94a3b8; }
+.pd-chip.pd-dim  { opacity: .38; }
+.pd-chip.pd-dim  .pd-v { font-size: 13px; }
+
+/* ── Secuencia A/E ── */
+.pd-seq { display: flex; gap: 4px; margin-top: 8px; }
+.pd-seq-x {
+  flex: 1;
+  text-align: center;
+  padding: 3px 0;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, .05);
+  color: #94a3b8;
+}
+.pd-seq-a { background: rgba(34, 197, 94, .18);  color: #22c55e; }
+.pd-seq-e { background: rgba(239, 68, 68, .18);  color: #ef4444; }
+
+/* ── Anclaje ── */
+.pd-anc {
+  display: grid;
+  grid-template-columns: 32px 34px 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 10px;
+}
+.pd-anc + .pd-anc { border-top: 1px solid rgba(255, 255, 255, .05); }
+.pd-anc-k { opacity: .45; letter-spacing: .08em; }
+.pd-anc-v { font-size: 14px; font-weight: 700; }
+.pd-anc-s { font-size: 9px; letter-spacing: .05em; font-weight: 700; }
+.pd-anc-s.ok  { color: #38bdf8; }
+.pd-anc-s.bad { color: #eab308; }
+.pd-anc-r { font-size: 9px; opacity: .35; }
+
+/* ── Alerta de choque ── */
+.pd-alert.on {
+  border-color: rgba(239, 68, 68, .55);
+  background: rgba(239, 68, 68, .07);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, .18), 0 0 16px rgba(239, 68, 68, .16);
+}
+
+.pd-accion {
+  margin-top: 8px;
+  padding: 7px 6px;
+  border-radius: 5px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+.pd-accion.ok  { background: rgba(34, 197, 94, .10); color: #22c55e; }
+.pd-accion.bad { background: rgba(239, 68, 68, .18); color: #fca5a5; font-size: 13px; }
+
+@keyframes pd-pulse { 0%,100% { opacity: 1 } 50% { opacity: .42 } }
+.pd-blink { animation: pd-pulse 1s ease-in-out infinite; }
+
+/* ── Validación ── */
+.pd-val {
+  border-top: 1px solid rgba(255, 255, 255, .07);
+  padding-top: 7px;
+}
+.pd-val-t { font-size: 8px; letter-spacing: .14em; opacity: .38; }
+.pd-val-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 10px;
+  opacity: .75;
+}
+.pd-val-row b { font-size: 12px; }
+.pd-val-row i { opacity: .45; font-style: normal; font-size: 9px; }
+.pd-val-note {
+  margin-top: 5px;
+  font-size: 8px;
+  opacity: .3;
+  line-height: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pd-blink { animation: none; outline: 2px solid #ef4444; }
+}

@@ -5,9 +5,10 @@
 //   ✅ PIEZA 1 — HUD top bar
 //   ✅ PIEZA 2 — OPTIMAL state strip
 //   ✅ PIEZA 3 — Control de Misión + Live Bet + Paño + Wheel + Entropy + Radar + Dispersión + WarTerminal
+//   ✅ REGISTRO — SessionRecorder: log por giro + export CSV (col-izquierda)
 //   ⏳ PIEZA 4 — GOD modal flotante + Capital Allocation + Bankroll + Ledger
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -29,6 +30,7 @@ import { CategoryTable } from '@/components/CategoryTable';
 import { GodBetPanel } from '@/components/GodBetPanel';
 import { NeuralBackground } from '@/components/NeuralBackground';
 import { ChaosPanel } from '@/components/ChaosPanel';
+import { SessionRecorder } from '@/components/SessionRecorder';
 
 import { QuantumPilot } from '@/components/Quantumpilot';
 import { SidebarDrawer } from '@/components/SidebarDrawer';
@@ -40,6 +42,7 @@ import '@/styles/quantum-pilot.css';
 import '@/styles/sidebar.css';
 import '@/styles/app.css';
 import '@/styles/chaos-panel.css';
+import '@/styles/session-recorder.css';
 
 interface PendingBet {
   kind: string;
@@ -55,6 +58,41 @@ export function AppPage() {
   const [pendingBet, setPendingBet] = useState<PendingBet | null>(null);
   const [openBetsCount, setOpenBetsCount] = useState(0);
 
+  // ── Derivación de acierto/error del ÚLTIMO giro ──────────────────────────
+  // El API no expone "el ultimo giro acerto si/no" como campo suelto. Se
+  // deduce de como cambian los contadores acumulados entre un giro y el
+  // siguiente: si wins sube -> acierto; si losses sube -> error; si ninguno
+  // se movio -> null (esa categoria no se evaluo en ese giro).
+  // Alimenta a SessionRecorder, que registra el resultado SIEMPRE, sin
+  // importar que el paño dijera BET, PROBE o WAIT.
+  const prevCnt = useRef<{ d: [number, number]; c: [number, number] } | null>(null);
+  const [lastHits, setLastHits] = useState<{ doc: boolean | null; col: boolean | null }>({
+    doc: null,
+    col: null,
+  });
+  const spinsCount = stateQuery.data?.sequence?.count ?? 0;
+  const countersRaw: any = stateQuery.data?.counters ?? {};
+
+  useEffect(() => {
+    const d: [number, number] = [
+      Number(countersRaw?.docenas?.wins ?? 0),
+      Number(countersRaw?.docenas?.losses ?? 0),
+    ];
+    const c: [number, number] = [
+      Number(countersRaw?.columnas?.wins ?? 0),
+      Number(countersRaw?.columnas?.losses ?? 0),
+    ];
+    const prev = prevCnt.current;
+    if (prev) {
+      setLastHits({
+        doc: d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null,
+        col: c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null,
+      });
+    }
+    prevCnt.current = { d, c };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinsCount]);
+
   async function handleLogout() {
     try { await api.logout(); } catch {}
     queryClient.clear();
@@ -67,7 +105,7 @@ export function AppPage() {
 
   function handleExecute(stake: number) {
     if (pendingBet && stake > 0) {
-      setOpenBetsCount((c) => c + 1);
+      setOpenBetsCount((c: number) => c + 1);
       setPendingBet(null);
     }
   }
@@ -183,6 +221,35 @@ export function AppPage() {
             <SequenceLog spins={data.sequence.spins} limit={12} />
             <WarTerminal payload={data.payload} spins={data.sequence.spins} />
             <SessionPanel />
+            <SessionRecorder
+              snap={{
+                spinsCount: data.sequence.count,
+                spin:
+                  Array.isArray(data.sequence.spins) && data.sequence.spins.length > 0
+                    ? Number(data.sequence.spins[data.sequence.spins.length - 1])
+                    : null,
+                hud: (data as any)._debug?.hud_cond ?? null,
+                hudState: String((data as any).god_bet?.cond_state ?? ''),
+                entropy: (data as any)._debug?.table_entropy ?? null,
+                radar: (data.payload as any)?.decision?.mesa_score?.score10 ?? null,
+                wheel: (data as any).wheel_info?.adaptive_w ?? null,
+                panoPct: (data as any).chaos_index?.pano?.pct ?? null,
+                ruedaPct: (data as any).chaos_index?.rueda?.pct ?? null,
+                chaosEstado: String((data as any).chaos_index?.estado ?? ''),
+                pCat: String((data.payload as any)?.decision?.primary_bet?.bet_key ?? ''),
+                p: (data.payload as any)?.decision?.bet_advice?.docenas?.p ?? null,
+                p1: (data.payload as any)?.decision?.bet_advice?.docenas?.p1 ?? null,
+                p2: (data.payload as any)?.decision?.bet_advice?.docenas?.p2 ?? null,
+                docPick: String((data.payload as any)?.decision?.bet_advice?.docenas?.pick ?? ''),
+                docState: String((data.payload as any)?.decision?.bet_advice?.docenas?.status ?? ''),
+                docHit: lastHits.doc,
+                colPick: String((data.payload as any)?.decision?.bet_advice?.columnas?.pick ?? ''),
+                colState: String((data.payload as any)?.decision?.bet_advice?.columnas?.status ?? ''),
+                colHit: lastHits.col,
+                cond: (data as any)._debug?.hud_cond ?? null,
+                condState: String((data as any).god_bet?.cond_state ?? ''),
+              }}
+            />
             <BankrollLedger bankroll={data.bankroll} />
           </div>
 
