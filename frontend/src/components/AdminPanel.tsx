@@ -2,19 +2,17 @@
 // Vive dentro de la sección "🔴 ADMIN PANEL" del SidebarDrawer (solo plan=admin).
 //
 // Backend: api_v2/admin_routes.py (ya soporta todo esto, no hay que tocarlo)
-//   GET    /api/admin/users[?status=pending|active|suspended]
-//   POST   /api/admin/users/approve      { username, plan, days? }
+//   GET    /api/admin/users[?status=...]
+//   POST   /api/admin/users/approve      { username, plan, days? }   ← también RENUEVA (re-setea plan y vencimiento)
 //   POST   /api/admin/users/suspend      { username }
-//   POST   /api/admin/users/reactivate   { username }
+//   POST   /api/admin/users/reactivate   { username }                ← solo quita la suspensión, NO renueva el vencimiento
 //   POST   /api/admin/users/reset_spins  { username }
 //   DELETE /api/admin/users/{username}
 //
-// Trae TODOS los usuarios en una sola query y filtra en cliente, para poder
-// mostrar los contadores por pestaña sin pedir varias veces. Las acciones que
-// se ofrecen por usuario dependen de SU estado, no de la pestaña seleccionada.
-//
-// fetch directo con credentials:'include' (mismo patrón que useDannaEngine.ts),
-// sin tocar @/lib/api.
+// PROBLEMA que resuelve: el status queda 'active' aunque el plan haya vencido
+// (eso lo decide auth.py, que no se toca). Por eso aquí se detecta el
+// vencimiento en el cliente (VENCIDO) y se ofrece RENOVAR = approve con plan,
+// que reextiende plan_expires. Hay pestaña VENCIDOS para encontrarlos rápido.
 
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -35,14 +33,23 @@ interface UsersResponse {
   plans: string[];
 }
 
-type Filtro = 'pending' | 'active' | 'suspended' | 'all';
+type Filtro = 'pending' | 'active' | 'suspended' | 'expired' | 'all';
 
 const FILTROS: { key: Filtro; label: string }[] = [
   { key: 'pending', label: 'PENDIENTES' },
   { key: 'active', label: 'ACTIVOS' },
+  { key: 'expired', label: 'VENCIDOS' },
   { key: 'suspended', label: 'SUSPENDIDOS' },
   { key: 'all', label: 'TODOS' },
 ];
+
+const TODAY = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+/** Vencido = tiene fecha de vencimiento y ya pasó (comparación ISO por string). */
+function isExpired(u: AdminUser): boolean {
+  const d = (u.plan_expires || '').slice(0, 10);
+  return !!d && d < TODAY;
+}
 
 async function fetchJson<T>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: 'include', ...opts });
@@ -53,12 +60,21 @@ async function fetchJson<T>(url: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
+function postJson(path: string, username: string) {
+  return fetchJson(`/api/admin/users/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  });
+}
+
 // Estilos de botón inline (sidebar-action-btn no trae color por defecto).
 const BTN: Record<string, React.CSSProperties> = {
-  approve:   { background: 'rgba(0,255,156,0.10)', border: '1px solid rgba(0,255,156,0.45)', color: 'var(--green)' },
-  reactivate:{ background: 'rgba(0,255,156,0.10)', border: '1px solid rgba(0,255,156,0.45)', color: 'var(--green)' },
-  suspend:   { background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.45)', color: '#fbbf24' },
-  reset:     { background: 'rgba(0,229,255,0.08)', border: '1px solid rgba(0,229,255,0.40)', color: 'var(--cyan)' },
+  approve:    { background: 'rgba(0,255,156,0.10)', border: '1px solid rgba(0,255,156,0.45)', color: 'var(--green)' },
+  renew:      { background: 'rgba(0,229,255,0.10)', border: '1px solid rgba(0,229,255,0.50)', color: 'var(--cyan)' },
+  reactivate: { background: 'rgba(0,255,156,0.10)', border: '1px solid rgba(0,255,156,0.45)', color: 'var(--green)' },
+  suspend:    { background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.45)', color: '#fbbf24' },
+  reset:      { background: 'rgba(148,163,184,0.10)', border: '1px solid rgba(148,163,184,0.40)', color: 'var(--txt-md)' },
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -69,10 +85,9 @@ const STATUS_COLOR: Record<string, string> = {
 
 export function AdminPanel() {
   const qc = useQueryClient();
-  const [filtro, setFiltro] = useState<Filtro>('pending');
+  const [filtro, setFiltro] = useState<Filtro>('active');
   const [selectedPlan, setSelectedPlan] = useState<Record<string, string>>({});
 
-  // Una sola query: TODOS los usuarios. El filtro se aplica en cliente.
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin', 'users'],
     queryFn: () => fetchJson<UsersResponse>('/api/admin/users'),
@@ -92,35 +107,17 @@ export function AdminPanel() {
   });
 
   const suspendMutation = useMutation({
-    mutationFn: (username: string) =>
-      fetchJson('/api/admin/users/suspend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
-      }),
+    mutationFn: (username: string) => postJson('suspend', username),
     onSuccess: invalidate,
   });
-
   const reactivateMutation = useMutation({
-    mutationFn: (username: string) =>
-      fetchJson('/api/admin/users/reactivate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
-      }),
+    mutationFn: (username: string) => postJson('reactivate', username),
     onSuccess: invalidate,
   });
-
   const resetMutation = useMutation({
-    mutationFn: (username: string) =>
-      fetchJson('/api/admin/users/reset_spins', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
-      }),
+    mutationFn: (username: string) => postJson('reset_spins', username),
     onSuccess: invalidate,
   });
-
   const deleteMutation = useMutation({
     mutationFn: (username: string) =>
       fetchJson(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' }),
@@ -138,12 +135,22 @@ export function AdminPanel() {
   const plans = data?.plans ?? ['trial', 'daily_pass', 'weekly_pro', 'monthly', 'admin'];
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { pending: 0, active: 0, suspended: 0, all: allUsers.length };
-    for (const u of allUsers) c[u.status] = (c[u.status] ?? 0) + 1;
+    const c: Record<string, number> = {
+      pending: 0, active: 0, suspended: 0, all: allUsers.length, expired: 0,
+    };
+    for (const u of allUsers) {
+      c[u.status] = (c[u.status] ?? 0) + 1;
+      if (isExpired(u)) c.expired += 1;
+    }
     return c;
   }, [allUsers]);
 
-  const visibles = filtro === 'all' ? allUsers : allUsers.filter((u) => u.status === filtro);
+  const visibles =
+    filtro === 'all'
+      ? allUsers
+      : filtro === 'expired'
+      ? allUsers.filter(isExpired)
+      : allUsers.filter((u) => u.status === filtro);
 
   const mutErr =
     (approveMutation.error ||
@@ -151,6 +158,8 @@ export function AdminPanel() {
       reactivateMutation.error ||
       resetMutation.error ||
       deleteMutation.error) as Error | null;
+
+  const planFor = (u: AdminUser) => selectedPlan[u.username] ?? (u.plan || 'trial');
 
   return (
     <div className="sidebar-collapsible-body">
@@ -164,10 +173,11 @@ export function AdminPanel() {
 
       <div className="sidebar-divider" />
 
-      {/* ── Pestañas de estado ── */}
+      {/* ── Pestañas ── */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {FILTROS.map((f) => {
           const on = filtro === f.key;
+          const isExp = f.key === 'expired';
           return (
             <button
               key={f.key}
@@ -180,9 +190,13 @@ export function AdminPanel() {
                 fontFamily: 'var(--font-mono)',
                 fontSize: 9,
                 letterSpacing: 1,
-                background: on ? 'rgba(0,229,255,0.12)' : 'rgba(10,16,26,0.40)',
-                border: on ? '1px solid var(--cyan)' : '1px solid var(--panel-bd)',
-                color: on ? 'var(--cyan)' : 'var(--txt-lo)',
+                background: on
+                  ? isExp ? 'rgba(255,45,79,0.14)' : 'rgba(0,229,255,0.12)'
+                  : 'rgba(10,16,26,0.40)',
+                border: on
+                  ? isExp ? '1px solid var(--red)' : '1px solid var(--cyan)'
+                  : '1px solid var(--panel-bd)',
+                color: on ? (isExp ? 'var(--red)' : 'var(--cyan)') : 'var(--txt-lo)',
               }}
             >
               {f.label} ({counts[f.key] ?? 0})
@@ -201,54 +215,56 @@ export function AdminPanel() {
         <div className="sidebar-admin-note">No hay usuarios en esta vista.</div>
       )}
 
-      {visibles.map((u) => (
-        <div
-          key={u.username}
-          style={{
-            padding: '10px 12px',
-            borderRadius: 8,
-            background: 'rgba(10, 16, 26, 0.40)',
-            border: '1px solid var(--panel-bd)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}
-        >
-          <div className="sidebar-kv">
-            <span className="sidebar-k">USUARIO</span>
-            <span className="sidebar-v">{u.username}</span>
-          </div>
-          <div className="sidebar-kv">
-            <span className="sidebar-k">ESTADO</span>
-            <span className="sidebar-v" style={{ color: STATUS_COLOR[u.status] ?? 'var(--txt-hi)' }}>
-              {(u.status || '—').toUpperCase()}
-            </span>
-          </div>
-          <div className="sidebar-kv">
-            <span className="sidebar-k">PLAN</span>
-            <span className="sidebar-v" style={{ fontSize: 10 }}>
-              {u.plan || '—'}{u.plan_expires ? ` · vence ${u.plan_expires.slice(0, 10)}` : ''}
-            </span>
-          </div>
-          <div className="sidebar-kv">
-            <span className="sidebar-k">CONTACTO</span>
-            <span className="sidebar-v" style={{ fontSize: 10 }}>{u.email || '—'}</span>
-          </div>
-          <div className="sidebar-kv">
-            <span className="sidebar-k">SPINS</span>
-            <span className="sidebar-v" style={{ fontSize: 10 }}>{u.spins_used_total ?? 0}</span>
-          </div>
-          <div className="sidebar-kv">
-            <span className="sidebar-k">REGISTRO</span>
-            <span className="sidebar-v" style={{ fontSize: 10 }}>
-              {u.created_at ? u.created_at.slice(0, 10) : '—'}
-            </span>
-          </div>
+      {visibles.map((u) => {
+        const expired = isExpired(u);
+        return (
+          <div
+            key={u.username}
+            style={{
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: 'rgba(10, 16, 26, 0.40)',
+              border: expired ? '1px solid rgba(255,45,79,0.40)' : '1px solid var(--panel-bd)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}
+          >
+            <div className="sidebar-kv">
+              <span className="sidebar-k">USUARIO</span>
+              <span className="sidebar-v">{u.username}</span>
+            </div>
+            <div className="sidebar-kv">
+              <span className="sidebar-k">ESTADO</span>
+              <span className="sidebar-v" style={{ color: STATUS_COLOR[u.status] ?? 'var(--txt-hi)' }}>
+                {(u.status || '—').toUpperCase()}
+                {expired && <span style={{ color: 'var(--red)' }}> · VENCIDO</span>}
+              </span>
+            </div>
+            <div className="sidebar-kv">
+              <span className="sidebar-k">PLAN</span>
+              <span className="sidebar-v" style={{ fontSize: 10, color: expired ? 'var(--red)' : 'var(--txt-hi)' }}>
+                {u.plan || '—'}{u.plan_expires ? ` · vence ${u.plan_expires.slice(0, 10)}` : ''}
+              </span>
+            </div>
+            <div className="sidebar-kv">
+              <span className="sidebar-k">CONTACTO</span>
+              <span className="sidebar-v" style={{ fontSize: 10 }}>{u.email || '—'}</span>
+            </div>
+            <div className="sidebar-kv">
+              <span className="sidebar-k">SPINS</span>
+              <span className="sidebar-v" style={{ fontSize: 10 }}>{u.spins_used_total ?? 0}</span>
+            </div>
+            <div className="sidebar-kv">
+              <span className="sidebar-k">REGISTRO</span>
+              <span className="sidebar-v" style={{ fontSize: 10 }}>
+                {u.created_at ? u.created_at.slice(0, 10) : '—'}
+              </span>
+            </div>
 
-          {/* Selector de plan — solo cuando se va a aprobar un pendiente */}
-          {u.status === 'pending' && (
+            {/* Selector de plan — usado por APROBAR (pendiente) y RENOVAR (resto). */}
             <select
-              value={selectedPlan[u.username] ?? 'trial'}
+              value={planFor(u)}
               onChange={(e) => setSelectedPlan((s) => ({ ...s, [u.username]: e.target.value }))}
               style={{
                 width: '100%',
@@ -265,27 +281,42 @@ export function AdminPanel() {
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
-          )}
 
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {u.status === 'pending' && (
-              <button
-                className="sidebar-action-btn"
-                style={{ ...BTN.approve, flex: '1 1 45%' }}
-                disabled={busy}
-                onClick={() =>
-                  approveMutation.mutate({
-                    username: u.username,
-                    plan: selectedPlan[u.username] ?? 'trial',
-                  })
-                }
-              >
-                {approveMutation.isPending ? '◌ APROBANDO...' : '✅ APROBAR'}
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {u.status === 'pending' ? (
+                <button
+                  className="sidebar-action-btn"
+                  style={{ ...BTN.approve, flex: '1 1 45%' }}
+                  disabled={busy}
+                  onClick={() => approveMutation.mutate({ username: u.username, plan: planFor(u) })}
+                >
+                  {approveMutation.isPending ? '◌ ...' : '✅ APROBAR'}
+                </button>
+              ) : (
+                <button
+                  className="sidebar-action-btn"
+                  style={{ ...BTN.renew, flex: '1 1 45%' }}
+                  disabled={busy}
+                  onClick={() => approveMutation.mutate({ username: u.username, plan: planFor(u) })}
+                  title="Re-aplica el plan y reextiende el vencimiento"
+                >
+                  {approveMutation.isPending ? '◌ ...' : '↻ RENOVAR'}
+                </button>
+              )}
 
-            {u.status === 'active' && (
-              <>
+              {u.status === 'suspended' && (
+                <button
+                  className="sidebar-action-btn"
+                  style={{ ...BTN.reactivate, flex: '1 1 45%' }}
+                  disabled={busy}
+                  onClick={() => reactivateMutation.mutate(u.username)}
+                  title="Quita la suspensión (no cambia el vencimiento)"
+                >
+                  ▶️ REACTIVAR
+                </button>
+              )}
+
+              {u.status === 'active' && (
                 <button
                   className="sidebar-action-btn"
                   style={{ ...BTN.suspend, flex: '1 1 45%' }}
@@ -294,47 +325,35 @@ export function AdminPanel() {
                 >
                   ⏸️ SUSPENDER
                 </button>
-                <button
-                  className="sidebar-action-btn"
-                  style={{ ...BTN.reset, flex: '1 1 45%' }}
-                  disabled={busy}
-                  onClick={() => {
-                    if (confirm(`¿Resetear los spins de ${u.username}?`)) {
-                      resetMutation.mutate(u.username);
-                    }
-                  }}
-                >
-                  ↺ RESET SPINS
-                </button>
-              </>
-            )}
+              )}
 
-            {u.status === 'suspended' && (
               <button
                 className="sidebar-action-btn"
-                style={{ ...BTN.reactivate, flex: '1 1 45%' }}
+                style={{ ...BTN.reset, flex: '1 1 45%' }}
                 disabled={busy}
-                onClick={() => reactivateMutation.mutate(u.username)}
+                onClick={() => {
+                  if (confirm(`¿Resetear los spins de ${u.username}?`)) resetMutation.mutate(u.username);
+                }}
               >
-                ▶️ REACTIVAR
+                ↺ RESET SPINS
               </button>
-            )}
 
-            <button
-              className="sidebar-action-btn danger"
-              style={{ flex: '1 1 45%' }}
-              disabled={busy}
-              onClick={() => {
-                if (confirm(`¿Eliminar a ${u.username} del historial? Esto no se puede deshacer.`)) {
-                  deleteMutation.mutate(u.username);
-                }
-              }}
-            >
-              🗑️ ELIMINAR
-            </button>
+              <button
+                className="sidebar-action-btn danger"
+                style={{ flex: '1 1 45%' }}
+                disabled={busy}
+                onClick={() => {
+                  if (confirm(`¿Eliminar a ${u.username} del historial? No se puede deshacer.`)) {
+                    deleteMutation.mutate(u.username);
+                  }
+                }}
+              >
+                🗑️ ELIMINAR
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {mutErr && (
         <div className="sidebar-admin-note" style={{ color: 'var(--red)' }}>
