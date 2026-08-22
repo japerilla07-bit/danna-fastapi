@@ -16,14 +16,13 @@
 // nombre real, EFICACIA 15.
 //
 // AÑADIDO — bloque ESTADO MESA (monitor rodante, DESCRIPTIVO, no predictivo).
-// Auditado sobre 9 sesiones (2.959 ventanas rodantes): dentro de una sesión
-// el error NO se autocorrelaciona ventana-a-ventana (r=-0.07) y la entropía
-// NO correlaciona con el error, ni contemporánea (r=+0.00) ni adelantada
-// (r=-0.07). Conclusión: un semáforo por conteo de errores puede DESCRIBIR
-// los últimos 30 giros pero NO anticipa el próximo tramo. Por eso este bloque
-// se etiqueta como lectura, no pronóstico, y NO gatilla ninguna pausa.
-// Umbrales calibrados contra la distribución REAL de errores/30 giros
-// (media 10.2, sd 2.7 · p11≈7, p90≈13): VERDE ≤7 · ÁMBAR 8-13 · HOSTIL ≥14.
+// Semáforo por errores en los últimos 30 giros + racha de errores en curso,
+// POR MERCADO (columnas y docenas se muestran por separado, no se mezclan).
+// Auditado sobre 9 sesiones: dentro de una sesión el error NO se autocorrela-
+// ciona ventana-a-ventana (r=-0.07) y la entropía NO predice el error. Este
+// semáforo DESCRIBE los últimos 30 giros; NO anticipa el próximo, y NO pausa
+// nada. Umbrales contra la distribución real de errores/30 (media 10.2, sd
+// 2.7 · p11≈7, p90≈13): VERDE ≤7 · ÁMBAR 8-13 · HOSTIL ≥14.
 
 interface ChaosAxis {
   chi2?: number;
@@ -47,10 +46,16 @@ interface TableHealth {
   trend: number[];
 }
 
-/** Resultado reciente de columnas, el más nuevo AL FINAL del array. */
+/** Resultado reciente de un mercado, el más nuevo AL FINAL del array. */
 export interface MesaResult {
-  isError: boolean;   // true = el pick de columnas falló ese giro
+  isError: boolean;   // true = ese mercado falló el giro
   bet?: boolean;      // ¿se apostó? Una PAUSA (false) no resetea la racha. Default: true.
+}
+
+/** Un mercado a mostrar en ESTADO MESA (p.ej. COL, DOC). */
+export interface MesaMarket {
+  label: string;
+  results: MesaResult[];
 }
 
 interface Props {
@@ -58,12 +63,11 @@ interface Props {
   /** Opcional. Racha reciente — se muestra al pie con su nombre real. */
   tableHealth?: TableHealth | null;
   /**
-   * Opcional. Resultados recientes de columnas (el más nuevo al final).
-   * Alimenta el semáforo ESTADO MESA (errores en los últimos 30) y la racha
-   * de errores en curso. Si no se pasa, ese bloque NO se renderiza — sin
-   * regresión sobre el comportamiento actual de la card.
+   * Opcional. Uno o más mercados para el semáforo ESTADO MESA. Cada mercado
+   * se muestra por separado (no se mezclan). Un mercado sin giros no aparece;
+   * si no se pasa ninguno, el bloque no se renderiza (sin regresión).
    */
-  recentResults?: MesaResult[];
+  mesaMarkets?: MesaMarket[];
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -102,13 +106,35 @@ const MESA_COLOR: Record<Mesa, string> = {
   HOSTIL: '#f87171',
 };
 
-const MESA_MSG: Record<Mesa, string> = {
-  VERDE: 'Pocos fallos recientes',
-  AMBAR: 'Fallos en rango normal',
-  HOSTIL: 'Tramo de muchos fallos',
-};
+interface MesaCalc {
+  label: string;
+  mesa: Mesa;
+  errors: number;
+  window: number;
+  streak: number;
+}
 
-export function TableEntropy({ chaosIndex, tableHealth = null, recentResults }: Props) {
+function computeMesa(m: MesaMarket): MesaCalc {
+  const w30 = m.results.slice(-30);
+  const errors = w30.reduce((acc, r) => acc + (r.isError ? 1 : 0), 0);
+  // Racha en curso: recorre TODO el historial, la pausa (bet=false) ni cuenta
+  // ni resetea, solo un ACIERTO jugado reinicia a 0.
+  let streak = 0;
+  for (const r of m.results) {
+    if (r.bet === false) continue;
+    if (r.isError) streak++;
+    else streak = 0;
+  }
+  return {
+    label: m.label,
+    mesa: classifyMesa(errors, w30.length),
+    errors,
+    window: w30.length,
+    streak,
+  };
+}
+
+export function TableEntropy({ chaosIndex, tableHealth = null, mesaMarkets }: Props) {
   const ci = chaosIndex ?? {};
   const estado = String(ci.estado ?? 'CALIBRANDO').toUpperCase();
   const n = Number(ci.n ?? 0);
@@ -138,19 +164,10 @@ export function TableEntropy({ chaosIndex, tableHealth = null, recentResults }: 
           .join(' ')
       : '0,14 100,14';
 
-  // ── ESTADO MESA (rodante) — solo si nos pasan resultados recientes ──────
-  const results = Array.isArray(recentResults) ? recentResults : [];
-  const win30 = results.slice(-30);
-  const err30 = win30.reduce((acc, r) => acc + (r.isError ? 1 : 0), 0);
-  const mesa = classifyMesa(err30, win30.length);
-  // Racha de errores en curso: recorre TODO el historial, la pausa (bet=false)
-  // ni cuenta ni resetea, solo un ACIERTO jugado reinicia a 0.
-  let streak = 0;
-  for (const r of results) {
-    if (r.bet === false) continue;
-    if (r.isError) streak++;
-    else streak = 0;
-  }
+  // ── ESTADO MESA (rodante, por mercado) — solo mercados con giros ──────────
+  const mercados = (Array.isArray(mesaMarkets) ? mesaMarkets : [])
+    .filter((m) => Array.isArray(m.results) && m.results.length > 0)
+    .map(computeMesa);
 
   return (
     <div className={`panel entropy-card entropy-${cls}`}>
@@ -170,25 +187,23 @@ export function TableEntropy({ chaosIndex, tableHealth = null, recentResults }: 
 
       <div className="entropy-sub">{ESTADO_MSG[estado] ?? '—'}</div>
 
-      {results.length > 0 && (
+      {mercados.length > 0 && (
         <>
-          <div className="entropy-row entropy-row-sep">
-            <span className="k">
-              ESTADO MESA {win30.length < 30 ? `(${win30.length})` : '30'}
-            </span>
-            <span className="v" style={{ color: MESA_COLOR[mesa] }}>
-              ● {mesa}
-            </span>
-          </div>
-          <div className="entropy-row entropy-row-tight">
-            <span className="k">ERRORES</span>
-            <span className="v">{err30}/{win30.length}</span>
-          </div>
-          <div className="entropy-row entropy-row-tight">
-            <span className="k">RACHA</span>
-            <span className={`v ${streak >= 5 ? 'warn' : ''}`}>{streak}</span>
-          </div>
-          <div className="entropy-sub">{MESA_MSG[mesa]} · lectura, no pronóstico</div>
+          {mercados.map((mc, i) => (
+            <div
+              key={mc.label}
+              className={`entropy-row ${i === 0 ? 'entropy-row-sep' : 'entropy-row-tight'}`}
+            >
+              <span className="k">
+                MESA {mc.label}
+                {mc.window < 30 ? ` (${mc.window})` : ''}
+              </span>
+              <span className="v" style={{ color: MESA_COLOR[mc.mesa] }}>
+                ● {mc.mesa} · {mc.errors}/{mc.window} · R{mc.streak}
+              </span>
+            </div>
+          ))}
+          <div className="entropy-sub">errores/30 + racha · lectura, no pronóstico</div>
         </>
       )}
 
