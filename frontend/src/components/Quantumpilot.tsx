@@ -597,17 +597,27 @@ export function QuantumPilot({
           >
             ⚡
           </span>
-          <span
-            className="font-bold text-[15px]"
-            style={{
-              letterSpacing: '0.25em',
-              color: godBet.active ? '#fca5a5' : '#67e8f9',
-              textShadow: godBet.active
-                ? '0 0 8px rgba(220, 38, 38, 0.5)'
-                : '0 0 8px rgba(34, 211, 238, 0.4)',
-            }}
-          >
-            QUANTUM PILOT
+          <span className="flex flex-col leading-none">
+            <span
+              className="font-bold text-[15px]"
+              style={{
+                letterSpacing: '0.25em',
+                color: godBet.active ? '#fca5a5' : '#67e8f9',
+                textShadow: godBet.active
+                  ? '0 0 8px rgba(220, 38, 38, 0.5)'
+                  : '0 0 8px rgba(34, 211, 238, 0.4)',
+              }}
+            >
+              QUANTUM PILOT
+            </span>
+            {/* Marco honesto: el panel es lectura de mesa, no un pronóstico.
+                Auditoría (9 sesiones): ningún indicador anticipa el próximo giro. */}
+            <span
+              className="text-[9px] text-gray-500 mt-0.5"
+              style={{ letterSpacing: '0.18em' }}
+            >
+              LECTURA DE MESA · NO PREDICE EL PRÓXIMO GIRO
+            </span>
           </span>
         </div>
         <button
@@ -878,7 +888,7 @@ export function QuantumPilot({
                       : '1px solid rgba(34, 211, 238, 0.25)',
                 }}
               >
-                {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : 'TARGET LOCK'}
+                {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : '▸ SUGERENCIA TOP'}
               </span>
               {/* ★ Badge OVERRIDE FORZADO: el operador empujó el GO sobre
                  thr_go del Pilot vía Opción C (CCS 60-thr_go% en CAUTION).
