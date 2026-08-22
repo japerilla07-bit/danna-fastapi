@@ -23,6 +23,7 @@ import type { EnginePayload } from '@/types/api';
 
 import { PilotDelta } from '@/components/PilotDelta';
 import '@/styles/pilot-delta.css';
+import { MotorAlerts } from '@/components/MotorAlerts';
 
 const GOD_CATS = ['color', 'paridad', 'rango', 'docenas', 'columnas'] as const;
 type GodCat = typeof GOD_CATS[number];
@@ -1179,6 +1180,14 @@ export function QuantumPilot({
           entropy={pdEntropy}
           docHit={pdDocHit}
           colHit={pdColHit}
+        />
+
+        {/* Alarmas informativas del motor — NO bloquean, NO pausan, solo avisan */}
+        <MotorAlerts
+          spinsCount={spinsCount}
+          hud={pdHud}
+          radar={godBet.radar_score}
+          entropy={pdEntropy}
         />
 
         {/* PROGRESIÓN L1→L4 eliminada: arrastraba un bug conocido y ya no
