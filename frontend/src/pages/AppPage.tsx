@@ -33,6 +33,7 @@ import { ChaosPanel } from '@/components/ChaosPanel';
 import { SessionRecorder } from '@/components/SessionRecorder';
 
 import { QuantumPilot } from '@/components/Quantumpilot';
+import { RestGuard } from '@/components/RestGuard';
 import { SidebarDrawer } from '@/components/SidebarDrawer';
 
 import '@/styles/hud.css';
@@ -211,6 +212,9 @@ export function AppPage() {
         pdDocHit={lastHits.doc}
         pdColHit={lastHits.col}
       />
+
+      {/* Freno de descanso: avisa DESCANSÁ cuando columnas viene pegando */}
+      <RestGuard spinsCount={data.sequence.count} results={colHist} />
 
       <div className="app-wrap">
         {/* Userbar */}
