@@ -142,3 +142,12 @@
   border-radius: 4px;
 }
 .pilot-scroll::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, .55); }
+
+/* ── FIX: los hijos del cuerpo scrollable no deben encogerse ──────────────
+   Al limitar el panel a 92vh y poner overflow-y-auto, flexbox intentaba
+   encajar TODAS las secciones dentro de esa altura y las aplastaba: el
+   TARGET LOCK quedaba como una raya con el texto sobre el borde y el bloque
+   de SUGERENCIAS colapsaba a cero (parecía que no existía).
+   flex-shrink:0 obliga a cada sección a conservar su altura natural y a que
+   sea el contenedor el que scrollee, que es lo que se buscaba. */
+.pilot-scroll > * { flex-shrink: 0; }
