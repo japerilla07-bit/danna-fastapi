@@ -111,28 +111,39 @@ export function PilotDelta({
   const ant = hist[hist.length - 2];
   const act = hist[hist.length - 1];
 
-  // ── BLOQUE A ──
-  const evaluados = v14.filter((g: Giro) => g.doc !== null);
-  const wr = evaluados.length
-    ? (evaluados.filter((g: Giro) => g.doc).length / evaluados.length) * 100
-    : null;
-  const wrCls = wr === null ? 'na' : wr > 60 ? 'ok' : wr >= 50 ? 'mid' : 'bad';
-
-  const seq = v14.slice(-6).map((g: Giro) => (g.doc === null ? '·' : g.doc ? 'A' : 'E'));
-
-  // Diagnóstico de mesa sobre los últimos 5
-  const ult5 = v5.map((g: Giro) => g.doc).filter((x: boolean | null) => x !== null) as boolean[];
-  let mesa: 'LIMPIA' | 'PESADA' | 'TÓXICA' | 'CALIBRANDO' = 'CALIBRANDO';
-  if (ult5.length >= 3) {
-    let max = 0;
-    let c = 0;
-    for (const h of ult5) {
-      c = h ? 0 : c + 1;
-      max = Math.max(max, c);
+  // ── BLOQUE A ── (por mercado: columnas y docenas)
+  type EstadoMercado = {
+    nEval: number;
+    wr: number | null;
+    wrCls: string;
+    seq: string[];
+    mesa: 'LIMPIA' | 'PESADA' | 'TÓXICA' | 'CALIBRANDO';
+    mesaCls: string;
+  };
+  function estadoMercado(sel: (g: Giro) => boolean | null): EstadoMercado {
+    const ev = v14.filter((g: Giro) => sel(g) !== null);
+    const wr = ev.length ? (ev.filter((g: Giro) => sel(g)).length / ev.length) * 100 : null;
+    const wrCls = wr === null ? 'na' : wr > 60 ? 'ok' : wr >= 50 ? 'mid' : 'bad';
+    const seq = v14.slice(-6).map((g: Giro) => {
+      const r = sel(g);
+      return r === null ? '·' : r ? 'A' : 'E';
+    });
+    const ult5 = v5.map((g: Giro) => sel(g)).filter((x) => x !== null) as boolean[];
+    let mesa: EstadoMercado['mesa'] = 'CALIBRANDO';
+    if (ult5.length >= 3) {
+      let max = 0;
+      let c = 0;
+      for (const h of ult5) {
+        c = h ? 0 : c + 1;
+        max = Math.max(max, c);
+      }
+      mesa = max >= 3 ? 'TÓXICA' : max === 2 ? 'PESADA' : 'LIMPIA';
     }
-    mesa = max >= 3 ? 'TÓXICA' : max === 2 ? 'PESADA' : 'LIMPIA';
+    const mesaCls = mesa === 'LIMPIA' ? 'ok' : mesa === 'PESADA' ? 'mid' : mesa === 'TÓXICA' ? 'bad' : 'na';
+    return { nEval: ev.length, wr, wrCls, seq, mesa, mesaCls };
   }
-  const mesaCls = mesa === 'LIMPIA' ? 'ok' : mesa === 'PESADA' ? 'mid' : mesa === 'TÓXICA' ? 'bad' : 'na';
+  const estCol = estadoMercado((g) => g.col);
+  const estDoc = estadoMercado((g) => g.doc);
 
   // ── BLOQUE B ──
   const rHud = rango(v5.map((g: Giro) => g.hud as number));
@@ -159,27 +170,38 @@ export function PilotDelta({
 
   return (
     <div className="pd">
-      {/* ══ A ══ */}
+      {/* ══ A ══ (columnas y docenas por separado) */}
       <div className="pd-block">
-        <div className="pd-btitle">ESTADO DEL MOTOR · {evaluados.length}/{VENTANA}</div>
-        <div className="pd-row">
-          <span className={`pd-chip pd-${wrCls}`}>
-            <span className="pd-k">W/R 14</span>
-            <span className="pd-v">{wr === null ? '—' : `${wr.toFixed(0)}%`}</span>
-          </span>
-          <span className={`pd-chip pd-${mesaCls}`}>
-            <span className="pd-k">MESA</span>
-            <span className="pd-v">{mesa}</span>
-          </span>
+        <div className="pd-btitle">
+          ESTADO DEL MOTOR · COL {estCol.nEval}/{VENTANA} · DOC {estDoc.nEval}/{VENTANA}
         </div>
-        <div className="pd-seq">
-          {seq.length === 0 && <span className="pd-seq-x">·</span>}
-          {seq.map((s: string, i: number) => (
-            <span key={i} className={`pd-seq-x pd-seq-${s === 'A' ? 'a' : s === 'E' ? 'e' : 'n'}`}>
-              {s}
-            </span>
-          ))}
-        </div>
+        {([['COL', estCol], ['DOC', estDoc]] as [string, EstadoMercado][]).map(
+          ([mk, e], idx) => (
+            <div key={mk} style={idx > 0 ? { marginTop: 10 } : undefined}>
+              <div className="pd-row">
+                <span className={`pd-chip pd-${e.wrCls}`}>
+                  <span className="pd-k">W/R {mk}</span>
+                  <span className="pd-v">{e.wr === null ? '—' : `${e.wr.toFixed(0)}%`}</span>
+                </span>
+                <span className={`pd-chip pd-${e.mesaCls}`}>
+                  <span className="pd-k">MESA {mk}</span>
+                  <span className="pd-v">{e.mesa}</span>
+                </span>
+              </div>
+              <div className="pd-seq">
+                {e.seq.length === 0 && <span className="pd-seq-x">·</span>}
+                {e.seq.map((s: string, i: number) => (
+                  <span
+                    key={i}
+                    className={`pd-seq-x pd-seq-${s === 'A' ? 'a' : s === 'E' ? 'e' : 'n'}`}
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ),
+        )}
       </div>
 
       {/* ══ B ══ */}

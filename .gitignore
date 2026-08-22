@@ -84,3 +84,11 @@ Thumbs.db
 frontend/*.tsbuildinfo
 frontend/vite.config.d.ts
 frontend/vite.config.js
+*.bak
+*.bak-*
+_smoke_*.py
+estado_*.json
+exp_*.json
+state_*.json
+session_state_*.json
+verify_*.json
