@@ -21,6 +21,9 @@ import type { EnginePayload } from '@/types/api';
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
+// PilotDelta reemplazado por ZoneSemaphore en v2 (semáforo bifurcado + drawdown).
+// Se conserva el archivo por si se reactiva; el import queda aquí comentado.
+// import { PilotDelta } from '@/components/PilotDelta';
 import { ZoneSemaphore } from '@/components/ZoneSemaphore';
 import '@/styles/pilot-delta.css';
 
@@ -156,60 +159,81 @@ interface Props {
   /** Resultado del último giro en docenas / columnas. */
   pdDocHit?: boolean | null;
   pdColHit?: boolean | null;
-  /** Historial rodante de resultados por mercado (para el semáforo/drawdown). */
+  /** Historial rodante de resultados por mercado (para ZoneSemaphore/drawdown). */
   pdDocHist?: { isError: boolean }[];
   pdColHist?: { isError: boolean }[];
 }
 
 // ── Hook draggable ────────────────────────────────────────────────
+// Muta el DOM directamente con translate3d (GPU) — no dispara re-renders
+// de React durante el arrastre. Devuelve una ref para que el consumidor
+// la enganche al div raíz.
 
 function useDrag(initialPos: { x: number; y: number }) {
-  const [pos, setPos] = useState(initialPos);
-  const [isDragging, setIsDragging] = useState(false);
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const posRef = useRef({ ...initialPos });
+  const draggingRef = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const posStart = useRef({ x: 0, y: 0 });
 
+  // aplica la transform al nodo actual (si está montado)
+  const applyTransform = useCallback(() => {
+    const el = nodeRef.current;
+    if (!el) return;
+    el.style.transform = `translate3d(${posRef.current.x}px, ${posRef.current.y}px, 0)`;
+  }, []);
+
+  // ref-callback: enganchamos al div y aplicamos la posición inicial
+  const setNodeRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      nodeRef.current = el;
+      if (el) {
+        el.style.willChange = 'transform';
+        applyTransform();
+      }
+    },
+    [applyTransform]
+  );
+
   const onMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-      setIsDragging(true);
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
       dragStart.current = { x: clientX, y: clientY };
-      posStart.current = { ...pos };
+      posStart.current = { ...posRef.current };
+      draggingRef.current = true;
       e.stopPropagation();
     },
-    [pos]
+    []
   );
 
   useEffect(() => {
-    if (!isDragging) return;
-
     const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!draggingRef.current) return;
       const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-      const dx = clientX - dragStart.current.x;
-      const dy = clientY - dragStart.current.y;
-      setPos({
-        x: posStart.current.x + dx,
-        y: posStart.current.y + dy,
-      });
+      posRef.current = {
+        x: posStart.current.x + (clientX - dragStart.current.x),
+        y: posStart.current.y + (clientY - dragStart.current.y),
+      };
+      applyTransform();
     };
-    const onUp = () => setIsDragging(false);
-
+    const onUp = () => {
+      draggingRef.current = false;
+    };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
-
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [isDragging]);
+  }, [applyTransform]);
 
-  return { pos, onMouseDown };
+  return { setNodeRef, onMouseDown };
 }
 
 // ── Canvas de partículas ──────────────────────────────────────────
@@ -318,8 +342,11 @@ export function QuantumPilot({
   pdDocHist = [],
   pdColHist = [],
 }: Props) {
-  const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
+  const { setNodeRef, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
+  // Pestaña "MÁS": esconde Sugerencias del paño + Eficiencia por categoría.
+  // false por defecto → no se renderizan → rinde más rápido en cada giro.
+  const [showMore, setShowMore] = useState(false);
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
@@ -523,10 +550,11 @@ export function QuantumPilot({
   if (minimized) {
     return (
       <div
+        ref={setNodeRef}
         className="fixed z-50 flex items-center justify-center rounded-full w-12 h-12 cursor-grab active:cursor-grabbing"
         style={{
-          left: pos.x,
-          top: pos.y,
+          top: 0,
+          left: 0,
           background:
             'linear-gradient(135deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
           backdropFilter: 'blur(20px)',
@@ -559,10 +587,11 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[720px] max-w-[95vw] max-h-[92vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      ref={setNodeRef}
+      className="fixed z-50 w-[900px] max-w-[97vw] max-h-[94vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
-        left: pos.x,
-        top: pos.y,
+        top: 0,
+        left: 0,
         background:
           'linear-gradient(145deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.92) 50%, rgba(8, 12, 22, 0.95) 100%)',
         backdropFilter: 'blur(20px) saturate(140%)',
@@ -963,7 +992,8 @@ export function QuantumPilot({
           </div>
         )}
 
-        {/* ═══ 3. OTRAS SUGERENCIAS ═══ */}
+        {/* ═══ 3. OTRAS SUGERENCIAS (pestaña MÁS) ═══ */}
+        {showMore && (
         <div
           className="flex flex-col rounded-md overflow-hidden"
           style={{
@@ -1106,6 +1136,7 @@ export function QuantumPilot({
             )}
           </div>
         </div>
+        )}
 
         {/* ═══ 4. ERRORES (ancho completo) ═══ */}
         <div
@@ -1162,12 +1193,12 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 5. SEMÁFORO DE ZONA (sustituye a Anclaje/Choque/EstadoMotor) ═══
-             Dos tarjetas gemelas por mercado (DOCENAS · COLUMNAS):
-               VERDE / PROBE / TÓXICA según celda HUD × ENT de la matriz
-               validada en auditoría (4036 giros), + drawdown tracker
-               segmentado (7 bloques doc, 5 col).
-             Solo aviso — no bloquea ni modifica la sugerencia del motor. ═══ */}
+        {/* ═══ 5. SEMÁFORO DE ZONA · BIFURCADO (v2) ═══
+             Reemplaza a Anclaje / Alerta de Choque / Estado del Motor.
+             Dos tarjetas gemelas DOCENAS · COLUMNAS con:
+               • VERDE / PROBE / TÓXICA según celda HUD × ENT (matriz validada 4036 giros)
+               • Drawdown tracker segmentado (7 bloques doc, 5 col)
+             Solo aviso — no bloquea ni altera la sugerencia del motor.  ═══ */}
         <ZoneSemaphore
           hud={pdHud}
           entropy={pdEntropy}
@@ -1175,10 +1206,28 @@ export function QuantumPilot({
           colHist={pdColHist}
         />
 
-        {/* prev-use markers para satisfacer TS al eliminar consumo directo */}
-        {(() => { void pdDocHit; void pdColHit; return null; })()}
+        {/* markers para consumir vars sin advertencias TS */}
+        {(() => { void spinsCount; void pdDocHit; void pdColHit; return null; })()}
 
-        {/* ═══ 6. EFICIENCIA POR CATEGORÍA ═══ */}
+        {/* Toggle de pestaña MÁS/MENOS — muestra u oculta las secciones
+             "Sugerencias del paño" y "Eficiencia por categoría". Colapsado
+             por defecto para que el layout quede limpio y rinda más. */}
+        <button
+          onClick={() => setShowMore((v) => !v)}
+          className="self-center text-[10px] px-3 py-1 rounded-full transition-opacity hover:opacity-90"
+          style={{
+            fontFamily: 'monospace',
+            letterSpacing: '0.25em',
+            color: '#67e8f9',
+            background: 'rgba(8, 47, 73, 0.35)',
+            border: '1px solid rgba(34, 211, 238, 0.25)',
+          }}
+        >
+          {showMore ? '▲ menos' : '▼ más'}
+        </button>
+
+        {/* ═══ 6. EFICIENCIA POR CATEGORÍA (pestaña MÁS) ═══ */}
+        {showMore && (
         <div className="flex flex-col">
           <span
             className="text-[12px] text-cyan-500/70 mb-1.5 px-1"
@@ -1249,6 +1298,7 @@ export function QuantumPilot({
             })}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

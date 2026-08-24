@@ -70,9 +70,11 @@ export function AppPage() {
     doc: null,
     col: null,
   });
-  /** Historial rodante por mercado para semáforo/drawdown (últimos 60 giros). */
-  const [docHist, setDocHist] = useState<{ isError: boolean }[]>([]);
-  const [colHist, setColHist] = useState<{ isError: boolean }[]>([]);
+  // Historiales rodantes por mercado (últimos 60 giros) — se mutan por ref
+  // para NO forzar re-render en cada giro. El re-render llega solo cuando
+  // cambia lastHits (una vez por giro) o spinsCount (que ya cambia con el query).
+  const docHistRef = useRef<{ isError: boolean }[]>([]);
+  const colHistRef = useRef<{ isError: boolean }[]>([]);
   const spinsCount = stateQuery.data?.sequence?.count ?? 0;
   const countersRaw: any = stateQuery.data?.counters ?? {};
 
@@ -92,12 +94,17 @@ export function AppPage() {
       const colHit: boolean | null =
         c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
       setLastHits({ doc: docHit, col: colHit });
-      // acumular en historiales rodantes (últimos 60), solo cuando hubo un resultado
+      // mutar los refs (no dispara re-render extra) — el re-render que ya
+      // viene de setLastHits + query alcanza para que Quantum lea los nuevos valores.
       if (docHit !== null) {
-        setDocHist((h) => [...h, { isError: !docHit }].slice(-60));
+        const h = docHistRef.current;
+        h.push({ isError: !docHit });
+        if (h.length > 60) h.shift();
       }
       if (colHit !== null) {
-        setColHist((h) => [...h, { isError: !colHit }].slice(-60));
+        const h = colHistRef.current;
+        h.push({ isError: !colHit });
+        if (h.length > 60) h.shift();
       }
     }
     prevCnt.current = { d, c };
@@ -213,8 +220,8 @@ export function AppPage() {
         pdEntropy={entropyCalc}
         pdDocHit={lastHits.doc}
         pdColHit={lastHits.col}
-        pdDocHist={docHist}
-        pdColHist={colHist}
+        pdDocHist={docHistRef.current}
+        pdColHist={colHistRef.current}
       />
 
       <div className="app-wrap">
