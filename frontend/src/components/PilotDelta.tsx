@@ -22,7 +22,7 @@
 //   ΔHUD > +5 & HUD > 60 → COL : solo superó al 71 % — dentro del ruido
 // El contador de validación al pie mide ambos en vivo para resolverlo.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 
 interface Props {
   /** Nº de spins de la sesión — dispara el registro de un giro nuevo. */
@@ -106,10 +106,18 @@ export function PilotDelta({
     });
   }, [spinsCount, hud, entropy, docHit, colHit, thrEnt, thrHud, thrHudNivel]);
 
-  const v14 = hist.slice(-VENTANA);
-  const v5 = hist.slice(-VENTANA_ANCLAJE);
-  const ant = hist[hist.length - 2];
-  const act = hist[hist.length - 1];
+  /* FASE 1: Se envuelven las variables derivadas en useMemo.
+     Esto evita que se recalculen las ventanas y los estados de la mesa 
+     si el array 'hist' no ha cambiado (ej: al mover la ventana o recibir updates irrelevantes). */
+     
+  const { v14, v5, ant, act } = useMemo(() => {
+    return {
+      v14: hist.slice(-VENTANA),
+      v5: hist.slice(-VENTANA_ANCLAJE),
+      ant: hist[hist.length - 2],
+      act: hist[hist.length - 1],
+    };
+  }, [hist]);
 
   // ── BLOQUE A ── (por mercado: columnas y docenas)
   type EstadoMercado = {
@@ -120,53 +128,85 @@ export function PilotDelta({
     mesa: 'LIMPIA' | 'PESADA' | 'TÓXICA' | 'CALIBRANDO';
     mesaCls: string;
   };
-  function estadoMercado(sel: (g: Giro) => boolean | null): EstadoMercado {
-    const ev = v14.filter((g: Giro) => sel(g) !== null);
-    const wr = ev.length ? (ev.filter((g: Giro) => sel(g)).length / ev.length) * 100 : null;
-    const wrCls = wr === null ? 'na' : wr > 60 ? 'ok' : wr >= 50 ? 'mid' : 'bad';
-    const seq = v14.slice(-6).map((g: Giro) => {
-      const r = sel(g);
-      return r === null ? '·' : r ? 'A' : 'E';
-    });
-    const ult5 = v5.map((g: Giro) => sel(g)).filter((x) => x !== null) as boolean[];
-    let mesa: EstadoMercado['mesa'] = 'CALIBRANDO';
-    if (ult5.length >= 3) {
-      let max = 0;
-      let c = 0;
-      for (const h of ult5) {
-        c = h ? 0 : c + 1;
-        max = Math.max(max, c);
+
+  /* FASE 1: estadoMercado también se memoriza para evitar mapeos pesados en cada render */
+  const { estCol, estDoc } = useMemo(() => {
+    function getEstadoMercado(sel: (g: Giro) => boolean | null): EstadoMercado {
+      const ev = v14.filter((g: Giro) => sel(g) !== null);
+      const wr = ev.length ? (ev.filter((g: Giro) => sel(g)).length / ev.length) * 100 : null;
+      const wrCls = wr === null ? 'na' : wr > 60 ? 'ok' : wr >= 50 ? 'mid' : 'bad';
+      const seq = v14.slice(-6).map((g: Giro) => {
+        const r = sel(g);
+        return r === null ? '·' : r ? 'A' : 'E';
+      });
+      const ult5 = v5.map((g: Giro) => sel(g)).filter((x) => x !== null) as boolean[];
+      let mesa: EstadoMercado['mesa'] = 'CALIBRANDO';
+      if (ult5.length >= 3) {
+        let max = 0;
+        let c = 0;
+        for (const h of ult5) {
+          c = h ? 0 : c + 1;
+          max = Math.max(max, c);
+        }
+        mesa = max >= 3 ? 'TÓXICA' : max === 2 ? 'PESADA' : 'LIMPIA';
       }
-      mesa = max >= 3 ? 'TÓXICA' : max === 2 ? 'PESADA' : 'LIMPIA';
+      const mesaCls = mesa === 'LIMPIA' ? 'ok' : mesa === 'PESADA' ? 'mid' : mesa === 'TÓXICA' ? 'bad' : 'na';
+      return { nEval: ev.length, wr, wrCls, seq, mesa, mesaCls };
     }
-    const mesaCls = mesa === 'LIMPIA' ? 'ok' : mesa === 'PESADA' ? 'mid' : mesa === 'TÓXICA' ? 'bad' : 'na';
-    return { nEval: ev.length, wr, wrCls, seq, mesa, mesaCls };
-  }
-  const estCol = estadoMercado((g) => g.col);
-  const estDoc = estadoMercado((g) => g.doc);
+    
+    return {
+      estCol: getEstadoMercado((g) => g.col),
+      estDoc: getEstadoMercado((g) => g.doc)
+    };
+  }, [v14, v5]);
 
   // ── BLOQUE B ──
-  const rHud = rango(v5.map((g: Giro) => g.hud as number));
-  const rEnt = rango(v5.map((g: Giro) => g.ent as number));
-  const hudAnclado = rHud !== null && rHud <= 10;
-  const entAnclado = rEnt !== null && rEnt <= 15;
+  /* FASE 1: Se memorizan los cálculos de anclaje */
+  const { rHud, rEnt, hudAnclado, entAnclado } = useMemo(() => {
+    const _rHud = rango(v5.map((g: Giro) => g.hud as number));
+    const _rEnt = rango(v5.map((g: Giro) => g.ent as number));
+    return {
+      rHud: _rHud,
+      rEnt: _rEnt,
+      hudAnclado: _rHud !== null && _rHud <= 10,
+      entAnclado: _rEnt !== null && _rEnt <= 15
+    };
+  }, [v5]);
 
   // ── BLOQUE C ──
-  const dHud = ant && act && act.hud !== null && ant.hud !== null ? act.hud - ant.hud : null;
-  const dEnt = ant && act && act.ent !== null && ant.ent !== null ? act.ent - ant.ent : null;
-  const alertaEnt = dEnt !== null && Math.abs(dEnt) > thrEnt;
-  const alertaHud = dHud !== null && dHud > thrHud && (act?.hud ?? 0) > thrHudNivel;
+  /* FASE 1: Se memorizan las alertas delta */
+  const { dHud, dEnt, alertaEnt, alertaHud } = useMemo(() => {
+    const _dHud = ant && act && act.hud !== null && ant.hud !== null ? act.hud - ant.hud : null;
+    const _dEnt = ant && act && act.ent !== null && ant.ent !== null ? act.ent - ant.ent : null;
+    return {
+      dHud: _dHud,
+      dEnt: _dEnt,
+      alertaEnt: _dEnt !== null && Math.abs(_dEnt) > thrEnt,
+      alertaHud: _dHud !== null && _dHud > thrHud && (act?.hud ?? 0) > thrHudNivel
+    };
+  }, [ant, act, thrEnt, thrHud, thrHudNivel]);
 
   // ── VALIDACIÓN EN VIVO ──
   // ¿los giros con alerta fallan más que los que no?
-  const conAlertaDoc = hist.filter((g: Giro) => g.alertaEnt && g.doc !== null);
-  const sinAlertaDoc = hist.filter((g: Giro) => !g.alertaEnt && g.doc !== null);
-  const errCon = conAlertaDoc.length
-    ? (conAlertaDoc.filter((g: Giro) => !g.doc).length / conAlertaDoc.length) * 100
-    : null;
-  const errSin = sinAlertaDoc.length
-    ? (sinAlertaDoc.filter((g: Giro) => !g.doc).length / sinAlertaDoc.length) * 100
-    : null;
+  /* FASE 1: Se memorizan los cálculos de validación, que iteran sobre todo el array 'hist' */
+  const { errCon, errSin, conAlertaDoc, sinAlertaDoc } = useMemo(() => {
+    const _conAlertaDoc = hist.filter((g: Giro) => g.alertaEnt && g.doc !== null);
+    const _sinAlertaDoc = hist.filter((g: Giro) => !g.alertaEnt && g.doc !== null);
+    const _errCon = _conAlertaDoc.length
+      ? (_conAlertaDoc.filter((g: Giro) => !g.doc).length / _conAlertaDoc.length) * 100
+      : null;
+    const _errSin = _sinAlertaDoc.length
+      ? (_sinAlertaDoc.filter((g: Giro) => !g.doc).length / _sinAlertaDoc.length) * 100
+      : null;
+      
+    return {
+      errCon: _errCon,
+      errSin: _errSin,
+      conAlertaDoc: _conAlertaDoc,
+      sinAlertaDoc: _sinAlertaDoc
+    };
+  }, [hist]);
+
 
   return (
     <div className="pd">

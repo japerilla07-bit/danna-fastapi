@@ -24,6 +24,7 @@ import type { EnginePayload } from '@/types/api';
 import { PilotDelta } from '@/components/PilotDelta';
 import '@/styles/pilot-delta.css';
 import { MotorAlerts } from '@/components/MotorAlerts';
+import { RadarMap } from '@/components/RadarMap';
 
 const GOD_CATS = ['color', 'paridad', 'rango', 'docenas', 'columnas'] as const;
 type GodCat = typeof GOD_CATS[number];
@@ -159,13 +160,13 @@ interface Props {
   pdColHit?: boolean | null;
 }
 
+/* FASE 1: Refactorización de useDrag para rendimiento. */
 // ── Hook draggable ────────────────────────────────────────────────
 
-function useDrag(initialPos: { x: number; y: number }) {
-  const [pos, setPos] = useState(initialPos);
+function useDrag(initialPos: { x: number; y: number }, targetRef: React.RefObject<HTMLDivElement>) {
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
-  const posStart = useRef({ x: 0, y: 0 });
+  const posStart = useRef({ x: initialPos.x, y: initialPos.y });
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
@@ -173,10 +174,18 @@ function useDrag(initialPos: { x: number; y: number }) {
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
       dragStart.current = { x: clientX, y: clientY };
-      posStart.current = { ...pos };
+      if (targetRef.current) {
+         const transform = targetRef.current.style.transform;
+         if(transform) {
+             const match = transform.match(/translate3d\((.+)px,\s*(.+)px/);
+             if(match) {
+                 posStart.current = { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+             }
+         }
+      }
       e.stopPropagation();
     },
-    [pos]
+    [targetRef]
   );
 
   useEffect(() => {
@@ -187,10 +196,13 @@ function useDrag(initialPos: { x: number; y: number }) {
       const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
       const dx = clientX - dragStart.current.x;
       const dy = clientY - dragStart.current.y;
-      setPos({
-        x: posStart.current.x + dx,
-        y: posStart.current.y + dy,
-      });
+      
+      const newX = posStart.current.x + dx;
+      const newY = posStart.current.y + dy;
+
+      if (targetRef.current) {
+        targetRef.current.style.transform = `translate3d(${newX}px, ${newY}px, 0)`;
+      }
     };
     const onUp = () => setIsDragging(false);
 
@@ -205,9 +217,9 @@ function useDrag(initialPos: { x: number; y: number }) {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [isDragging]);
+  }, [isDragging, targetRef]);
 
-  return { pos, onMouseDown };
+  return { onMouseDown, initialPos };
 }
 
 // ── Canvas de partículas ──────────────────────────────────────────
@@ -314,7 +326,9 @@ export function QuantumPilot({
   pdDocHit = null,
   pdColHit = null,
 }: Props) {
-  const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { onMouseDown, initialPos } = useDrag({ x: 20, y: 100 }, containerRef);
+
   const [minimized, setMinimized] = useState(false);
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -333,17 +347,6 @@ export function QuantumPilot({
   const hudState = (godBet.cond_state || '').toUpperCase() || 'CALIBRANDO';
   const activeBets = godBet.active_bets || [];
 
-  // ★ TARGET LOCK con prioridad de 3 fuentes:
-  //   1. OVERRIDE del usuario — la sugerencia que el operador clickeó
-  //      pasa a ser el TARGET inmediatamente (sin esperar al verdict del
-  //      siguiente spin). Se busca en active_bets para tomar su conf_pct.
-  //   2. PICK_BET del Pilot — comportamiento por defecto cuando el Pilot
-  //      tiene una apuesta GO real.
-  //   3. PRIMERA SUGERENCIA — si GOD está activo pero el Pilot no emite
-  //      pick_bet (verdict ≠ GO, GOD-STRICT veto, etc.), usamos la
-  //      primera sugerencia activa como fallback visual. El backend
-  //      sigue contando hits/misses por categoría en counters_god, así
-  //      que ERRORES y SESIÓN GOD se mueven igual sin disonancia.
   const topPick: ActiveBet | null = (() => {
     if (override?.bet_key) {
       const fromOverride = activeBets.find((b) => b.bet_key === override.bet_key);
@@ -363,20 +366,6 @@ export function QuantumPilot({
     return null;
   })();
 
-  // OTRAS SUGERENCIAS = active_bets del motor (excluyendo la del TARGET LOCK).
-  // Estas son info ambient — pueden mostrarse aunque GOD no esté apostando.
-  // FIX: antes salían de godBet.active_bets, que solo existe con GOD activo —
-  // por eso el panel se quedaba vacío la mayor parte del tiempo. Ahora salen de
-  // payload.decision.bet_advice, que SIEMPRE está: todas las categorías del
-  // paño, ordenadas por probabilidad descendente, da igual que el estado sea
-  // BET, PROBE o WAIT. El estado se muestra como etiqueta, no como filtro.
-  // SUGERENCIAS DEL PAÑO — todas, siempre, ordenadas por probabilidad.
-  //
-  // Antes salían de godBet.active_bets (solo existe con GOD activo) y el panel
-  // quedaba vacío casi siempre. Ahora se busca bet_advice recorriendo varias
-  // rutas posibles del payload, porque su ubicación no es estable entre
-  // versiones. `otherSrc` deja constancia de cuál funcionó, y se muestra en la
-  // cabecera del bloque para poder diagnosticarlo sin adivinar.
   const { otherBets, otherSrc } = (() => {
     const pl: any = payload ?? {};
     const rutas: Array<[string, any]> = [
@@ -417,7 +406,6 @@ export function QuantumPilot({
     return { otherBets: filas as any[], otherSrc: `${src} · ${filas.length}` };
   })();
 
-  // ── Sincronizar override desde backend al montar y cuando cambie el verdict
   useEffect(() => {
     let cancelled = false;
     fetch('/api/pilot/override', { credentials: 'include' })
@@ -432,17 +420,15 @@ export function QuantumPilot({
         }
       })
       .catch(() => {
-        /* silencioso — si falla, queda en null */
+        /* silencioso */
       });
     return () => {
       cancelled = true;
     };
   }, [verdict?.pick_bet?.bet_key, godBet?.god_stats?.wins, godBet?.god_stats?.losses]);
 
-  // ── Acciones de override ──────────────────────────────────────
   const applyOverride = useCallback(async (bet_key: string, pick: any) => {
     setLoadingKey(bet_key);
-    // Update optimista
     setOverride({ bet_key, pick });
     try {
       const r = await fetch('/api/pilot/override', {
@@ -452,7 +438,6 @@ export function QuantumPilot({
         body: JSON.stringify({ bet_key, pick }),
       });
       if (!r.ok) {
-        // revertir si falló
         setOverride(null);
       }
     } catch {
@@ -477,52 +462,31 @@ export function QuantumPilot({
     }
   }, []);
 
-  // ── Click handler para una sugerencia
   const handleBetClick = useCallback(
     (b: ActiveBet) => {
       if (override?.bet_key === b.bet_key) {
-        // Click sobre la misma que ya está activa → la liberamos
         clearOverride();
       } else {
-        // Picks crudos: para color/paridad pasa string, para docenas/columnas un id
-        // El backend acepta `pick` libre — usamos pick_pretty como hint visible
         applyOverride(b.bet_key, b.pick_pretty);
       }
     },
     [override, applyOverride, clearOverride]
   );
 
-  // ── ERRORES + SESIÓN GOD: contador del PICK de TARGET LOCK ───────────
-  // ────────────────────────────────────────────────────────────────────
-  // Fuente ÚNICA: godBet.god_target — un contador dedicado del backend que
-  // cuenta SOLO el pick que TARGET LOCK muestra (la apuesta principal del
-  // pilot), y SOLO cuando GOD está ACTIVO. Cruza categorías: si docenas
-  // falla suma 1, si luego columnas falla suma 2, si color acierta baja a 0.
-  //
-  //   • CONSEC = errores consecutivos actuales del pick de TARGET LOCK
-  //   • MÁX    = peor racha de errores de la sesión GOD
-  //   • hits/misses/% = aciertos del pick de TARGET LOCK en GOD activo
-  //
-  // El backend lo calcula una sola vez por spin, sin dependencias de
-  // counters_god ni god_stats. El frontend solo lo lee.
   const godTarget = godBet?.god_target ?? { wins: 0, losses: 0, consec_errors: 0, max_consec_errors: 0 };
   const consecErr = Number(godTarget.consec_errors ?? 0);
   const maxConsecErr = Number(godTarget.max_consec_errors ?? 0);
   const hits = Number(godTarget.wins ?? 0);
   const misses = Number(godTarget.losses ?? 0);
-  // `totalBets` y `hitRate` alimentaban el bloque SESIÓN GOD, sustituido por
-  // PilotDelta. Eliminadas para no dejar variables sin usar (rompe el build
-  // si tsconfig tiene noUnusedLocals). `errHit` sigue viva en el bloque ERRORES.
   const errHit = hits > 0 ? misses / hits : misses;
 
-  // ── Minimizado
   if (minimized) {
     return (
       <div
+        ref={containerRef}
         className="fixed z-50 flex items-center justify-center rounded-full w-12 h-12 cursor-grab active:cursor-grabbing"
         style={{
-          left: pos.x,
-          top: pos.y,
+          transform: `translate3d(${initialPos.x}px, ${initialPos.y}px, 0)`,
           background:
             'linear-gradient(135deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
           backdropFilter: 'blur(20px)',
@@ -552,13 +516,12 @@ export function QuantumPilot({
     );
   }
 
-  // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[480px] max-w-[95vw] max-h-[92vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      ref={containerRef}
+      className="fixed z-50 w-[860px] max-w-[95vw] max-h-[92vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
-        left: pos.x,
-        top: pos.y,
+        transform: `translate3d(${initialPos.x}px, ${initialPos.y}px, 0)`,
         background:
           'linear-gradient(145deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.92) 50%, rgba(8, 12, 22, 0.95) 100%)',
         backdropFilter: 'blur(20px) saturate(140%)',
@@ -575,7 +538,7 @@ export function QuantumPilot({
 
       {/* ═══ Header ═══ */}
       <div
-        className="relative z-10 flex items-center justify-between px-4 py-3 cursor-grab active:cursor-grabbing"
+        className="relative z-10 flex items-center justify-between px-4 py-3 cursor-grab active:cursor-grabbing shrink-0"
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
         style={{
@@ -609,10 +572,8 @@ export function QuantumPilot({
                   : '0 0 8px rgba(34, 211, 238, 0.4)',
               }}
             >
-              QUANTUM PILOT
+              QUANTUM PILOT v2.0
             </span>
-            {/* Marco honesto: el panel es lectura de mesa, no un pronóstico.
-                Auditoría (9 sesiones): ningún indicador anticipa el próximo giro. */}
             <span
               className="text-[9px] text-gray-500 mt-0.5"
               style={{ letterSpacing: '0.18em' }}
@@ -631,7 +592,7 @@ export function QuantumPilot({
 
       {/* Scan-line decorativa */}
       <div
-        className="relative z-10 h-px w-full"
+        className="relative z-10 h-px w-full shrink-0"
         style={{
           background: godBet.active
             ? 'linear-gradient(90deg, transparent 0%, rgba(220, 38, 38, 0.6) 50%, transparent 100%)'
@@ -639,13 +600,10 @@ export function QuantumPilot({
         }}
       />
 
-      {/* FIX "no cabe": el panel se salia por abajo de la ventana y el
-          Bloque C quedaba cortado. Ahora el contenedor tiene max-h-[92vh]
-          y este cuerpo scrollea (min-h-0 es obligatorio para que flex-1
-          permita encoger dentro de un flex column). El header queda fijo. */}
       <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col p-4 gap-3 pilot-scroll">
-        {/* ═══ 1. Estado verdict ═══ */}
-        <div className="flex items-stretch gap-2">
+        
+        {/* ═══ 1. ZONA TOP: Telemetría ═══ */}
+        <div className="flex items-stretch gap-2 shrink-0">
           <div
             className="flex-1 flex flex-col items-center justify-center py-2.5 rounded-md relative overflow-hidden"
             style={{
@@ -676,8 +634,6 @@ export function QuantumPilot({
                   : '0 0 12px rgba(251, 191, 36, 0.6), 0 0 4px rgba(251, 191, 36, 0.8)',
               }}
             >
-              {/* GOD retirado del panel: el operador ya no ve ese modo.
-                  El estado ahora refleja si hay un pick activo o no. */}
               {topPick ? 'CON PICK' : 'EN ESPERA'}
             </span>
           </div>
@@ -726,9 +682,6 @@ export function QuantumPilot({
               {godBet.radar_score}/10
             </span>
           </div>
-          {/* VALIDACION: chip p crudo del ensemble — SIEMPRE visible (WAIT/BET/
-              PROBE), muestra el mejor p del spin y su categoria. Display puro,
-              no afecta ninguna decision. Para anotar en cada spin. */}
           <div
             className="flex flex-col items-center justify-center px-3 py-2 rounded-md min-w-[82px]"
             style={{
@@ -744,15 +697,12 @@ export function QuantumPilot({
                 paridad: 'PAR', rango: 'RNG',
               } as Record<string, string>)[godBet.best_p_key ?? ''] ?? (godBet.best_p_key ?? 'P').toUpperCase()}
             </span>
-            {/* grupo 1 individual: etiqueta + prob */}
             <span className="text-[12px] font-mono text-cyan-400 leading-tight">
               {(godBet.best_g1 ?? '—')} {godBet.best_p1 != null ? (godBet.best_p1 * 100).toFixed(1) : '—'}
             </span>
-            {/* grupo 2 individual: etiqueta + prob */}
             <span className="text-[12px] font-mono text-cyan-500 leading-tight">
               {(godBet.best_g2 ?? '—')} {godBet.best_p2 != null ? (godBet.best_p2 * 100).toFixed(1) : '—'}
             </span>
-            {/* suma (lo que apuesta el motor) */}
             <span
               className="font-black text-xs font-mono mt-0.5"
               style={{ color: '#67e8f9', textShadow: '0 0 6px rgba(34, 211, 238, 0.4)' }}
@@ -764,7 +714,7 @@ export function QuantumPilot({
 
         {/* ═══ Mesa CCS bar ═══ */}
         <div
-          className="flex items-center gap-2.5 px-3 py-2 rounded-md"
+          className="flex items-center gap-2.5 px-3 py-2 rounded-md shrink-0"
           style={{
             background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(8, 12, 22, 0.6) 100%)',
             border: '1px solid rgba(34, 211, 238, 0.12)',
@@ -813,7 +763,22 @@ export function QuantumPilot({
           </span>
         </div>
 
+        {/* ═══ FASE 3: CENTER CANVAS (RADAR MAP ACTIVO) ═══ */}
+        <div className="w-full h-[220px] rounded-md border border-[rgba(34,211,238,0.3)] bg-[rgba(8,12,22,0.8)] relative flex flex-col items-center justify-center overflow-hidden shadow-[inset_0_0_20px_rgba(34,211,238,0.1)] shrink-0 my-2">
+             <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-cyan-900 to-transparent"></div>
+             
+             {/* El RadarMap importado se inyecta aquí. Se alimenta directo del hud y entropy que llegan por Props */}
+             <div className="w-full h-full absolute inset-0 z-10">
+                 <RadarMap 
+                    spinsCount={spinsCount} 
+                    hud={pdHud} 
+                    entropy={pdEntropy} 
+                 />
+             </div>
+        </div>
+
         {/* ═══ 2. TARGET LOCK (top pick) ═══ */}
+        <div className="shrink-0">
         {topPick ? (
           <button
             onClick={() => handleBetClick(topPick)}
@@ -837,39 +802,19 @@ export function QuantumPilot({
             {/* Corners de targeting militar */}
             <span
               className="absolute top-1 left-1 w-2.5 h-2.5 border-t border-l"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
+              style={{ borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251, 191, 36, 0.8)' : 'rgba(103, 232, 249, 0.7)' }}
             />
             <span
               className="absolute top-1 right-1 w-2.5 h-2.5 border-t border-r"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
+              style={{ borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251, 191, 36, 0.8)' : 'rgba(103, 232, 249, 0.7)' }}
             />
             <span
               className="absolute bottom-1 left-1 w-2.5 h-2.5 border-b border-l"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
+              style={{ borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251, 191, 36, 0.8)' : 'rgba(103, 232, 249, 0.7)' }}
             />
             <span
               className="absolute bottom-1 right-1 w-2.5 h-2.5 border-b border-r"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
+              style={{ borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251, 191, 36, 0.8)' : 'rgba(103, 232, 249, 0.7)' }}
             />
 
             <div className="flex justify-between items-center mb-1.5 relative">
@@ -877,24 +822,13 @@ export function QuantumPilot({
                 className="text-[12px] font-bold px-2 py-0.5 rounded"
                 style={{
                   letterSpacing: '0.25em',
-                  background:
-                    override?.bet_key === topPick.bet_key
-                      ? 'rgba(251, 191, 36, 0.2)'
-                      : 'rgba(34, 211, 238, 0.15)',
-                  color:
-                    override?.bet_key === topPick.bet_key ? '#fcd34d' : '#67e8f9',
-                  border:
-                    override?.bet_key === topPick.bet_key
-                      ? '1px solid rgba(251, 191, 36, 0.3)'
-                      : '1px solid rgba(34, 211, 238, 0.25)',
+                  background: override?.bet_key === topPick.bet_key ? 'rgba(251, 191, 36, 0.2)' : 'rgba(34, 211, 238, 0.15)',
+                  color: override?.bet_key === topPick.bet_key ? '#fcd34d' : '#67e8f9',
+                  border: override?.bet_key === topPick.bet_key ? '1px solid rgba(251, 191, 36, 0.3)' : '1px solid rgba(34, 211, 238, 0.25)',
                 }}
               >
                 {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : '▸ SUGERENCIA TOP'}
               </span>
-              {/* ★ Badge OVERRIDE FORZADO: el operador empujó el GO sobre
-                 thr_go del Pilot vía Opción C (CCS 60-thr_go% en CAUTION).
-                 Indica visualmente que esta apuesta es decisión MANUAL del
-                 operador, no convicción autónoma del motor. */}
               {verdict?.override_forced_go ? (
                 <span
                   className="text-[10px] font-bold px-1.5 py-0.5 rounded"
@@ -905,7 +839,7 @@ export function QuantumPilot({
                     border: '1px solid rgba(251, 191, 36, 0.4)',
                     textShadow: '0 0 6px rgba(251, 191, 36, 0.45)',
                   }}
-                  title="Override forzó GO sobre threshold del Pilot (CCS ≥ 60% en mesa CAUTION)"
+                  title="Override forzó GO sobre threshold del Pilot"
                 >
                   OVERRIDE FORZADO
                 </span>
@@ -913,18 +847,8 @@ export function QuantumPilot({
               <span
                 className="text-base font-black"
                 style={{
-                  color:
-                    topPick.conf_pct >= 80
-                      ? '#67e8f9'
-                      : topPick.conf_pct >= 60
-                      ? '#22d3ee'
-                      : topPick.conf_pct >= 40
-                      ? '#fbbf24'
-                      : '#94a3b8',
-                  textShadow:
-                    topPick.conf_pct >= 60
-                      ? '0 0 10px rgba(34, 211, 238, 0.6)'
-                      : '0 0 4px rgba(148, 163, 184, 0.3)',
+                  color: topPick.conf_pct >= 80 ? '#67e8f9' : topPick.conf_pct >= 60 ? '#22d3ee' : topPick.conf_pct >= 40 ? '#fbbf24' : '#94a3b8',
+                  textShadow: topPick.conf_pct >= 60 ? '0 0 10px rgba(34, 211, 238, 0.6)' : '0 0 4px rgba(148, 163, 184, 0.3)',
                 }}
               >
                 {topPick.conf_pct}%
@@ -941,10 +865,7 @@ export function QuantumPilot({
                 className="text-2xl font-black tracking-wider"
                 style={{
                   color: '#ffffff',
-                  textShadow:
-                    override?.bet_key === topPick.bet_key
-                      ? '0 0 14px rgba(251, 191, 36, 0.7), 0 0 4px rgba(252, 211, 77, 0.9)'
-                      : '0 0 12px rgba(34, 211, 238, 0.5), 0 0 3px rgba(103, 232, 249, 0.8)',
+                  textShadow: override?.bet_key === topPick.bet_key ? '0 0 14px rgba(251, 191, 36, 0.7), 0 0 4px rgba(252, 211, 77, 0.9)' : '0 0 12px rgba(34, 211, 238, 0.5), 0 0 3px rgba(103, 232, 249, 0.8)',
                   letterSpacing: '0.05em',
                 }}
               >
@@ -968,10 +889,11 @@ export function QuantumPilot({
             </span>
           </div>
         )}
+        </div>
 
         {/* ═══ 3. OTRAS SUGERENCIAS ═══ */}
         <div
-          className="flex flex-col rounded-md overflow-hidden"
+          className="flex flex-col rounded-md overflow-hidden shrink-0"
           style={{
             background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 12, 22, 0.5) 100%)',
             border: '1px solid rgba(34, 211, 238, 0.12)',
@@ -1033,18 +955,6 @@ export function QuantumPilot({
                         ? '0 0 10px rgba(251, 191, 36, 0.25), inset 0 1px 0 rgba(252, 211, 77, 0.15)'
                         : 'none',
                     }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.border = '1px solid rgba(34, 211, 238, 0.3)';
-                        e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 211, 238, 0.15)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.border = '1px solid rgba(34, 211, 238, 0.08)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
-                    }}
                   >
                     <span
                       className="text-[13px] font-bold w-10"
@@ -1055,24 +965,12 @@ export function QuantumPilot({
                     >
                       {CAT_SHORT[b.bet_key] ?? b.bet_key.slice(0, 3).toUpperCase()}
                     </span>
-                    {/* Estado del paño: etiqueta informativa, NO filtro.
-                        Todas las sugerencias se muestran siempre. */}
                     <span
                       className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                       style={{
                         letterSpacing: '0.08em',
-                        background:
-                          b.status === 'BET'
-                            ? 'rgba(34, 197, 94, 0.18)'
-                            : b.status === 'PROBE'
-                            ? 'rgba(251, 191, 36, 0.18)'
-                            : 'rgba(100, 116, 139, 0.18)',
-                        color:
-                          b.status === 'BET'
-                            ? '#4ade80'
-                            : b.status === 'PROBE'
-                            ? '#fbbf24'
-                            : '#94a3b8',
+                        background: b.status === 'BET' ? 'rgba(34, 197, 94, 0.18)' : b.status === 'PROBE' ? 'rgba(251, 191, 36, 0.18)' : 'rgba(100, 116, 139, 0.18)',
+                        color: b.status === 'BET' ? '#4ade80' : b.status === 'PROBE' ? '#fbbf24' : '#94a3b8',
                       }}
                     >
                       {b.status}
@@ -1080,9 +978,7 @@ export function QuantumPilot({
                     <span
                       className="flex-1 text-[14px] font-bold text-white text-center truncate"
                       style={{
-                        textShadow: isActive
-                          ? '0 0 6px rgba(251, 191, 36, 0.5)'
-                          : '0 0 4px rgba(34, 211, 238, 0.2)',
+                        textShadow: isActive ? '0 0 6px rgba(251, 191, 36, 0.5)' : '0 0 4px rgba(34, 211, 238, 0.2)',
                       }}
                     >
                       {b.pick_pretty}
@@ -1090,18 +986,8 @@ export function QuantumPilot({
                     <span
                       className="text-[13px] font-bold w-12 text-right"
                       style={{
-                        color:
-                          b.conf_pct >= 80
-                            ? '#67e8f9'
-                            : b.conf_pct >= 60
-                            ? '#22d3ee'
-                            : b.conf_pct >= 40
-                            ? '#fbbf24'
-                            : '#94a3b8',
-                        textShadow:
-                          b.conf_pct >= 60
-                            ? '0 0 6px rgba(34, 211, 238, 0.4)'
-                            : 'none',
+                        color: b.conf_pct >= 80 ? '#67e8f9' : b.conf_pct >= 60 ? '#22d3ee' : b.conf_pct >= 40 ? '#fbbf24' : '#94a3b8',
+                        textShadow: b.conf_pct >= 60 ? '0 0 6px rgba(34, 211, 238, 0.4)' : 'none',
                       }}
                     >
                       {b.conf_pct}%
@@ -1113,9 +999,9 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 4. ERRORES (ancho completo) ═══ */}
+        {/* ═══ 4. ERRORES ═══ */}
         <div
-          className="flex items-center justify-between p-3 rounded-md"
+          className="flex items-center justify-between p-3 rounded-md shrink-0"
           style={{
             background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(8, 12, 22, 0.6) 100%)',
             border: '1px solid rgba(34, 211, 238, 0.12)',
@@ -1135,10 +1021,7 @@ export function QuantumPilot({
                 className="font-bold text-base"
                 style={{
                   color: consecErr > 0 ? '#f87171' : '#94a3b8',
-                  textShadow:
-                    consecErr > 0
-                      ? '0 0 8px rgba(248, 113, 113, 0.5)'
-                      : 'none',
+                  textShadow: consecErr > 0 ? '0 0 8px rgba(248, 113, 113, 0.5)' : 'none',
                 }}
               >
                 {consecErr}
@@ -1168,12 +1051,7 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 5. CONCIENCIA SITUACIONAL (sustituye a SESIÓN GOD) ═══
-             Tres bloques de lectura rápida:
-               A · W/R 14, secuencia A/E, diagnóstico de mesa
-               B · anclaje (Max−Min de HUD y Entropía en 5 giros)
-               C · Δ contra el giro anterior + acción recomendada
-             Solo lectura: no cambia ninguna decisión del motor.        ═══ */}
+        {/* ═══ 5. CONCIENCIA SITUACIONAL ═══ */}
         <PilotDelta
           spinsCount={spinsCount}
           hud={pdHud}
@@ -1182,7 +1060,6 @@ export function QuantumPilot({
           colHit={pdColHit}
         />
 
-        {/* Alarmas informativas del motor — NO bloquean, NO pausan, solo avisan */}
         <MotorAlerts
           spinsCount={spinsCount}
           hud={pdHud}
@@ -1190,12 +1067,8 @@ export function QuantumPilot({
           entropy={pdEntropy}
         />
 
-        {/* PROGRESIÓN L1→L4 eliminada: arrastraba un bug conocido y ya no
-            es funcional para la operación. Si algún día vuelve, está en
-            Quantumpilot_PRE3.tsx.bak. */}
-
         {/* ═══ 6. EFICIENCIA POR CATEGORÍA ═══ */}
-        <div className="flex flex-col">
+        <div className="flex flex-col shrink-0 mb-4">
           <span
             className="text-[12px] text-cyan-500/70 mb-1.5 px-1"
             style={{ letterSpacing: '0.3em' }}
