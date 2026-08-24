@@ -33,6 +33,7 @@ import { ChaosPanel } from '@/components/ChaosPanel';
 import { SessionRecorder } from '@/components/SessionRecorder';
 
 import { QuantumPilot } from '@/components/Quantumpilot';
+import { RestGuard } from '@/components/RestGuard';
 import { SidebarDrawer } from '@/components/SidebarDrawer';
 
 import '@/styles/hud.css';
@@ -70,9 +71,10 @@ export function AppPage() {
     doc: null,
     col: null,
   });
-  /** Historial rodante por mercado para semáforo/drawdown (últimos 60 giros). */
-  const [docHist, setDocHist] = useState<{ isError: boolean }[]>([]);
+  // Historial rodante de acierto/error por mercado, para el semáforo ESTADO
+  // MESA del TableEntropy (columnas y docenas por separado). Acotado a 120.
   const [colHist, setColHist] = useState<{ isError: boolean }[]>([]);
+  const [docHist, setDocHist] = useState<{ isError: boolean }[]>([]);
   const spinsCount = stateQuery.data?.sequence?.count ?? 0;
   const countersRaw: any = stateQuery.data?.counters ?? {};
 
@@ -87,18 +89,14 @@ export function AppPage() {
     ];
     const prev = prevCnt.current;
     if (prev) {
-      const docHit: boolean | null =
-        d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null;
-      const colHit: boolean | null =
-        c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
-      setLastHits({ doc: docHit, col: colHit });
-      // acumular en historiales rodantes (últimos 60), solo cuando hubo un resultado
-      if (docHit !== null) {
-        setDocHist((h) => [...h, { isError: !docHit }].slice(-60));
-      }
-      if (colHit !== null) {
-        setColHist((h) => [...h, { isError: !colHit }].slice(-60));
-      }
+      const docRes = d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null;
+      const colRes = c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
+      setLastHits({ doc: docRes, col: colRes });
+      // isError = ese mercado falló el giro. `bet` se omite (se asume jugado):
+      // aquí no hay decisión de pausa del operador, así que la racha es la de
+      // seguir todos los picks.
+      if (colRes !== null) setColHist((h) => [...h, { isError: !colRes }].slice(-120));
+      if (docRes !== null) setDocHist((h) => [...h, { isError: !docRes }].slice(-120));
     }
     prevCnt.current = { d, c };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,9 +211,10 @@ export function AppPage() {
         pdEntropy={entropyCalc}
         pdDocHit={lastHits.doc}
         pdColHit={lastHits.col}
-        pdDocHist={docHist}
-        pdColHist={colHist}
       />
+
+      {/* Freno de descanso: avisa DESCANSÁ cuando columnas viene pegando */}
+      <RestGuard spinsCount={data.sequence.count} results={colHist} />
 
       <div className="app-wrap">
         {/* Userbar */}
@@ -337,6 +336,10 @@ export function AppPage() {
             <TableEntropy
               chaosIndex={(data as any).chaos_index ?? null}
               tableHealth={(data as any).table_health ?? null}
+              mesaMarkets={[
+                { label: 'COL', results: colHist },
+                { label: 'DOC', results: docHist },
+              ]}
             />
             <RadarCard payload={data.payload} />
             <ChaosPanel chaosIndex={(data as any).chaos_index ?? null} />
