@@ -1,14 +1,16 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — Store de telemetría del Quantum Pilot V2 (v2.1: sin loops)
+// D.A.N.N.A. — Store de telemetría (v3: contadores acumulados)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Cambios v2.1 (fix Maximum update depth exceeded / React #185):
-//   • Selectores por PRIMITIVAS (números, strings, bool) — nunca objetos
-//     ni arrays nuevos por render. Esto rompe el ciclo:
-//         re-render → useEffect → ingest → re-render.
-//   • Arrays derivados (trail, sparkline) cacheados por firma (lastN + len)
-//     → devuelven la MISMA referencia mientras los datos no cambian.
-//   • ingest idempotente por firma completa — si nada cambió, no muta.
+// Cambios v3:
+//   • Rachas contiguas → REEMPLAZADAS por contadores acumulados por
+//     mercado (hits, misses). No dependen de que los giros lleguen sin
+//     nulls entre medio. Fácil de leer, coincide con lo que ves en mesa.
+//   • Selectores por primitivas → cero loops de re-render.
+//   • Ingesta idempotente por firma.
+//
+// Regla del motor: apuesta siempre (BET forzado). El semáforo del
+// ZoneChip es solo lectura visual — no bloquea al motor.
 // ════════════════════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
@@ -37,10 +39,18 @@ export interface IngestPayload {
   colHit: boolean | null;
 }
 
+interface Counters {
+  docHits: number;
+  docMisses: number;
+  colHits: number;
+  colMisses: number;
+}
+
 interface TelemetryState {
   history: TelemetrySpin[];
   lastN: number;
   lastSig: string;
+  counters: Counters;
   ingest: (p: IngestPayload) => void;
   reset: () => void;
 }
@@ -58,50 +68,51 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   history: [],
   lastN: -1,
   lastSig: '',
+  counters: { docHits: 0, docMisses: 0, colHits: 0, colMisses: 0 },
 
   ingest: (p) => {
     const s = sig(p);
     const st = get();
-
-    // Dedupe fuerte: misma firma → no muto NADA (no dispara re-renders).
     if (s === st.lastSig) return;
-
-    // n retrocedió o repite con historial: sólo actualizamos firma.
     if (p.n <= st.lastN && st.history.length > 0) {
       set({ lastSig: s });
       return;
     }
 
     const prev = st.history[st.history.length - 1];
-    const dHud =
-      prev && p.hud !== null && prev.hud !== null ? p.hud - prev.hud : null;
-    const dEnt =
-      prev && p.ent !== null && prev.ent !== null ? p.ent - prev.ent : null;
+    const dHud = prev && p.hud !== null && prev.hud !== null ? p.hud - prev.hud : null;
+    const dEnt = prev && p.ent !== null && prev.ent !== null ? p.ent - prev.ent : null;
 
     const spin: TelemetrySpin = {
-      n: p.n,
-      hud: p.hud,
-      ent: p.ent,
-      dHud,
-      dEnt,
-      docHit: p.docHit,
-      colHit: p.colHit,
-      ts: Date.now(),
+      n: p.n, hud: p.hud, ent: p.ent, dHud, dEnt,
+      docHit: p.docHit, colHit: p.colHit, ts: Date.now(),
     };
 
-    const next =
-      st.history.length >= HISTORY_CAP
-        ? [...st.history.slice(1), spin]
-        : [...st.history, spin];
+    const next = st.history.length >= HISTORY_CAP
+      ? [...st.history.slice(1), spin]
+      : [...st.history, spin];
 
-    set({ history: next, lastN: p.n, lastSig: s });
+    // ── Contadores acumulados: sumar el hit/miss de este giro ──
+    const c = { ...st.counters };
+    if (p.docHit === true) c.docHits += 1;
+    else if (p.docHit === false) c.docMisses += 1;
+    if (p.colHit === true) c.colHits += 1;
+    else if (p.colHit === false) c.colMisses += 1;
+
+    set({ history: next, lastN: p.n, lastSig: s, counters: c });
   },
 
-  reset: () => set({ history: [], lastN: -1, lastSig: '' }),
+  reset: () =>
+    set({
+      history: [],
+      lastN: -1,
+      lastSig: '',
+      counters: { docHits: 0, docMisses: 0, colHits: 0, colMisses: 0 },
+    }),
 }));
 
 // ════════════════════════════════════════════════════════════════════════
-// SELECTORES — devuelven PRIMITIVAS o arrays cacheados (misma ref)
+// SELECTORES por primitivas o arrays cacheados
 // ════════════════════════════════════════════════════════════════════════
 
 export const useLastHud = (): number | null =>
@@ -116,9 +127,6 @@ export const useLastEnt = (): number | null =>
     return l ? l.ent : null;
   });
 
-export const useLastN = (): number =>
-  useTelemetryStore((s) => s.lastN);
-
 export const useCurrentDelta = (metric: 'hud' | 'ent'): number | null =>
   useTelemetryStore((s) => {
     const l = s.history[s.history.length - 1];
@@ -129,75 +137,32 @@ export const useCurrentDelta = (metric: 'hud' | 'ent'): number | null =>
 export const useCurrentZone = (mkt: Market): Zone =>
   useTelemetryStore((s) => {
     const l = s.history[s.history.length - 1];
-    if (!l) return 'TOXICA';
+    if (!l) return 'NEUTRA';
     return classifyZone(l.hud, l.ent, mkt);
   });
 
-export const useCurrentStreak = (mkt: Market): number =>
+// ── Contadores acumulados (nuevo — reemplaza rachas contiguas) ──────
+
+export const useMarketHits = (mkt: Market): number =>
+  useTelemetryStore((s) => mkt === 'doc' ? s.counters.docHits : s.counters.colHits);
+
+export const useMarketMisses = (mkt: Market): number =>
+  useTelemetryStore((s) => mkt === 'doc' ? s.counters.docMisses : s.counters.colMisses);
+
+export const useMarketWr = (mkt: Market): number | null =>
   useTelemetryStore((s) => {
-    let n = 0;
-    for (let i = s.history.length - 1; i >= 0; i--) {
-      const r = mkt === 'doc' ? s.history[i].docHit : s.history[i].colHit;
-      if (r === null) continue;
-      if (r === false) n++;
-      else break;
-    }
-    return n;
+    const h = mkt === 'doc' ? s.counters.docHits : s.counters.colHits;
+    const m = mkt === 'doc' ? s.counters.docMisses : s.counters.colMisses;
+    const t = h + m;
+    return t > 0 ? (h / t) * 100 : null;
   });
 
-// ── Arrays derivados con caché por (lastN + length) ──────────────────
-
-let _trailCache: { key: string; data: Array<{ hud: number; ent: number }> } = {
-  key: '',
-  data: [],
-};
-
-export const useRadarTrail = (n = 5): Array<{ hud: number; ent: number }> =>
-  useTelemetryStore((s) => {
-    const key = `${s.lastN}:${s.history.length}:${n}`;
-    if (_trailCache.key === key) return _trailCache.data;
-    const trail: Array<{ hud: number; ent: number }> = [];
-    for (let i = s.history.length - 1; i >= 0 && trail.length < n; i--) {
-      const g = s.history[i];
-      if (g.hud !== null && g.ent !== null) trail.push({ hud: g.hud, ent: g.ent });
-    }
-    trail.reverse();
-    _trailCache = { key, data: trail };
-    return trail;
-  });
-
-const _sparkCache: Record<string, { key: string; data: number[] }> = {
-  hud: { key: '', data: [] },
-  ent: { key: '', data: [] },
-};
-
-export const useSparkline = (metric: 'hud' | 'ent', n = 30): number[] =>
-  useTelemetryStore((s) => {
-    const key = `${s.lastN}:${s.history.length}:${n}`;
-    const c = _sparkCache[metric];
-    if (c.key === key) return c.data;
-    const arr: number[] = [];
-    const start = Math.max(0, s.history.length - n);
-    for (let i = start; i < s.history.length; i++) {
-      const v = s.history[i][metric];
-      if (v !== null) arr.push(v);
-    }
-    _sparkCache[metric] = { key, data: arr };
-    return arr;
-  });
-
-// ── Acciones ──────────────────────────────────────────────────────────
+// ── Acciones ─────────────────────────────────────────────────────────
 
 export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
 
-// ════════════════════════════════════════════════════════════════════════
-// DEBUG · exposición en window (solo dev — inspección desde consola)
-// ════════════════════════════════════════════════════════════════════════
-// Uso en DevTools:
-//   __telemetry.getState().history.slice(-5)   ← ver últimos 5 giros
-//   __telemetry.getState().lastN               ← último n registrado
-//   __telemetry.getState().reset()             ← limpiar historial
+// ── DEBUG · exposición en window (solo dev) ──────────────────────────
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
 }

@@ -1,195 +1,299 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — Matriz canónica de zonas 3×3 (auditoría 2412 giros)
+// D.A.N.N.A. — Matriz de zonas puntuales (v3)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Cortes canónicos:
-//   HUD    → Bajo 0-45   · Medio 46-69   · Alto 70-100
-//   ENT    → Baja 0-15   · Media 16-45   · Alta 46-100
+// Reemplaza la matriz 3×3 gruesa (que promediaba santuarios con agujeros
+// negros y borraba la señal) por 20 zonas puntuales extraídas de la
+// auditoría fina — hojas 2, 3 y 4 del Excel de referencia.
 //
-// 9 celdas físicas de la mesa. Cada celda tiene WR histórico por mercado
-// y decisión operativa (VERDE si > 66.67%, ROJO si no). La celda 9 no
-// tiene muestra suficiente → estado especial NO_DATA (no operar).
+// Prioridad de evaluación:
+//   1) AGUJEROS NEGROS  ganan siempre (aunque el punto también caiga en
+//      un santuario del mismo mercado, prevalece el agujero).
+//   2) SANTUARIOS (WR ≥ 73%)  → primera opción para operar.
+//   3) VERDES     (WR 67 – 72%) → operar normal.
+//   4) PROBE      (WR 60 – 66%) → no operar este mercado; rotar si el
+//      OTRO mercado en este mismo punto está VERDE o SANTUARIO.
+//   5) TÓXICA     (WR 50 – 59%) → no operar.
+//   6) NEUTRA     → punto sin zona nombrada; sin decisión fuerte.
 //
-// Regla PROBE (transición): una celda es PROBE para un mercado si ese
-// mercado está en rojo PERO el otro mercado está verde. Señaliza rotación.
+// Regla del motor: SIEMPRE emite pick (BET). El semáforo es sugerencia
+// visual — el operador decide con la lectura del ZoneChip.
 // ════════════════════════════════════════════════════════════════════════
 
-export type Zone = 'VERDE' | 'PROBE' | 'TOXICA' | 'NO_DATA';
+export type Zone = 'SANTUARIO' | 'VERDE' | 'PROBE' | 'TOXICA' | 'AGUJERO' | 'NEUTRA';
 export type Market = 'doc' | 'col';
-export type HudBand = 'ALTO' | 'MEDIO' | 'BAJO';
-export type EntBand = 'BAJA' | 'MEDIA' | 'ALTA';
 
-/**
- * Definición de una celda de la matriz.
- * `verdeDoc` / `verdeCol` = true si el WR histórico supera 66.67%.
- * `noData` = true si la muestra es insuficiente para decidir.
- */
-interface Cell {
-  hud: HudBand;
-  ent: EntBand;
-  wrDoc: number;
-  wrCol: number;
-  verdeDoc: boolean;
-  verdeCol: boolean;
-  noData?: boolean;
+// ────────────────────────────────────────────────────────────────────────
+// Estructura de una zona nombrada
+// ────────────────────────────────────────────────────────────────────────
+
+interface NamedZone {
+  /** Rangos inclusivos en HUD y Entropía. */
+  hudMin: number; hudMax: number;
+  entMin: number; entMax: number;
+  /** WR histórico y decisión operativa por mercado. */
+  doc: { wr: number; kind: Zone };
+  col: { wr: number; kind: Zone };
   label: string;
-  diagnosis: string;
+  /** Diagnóstico corto para mostrar bajo el chip. */
+  hint: string;
+  /** Prioridad de evaluación — mayor = gana. */
+  prio: number;
 }
 
-/**
- * Matriz completa 3×3 — tal cual la auditoría entregada.
- */
-export const CELLS: readonly Cell[] = [
-  // 1. HUD Alto + Entropía Baja
+// ────────────────────────────────────────────────────────────────────────
+// Zonas nombradas (auditoría — Excel hojas 2, 3, 4)
+// ────────────────────────────────────────────────────────────────────────
+
+const ZONES: readonly NamedZone[] = [
+  // ── AGUJEROS NEGROS (prioridad máxima 100) ──────────────────────────
   {
-    hud: 'ALTO', ent: 'BAJA', wrDoc: 62.61, wrCol: 59.91,
-    verdeDoc: false, verdeCol: false,
+    label: 'AGUJERO NEGRO DEFINITIVO',
+    hint: 'Un solo punto: HUD 51-55 × ENT 51-55. Salir ya.',
+    hudMin: 51, hudMax: 55, entMin: 51, entMax: 55,
+    doc: { wr: 50.0, kind: 'AGUJERO' },
+    col: { wr: 43.7, kind: 'AGUJERO' },
+    prio: 100,
+  },
+  {
+    label: 'MESA MUERTA TÓXICA',
+    hint: 'HUD ≤ 25 con ENT ≥ 70. Destrucción total.',
+    hudMin: 0, hudMax: 25, entMin: 70, entMax: 100,
+    doc: { wr: 32.0, kind: 'AGUJERO' },
+    col: { wr: 32.0, kind: 'AGUJERO' },
+    prio: 100,
+  },
+  {
+    label: 'AGUJERO NEGRO CENTRAL',
+    hint: 'HUD 41-55 × ENT > 40. La trampa más peligrosa.',
+    hudMin: 41, hudMax: 55, entMin: 41, entMax: 100,
+    doc: { wr: 49.0, kind: 'AGUJERO' },
+    col: { wr: 49.0, kind: 'AGUJERO' },
+    prio: 90,   // menor que definitivo — si se solapan, gana el chico
+  },
+  {
     label: 'TRAMPA DE VELOCIDAD',
-    diagnosis: 'Destrucción total — prohibido operar.',
+    hint: 'HUD ≥ 70 × ENT ≤ 10. Orden aparente que quema cuenta.',
+    hudMin: 70, hudMax: 100, entMin: 0, entMax: 10,
+    doc: { wr: 61.0, kind: 'TOXICA' },
+    col: { wr: 62.6, kind: 'TOXICA' },
+    prio: 80,
   },
-  // 2. HUD Alto + Entropía Media
+
+  // ── SANTUARIOS (prioridad 60-70) ────────────────────────────────────
   {
-    hud: 'ALTO', ent: 'MEDIA', wrDoc: 60.00, wrCol: 67.62,
-    verdeDoc: false, verdeCol: true,
-    label: 'TRANSICIÓN RÁPIDA',
-    diagnosis: 'Exclusivo columnas con precaución.',
+    label: 'SANTUARIO CLÁSICO DOC',
+    hint: 'ENT 10-30 × HUD 46-55 — refugio histórico DOC.',
+    hudMin: 46, hudMax: 55, entMin: 10, entMax: 30,
+    doc: { wr: 79.0, kind: 'SANTUARIO' },
+    col: { wr: 60.0, kind: 'PROBE' },
+    prio: 70,
   },
-  // 3. HUD Alto + Entropía Alta
   {
-    hud: 'ALTO', ent: 'ALTA', wrDoc: 58.67, wrCol: 61.33,
-    verdeDoc: false, verdeCol: false,
-    label: 'CAOS EN ALTA VELOCIDAD',
-    diagnosis: 'Zona tóxica crítica — muestra inestable.',
+    label: 'SANTUARIO COL',
+    hint: 'ENT 0-10 × HUD 41-50 — rebotes verticales limpios.',
+    hudMin: 41, hudMax: 50, entMin: 0, entMax: 10,
+    doc: { wr: 60.0, kind: 'PROBE' },
+    col: { wr: 80.5, kind: 'SANTUARIO' },
+    prio: 70,
   },
-  // 4. HUD Medio + Entropía Baja
   {
-    hud: 'MEDIO', ent: 'BAJA', wrDoc: 63.87, wrCol: 67.10,
-    verdeDoc: false, verdeCol: true,
-    label: 'INERCIA ESTABLE',
-    diagnosis: 'Exclusivo columnas — progresiones limpias.',
+    label: 'CONFLUENCIA MAESTRA',
+    hint: 'ENT 56-60 × HUD 46-50 — único punto ambos mercados alto caos.',
+    hudMin: 46, hudMax: 50, entMin: 56, entMax: 60,
+    doc: { wr: 77.14, kind: 'SANTUARIO' },
+    col: { wr: 77.14, kind: 'SANTUARIO' },
+    prio: 70,
   },
-  // 5. HUD Medio + Entropía Media
   {
-    hud: 'MEDIO', ent: 'MEDIA', wrDoc: 65.19, wrCol: 66.35,
-    verdeDoc: false, verdeCol: false,
-    label: 'ZONA DE TRANSICIÓN',
-    diagnosis: 'Sub-óptimo — al borde del umbral.',
+    label: 'PICO DOC EN CAOS',
+    hint: 'ENT 71-80 × HUD 36-40 — fractura de caída libre.',
+    hudMin: 36, hudMax: 40, entMin: 71, entMax: 80,
+    doc: { wr: 82.0, kind: 'SANTUARIO' },
+    col: { wr: 55.0, kind: 'TOXICA' },
+    prio: 70,
   },
-  // 6. HUD Medio + Entropía Alta
   {
-    hud: 'MEDIO', ent: 'ALTA', wrDoc: 66.88, wrCol: 64.50,
-    verdeDoc: true, verdeCol: false,
-    label: 'CAOS ESTABLE',
-    diagnosis: 'Exclusivo docenas — sectores del cilindro.',
+    label: 'REINO COL EXTREMO',
+    hint: 'ENT 81-100 × HUD 26-30 — verticales dominan caos absoluto.',
+    hudMin: 26, hudMax: 30, entMin: 81, entMax: 100,
+    doc: { wr: 55.0, kind: 'TOXICA' },
+    col: { wr: 81.2, kind: 'SANTUARIO' },
+    prio: 70,
   },
-  // 7. HUD Bajo + Entropía Baja
   {
-    hud: 'BAJO', ent: 'BAJA', wrDoc: 61.38, wrCol: 64.14,
-    verdeDoc: false, verdeCol: false,
-    label: 'MESA MUERTA',
-    diagnosis: 'Pérdida de inercia — ambos ciegos.',
-  },
-  // 8. HUD Bajo + Entropía Media  ← EL SANTUARIO
-  {
-    hud: 'BAJO', ent: 'MEDIA', wrDoc: 66.79, wrCol: 71.79,
-    verdeDoc: true, verdeCol: true,
     label: 'SANTUARIO LENTO',
-    diagnosis: 'El mejor entorno — rentable en ambos.',
+    hint: 'HUD < 45 × ENT 11-39 — refugio global estable.',
+    hudMin: 0, hudMax: 44, entMin: 11, entMax: 39,
+    doc: { wr: 68.5, kind: 'VERDE' },
+    col: { wr: 71.79, kind: 'SANTUARIO' },
+    prio: 60,
   },
-  // 9. HUD Bajo + Entropía Alta  ← SIN DATA
+
+  // ── VERDES por bloques finos de la Hoja 4 (prioridad 50) ────────────
   {
-    hud: 'BAJO', ent: 'ALTA', wrDoc: 0, wrCol: 0,
-    verdeDoc: false, verdeCol: false, noData: true,
-    label: 'DATA INSUFICIENTE',
-    diagnosis: 'Sin muestra confiable — mejor no operar.',
+    label: 'ESTÁTICA · COL',
+    hint: 'ENT 0-5 × HUD 41-50 — inercia alta, rebote vertical.',
+    hudMin: 41, hudMax: 50, entMin: 0, entMax: 5,
+    doc: { wr: 55.0, kind: 'TOXICA' },
+    col: { wr: 80.9, kind: 'SANTUARIO' },
+    prio: 55,
   },
-] as const;
+  {
+    label: 'BAJA · COL',
+    hint: 'ENT 6-10 × HUD 46-55 — punto dulce columnas.',
+    hudMin: 46, hudMax: 55, entMin: 6, entMax: 10,
+    doc: { wr: 60.0, kind: 'PROBE' },
+    col: { wr: 78.2, kind: 'SANTUARIO' },
+    prio: 55,
+  },
+  {
+    label: 'MEDIA-BAJA · DOC ALTA INERCIA',
+    hint: 'ENT 11-15 × HUD 76-80 — altísima inercia favorece DOC.',
+    hudMin: 76, hudMax: 80, entMin: 11, entMax: 15,
+    doc: { wr: 83.3, kind: 'SANTUARIO' },
+    col: { wr: 60.0, kind: 'PROBE' },
+    prio: 55,
+  },
+  {
+    label: 'MEDIA-BAJA · COL',
+    hint: 'ENT 11-15 × HUD 51-55 — bipolar hacia columnas.',
+    hudMin: 51, hudMax: 55, entMin: 11, entMax: 15,
+    doc: { wr: 60.0, kind: 'PROBE' },
+    col: { wr: 77.2, kind: 'SANTUARIO' },
+    prio: 55,
+  },
+  {
+    label: 'MEDIA · DOC (SANTUARIO PRINCIPAL)',
+    hint: 'ENT 16-20 × HUD 46-55 — interruptor de luz DOC.',
+    hudMin: 46, hudMax: 55, entMin: 16, entMax: 20,
+    doc: { wr: 74.6, kind: 'SANTUARIO' },
+    col: { wr: 60.0, kind: 'PROBE' },
+    prio: 55,
+  },
+  {
+    label: 'ALTA · DOC (SALTO DE ANCLA)',
+    hint: 'ENT 21-25 × HUD 46-50 — santuario 51-55 se rompe.',
+    hudMin: 46, hudMax: 50, entMin: 21, entMax: 25,
+    doc: { wr: 73.6, kind: 'SANTUARIO' },
+    col: { wr: 60.0, kind: 'PROBE' },
+    prio: 55,
+  },
+  {
+    label: 'LÍMITE MEDIO · DOC PICO',
+    hint: 'ENT 26-30 × HUD 46-55 — pico más limpio del sistema.',
+    hudMin: 46, hudMax: 55, entMin: 26, entMax: 30,
+    doc: { wr: 82.5, kind: 'SANTUARIO' },
+    col: { wr: 60.0, kind: 'PROBE' },
+    prio: 55,
+  },
+  {
+    label: 'ALTA DISP · CONFLUENCIA',
+    hint: 'ENT 31-35 × HUD 41-45 — confluencia maestra.',
+    hudMin: 41, hudMax: 45, entMin: 31, entMax: 35,
+    doc: { wr: 80.9, kind: 'SANTUARIO' },
+    col: { wr: 85.7, kind: 'SANTUARIO' },
+    prio: 55,
+  },
+  {
+    label: 'CAOS EXTREMO · DOC ARRIBA',
+    hint: 'ENT 36-40 × HUD 56-60 — DOC en extremo alto.',
+    hudMin: 56, hudMax: 60, entMin: 36, entMax: 40,
+    doc: { wr: 80.0, kind: 'SANTUARIO' },
+    col: { wr: 55.0, kind: 'TOXICA' },
+    prio: 55,
+  },
+  {
+    label: 'CAOS EXTREMO · COL ABAJO',
+    hint: 'ENT 36-40 × HUD 36-40 — COL extremo bajo.',
+    hudMin: 36, hudMax: 40, entMin: 36, entMax: 40,
+    doc: { wr: 55.0, kind: 'TOXICA' },
+    col: { wr: 86.3, kind: 'SANTUARIO' },
+    prio: 55,
+  },
+  {
+    label: 'MUY ALTA · HUD 56-60',
+    hint: 'ENT 41-45 × HUD 56-60 — HUD alto salva sesión.',
+    hudMin: 56, hudMax: 60, entMin: 41, entMax: 45,
+    doc: { wr: 75.0, kind: 'SANTUARIO' },
+    col: { wr: 70.0, kind: 'VERDE' },
+    prio: 55,
+  },
+];
 
 // ────────────────────────────────────────────────────────────────────────
-// Utilidades de bandas
+// Motor de evaluación
 // ────────────────────────────────────────────────────────────────────────
-
-export function hudBand(hud: number): HudBand {
-  if (hud >= 70) return 'ALTO';
-  if (hud >= 46) return 'MEDIO';
-  return 'BAJO';
-}
-
-export function entBand(ent: number): EntBand {
-  if (ent >= 46) return 'ALTA';
-  if (ent >= 16) return 'MEDIA';
-  return 'BAJA';
-}
 
 /**
- * Encuentra la celda actual dado (hud, ent). Nunca devuelve null si hay
- * ambos valores — las 9 celdas cubren todo el espacio 0-100 × 0-100.
+ * Busca la zona nombrada de mayor prioridad que contenga (hud, ent).
+ * Recorre todas — son sólo ~20, es O(1) práctico.
  */
-export function findCell(hud: number | null, ent: number | null): Cell | null {
-  if (hud === null || ent === null) return null;
-  const hb = hudBand(hud);
-  const eb = entBand(ent);
-  return CELLS.find((c) => c.hud === hb && c.ent === eb) ?? null;
+function findZone(hud: number, ent: number): NamedZone | null {
+  let best: NamedZone | null = null;
+  for (const z of ZONES) {
+    if (hud >= z.hudMin && hud <= z.hudMax && ent >= z.entMin && ent <= z.entMax) {
+      if (!best || z.prio > best.prio) best = z;
+    }
+  }
+  return best;
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// Clasificación operativa por mercado
-// ────────────────────────────────────────────────────────────────────────
-
-/**
- * Clasifica la zona operativa para un mercado.
- *
- *   NO_DATA → celda sin muestra suficiente (fila 9).
- *   VERDE   → WR > 66.67% para este mercado.
- *   PROBE   → este mercado en rojo, pero el OTRO está verde
- *             (oportunidad de rotación).
- *   TOXICA  → ambos mercados debajo del umbral en esta celda.
- */
+/** Clasificación operativa por mercado, con regla PROBE por rotación. */
 export function classifyZone(
   hud: number | null,
   ent: number | null,
   mkt: Market
 ): Zone {
-  const c = findCell(hud, ent);
-  if (!c) return 'TOXICA';
-  if (c.noData) return 'NO_DATA';
-  const mine = mkt === 'doc' ? c.verdeDoc : c.verdeCol;
-  const other = mkt === 'doc' ? c.verdeCol : c.verdeDoc;
-  if (mine) return 'VERDE';
-  if (other) return 'PROBE';
-  return 'TOXICA';
+  if (hud === null || ent === null) return 'NEUTRA';
+  const z = findZone(hud, ent);
+  if (!z) return 'NEUTRA';
+
+  const mine = mkt === 'doc' ? z.doc.kind : z.col.kind;
+
+  // Agujero siempre gana
+  if (mine === 'AGUJERO') return 'AGUJERO';
+
+  // Si mi mercado es santuario o verde, listo
+  if (mine === 'SANTUARIO' || mine === 'VERDE') return mine;
+
+  // Si mi mercado está en probe/toxica pero el OTRO está verde o santuario
+  // → PROBE (sugerencia de rotación)
+  const other = mkt === 'doc' ? z.col.kind : z.doc.kind;
+  if (other === 'SANTUARIO' || other === 'VERDE') return 'PROBE';
+
+  // Ambos en probe/tóxica → devolver el propio (probe o toxica)
+  return mine;
 }
 
-/**
- * Devuelve el WR histórico de la celda actual para un mercado (0-100).
- * Útil para mostrarlo en el chip: "COL 67,1% — INERCIA ESTABLE".
- */
+/** WR histórico exacto del punto para un mercado. */
 export function currentCellWr(
   hud: number | null,
   ent: number | null,
   mkt: Market
 ): number | null {
-  const c = findCell(hud, ent);
-  if (!c || c.noData) return null;
-  return mkt === 'doc' ? c.wrDoc : c.wrCol;
+  if (hud === null || ent === null) return null;
+  const z = findZone(hud, ent);
+  if (!z) return null;
+  return mkt === 'doc' ? z.doc.wr : z.col.wr;
 }
 
-/**
- * Etiqueta operativa de la celda actual (p. ej. "SANTUARIO LENTO").
- */
+/** Etiqueta de la zona nombrada actual. */
 export function currentCellLabel(
   hud: number | null,
   ent: number | null
 ): string | null {
-  const c = findCell(hud, ent);
-  return c ? c.label : null;
+  if (hud === null || ent === null) return null;
+  const z = findZone(hud, ent);
+  return z ? z.label : null;
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// Capacidad de racha por mercado (drawdown tracker)
-// ────────────────────────────────────────────────────────────────────────
-
-export const STREAK_CAP: Record<Market, number> = {
-  doc: 7,
-  col: 5,
-};
+/** Diagnóstico corto de la zona nombrada actual. */
+export function currentCellHint(
+  hud: number | null,
+  ent: number | null
+): string | null {
+  if (hud === null || ent === null) return null;
+  const z = findZone(hud, ent);
+  return z ? z.hint : null;
+}

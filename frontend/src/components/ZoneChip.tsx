@@ -1,31 +1,13 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — ZoneChip · Semáforo bifurcado DOC/COL (pro)
+// D.A.N.N.A. — ZoneChip v3 (contadores acumulados + zonas puntuales)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Bloque compacto pero rico visualmente que se inserta ARRIBA del bloque
-// TARGET LOCK del Quantumpilot legacy. Autocontenido: solo consume el
-// store de telemetría, sin props. No toca ningún flujo del panel viejo.
-//
-// Anatomía:
-//   ┌──────────────────────────────────────────────────────────────┐
-//   │ LECTURA DE MESA · CAOS/ESTABILIDAD/ESTADO DEL MOTOR         │
-//   ├─────────────────────────────┬────────────────────────────────┤
-//   │ DOCENAS                     │  COLUMNAS                      │
-//   │ ● VERDE · SANTUARIO LENTO   │  ● VERDE · SANTUARIO LENTO     │
-//   │ HUD 30 · ENT 25 · WR 66.8%  │  HUD 30 · ENT 25 · WR 71.8%    │
-//   │ ▇▇▇░░░░ 3/7 drawdown        │  ▇▇▇░░ 3/5 drawdown            │
-//   └─────────────────────────────┴────────────────────────────────┘
-//
-// Estados por tarjeta:
-//   VERDE   — chip esmeralda con halo suave.
-//   PROBE   — chip ámbar, sugiere rotar al otro mercado.
-//   TOXICA  — chip rojo con halo Pixi WebGL pulsante (capta la atención).
-//   NO_DATA — chip gris con banda diagonal (más severo que TÓXICA).
-//
-// Rendimiento:
-//   • Selectores por primitivas → cero re-renders en cascada.
-//   • Halo Pixi montado UNA vez; sólo cambia alpha/color por props.
-//   • Framer Motion en el chip principal y en los bloques de drawdown.
+// Cambios v3:
+//   • Drawdown contiguo → CONTADORES ACUMULADOS por mercado
+//     (aciertos · errores · WR sesión).
+//   • Zonas 3×3 → ZONAS PUNTUALES (20 celdas nombradas de 5×5 puntos).
+//   • Nuevo estado AGUJERO NEGRO: banner rojo pulsante prioritario.
+//   • Halo Pixi solo en zonas críticas (AGUJERO / TÓXICA).
 // ════════════════════════════════════════════════════════════════════════
 
 import { memo, useEffect, useRef } from 'react';
@@ -33,35 +15,27 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Application, Graphics } from 'pixi.js';
 import {
   useCurrentZone,
-  useCurrentStreak,
   useLastHud,
   useLastEnt,
+  useMarketHits,
+  useMarketMisses,
+  useMarketWr,
 } from '@/store/telemetryStore';
 import {
   currentCellWr,
   currentCellLabel,
-  STREAK_CAP,
+  currentCellHint,
   type Zone,
   type Market,
 } from '@/domain/zoneMatrix';
 
 // ────────────────────────────────────────────────────────────────────────
-// Halo Pixi WebGL (se enciende en TOXICA y NO_DATA)
+// Halo Pixi WebGL
 // ────────────────────────────────────────────────────────────────────────
 
-interface HaloProps {
-  color: number;
-  active: boolean;
-  width?: number;
-  height?: number;
-}
+interface HaloProps { color: number; active: boolean; }
 
-const PulsingHalo = memo(function PulsingHalo({
-  color,
-  active,
-  width = 300,
-  height = 90,
-}: HaloProps) {
+const PulsingHalo = memo(function PulsingHalo({ color, active }: HaloProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const gRef = useRef<Graphics | null>(null);
@@ -76,6 +50,7 @@ const PulsingHalo = memo(function PulsingHalo({
     if (!host) return;
     let cancelled = false;
     const app = new Application();
+    const width = 340, height = 110;
 
     (async () => {
       await app.init({
@@ -93,14 +68,12 @@ const PulsingHalo = memo(function PulsingHalo({
       app.stage.addChild(g);
       gRef.current = g;
 
-      // Loop de animación por ticker de Pixi — no dispara React.
       let t = 0;
       app.ticker.add((ticker) => {
         t += ticker.deltaTime * 0.05;
         g.clear();
         if (!activeRef.current) return;
         const pulse = 0.4 + Math.sin(t) * 0.25;
-        // Tres círculos concéntricos, mayor a menor
         const cx = width / 2, cy = height / 2;
         g.circle(cx, cy, width * 0.55).fill({ color: colorRef.current, alpha: pulse * 0.08 });
         g.circle(cx, cy, width * 0.35).fill({ color: colorRef.current, alpha: pulse * 0.14 });
@@ -116,17 +89,14 @@ const PulsingHalo = memo(function PulsingHalo({
       }
       while (host.firstChild) host.removeChild(host.firstChild);
     };
-  }, [width, height]);
+  }, []);
 
   return (
     <div
       ref={hostRef}
       style={{
-        position: 'absolute',
-        inset: 0,
-        pointerEvents: 'none',
-        overflow: 'hidden',
-        borderRadius: 10,
+        position: 'absolute', inset: 0,
+        pointerEvents: 'none', overflow: 'hidden', borderRadius: 10,
       }}
     />
   );
@@ -136,17 +106,28 @@ const PulsingHalo = memo(function PulsingHalo({
 // Paletas por zona
 // ────────────────────────────────────────────────────────────────────────
 
-const ZONE_STYLE: Record<Zone, {
-  bg: string; border: string; text: string; label: string; icon: string;
-  glow: string; haloColor: number; halo: boolean;
+const STYLE: Record<Zone, {
+  bg: string; border: string; text: string;
+  label: string; icon: string; glow: string;
+  haloColor: number; halo: boolean;
 }> = {
+  SANTUARIO: {
+    bg: 'linear-gradient(180deg, rgba(4,120,87,0.60) 0%, rgba(6,78,59,0.25) 100%)',
+    border: 'rgba(52,211,153,0.85)',
+    text: '#d1fae5',
+    label: 'SANTUARIO · OPERAR',
+    icon: '★',
+    glow: 'rgba(52,211,153,0.55)',
+    haloColor: 0x34d399,
+    halo: false,
+  },
   VERDE: {
-    bg: 'linear-gradient(180deg, rgba(6,78,59,0.55) 0%, rgba(6,78,59,0.20) 100%)',
-    border: 'rgba(52,211,153,0.75)',
+    bg: 'linear-gradient(180deg, rgba(6,78,59,0.50) 0%, rgba(6,78,59,0.18) 100%)',
+    border: 'rgba(52,211,153,0.70)',
     text: '#a7f3d0',
     label: 'VERDE · OPERABLE',
     icon: '●',
-    glow: 'rgba(52,211,153,0.4)',
+    glow: 'rgba(52,211,153,0.40)',
     haloColor: 0x10b981,
     halo: false,
   },
@@ -156,29 +137,39 @@ const ZONE_STYLE: Record<Zone, {
     text: '#fed7aa',
     label: 'PROBE · ROTAR',
     icon: '◆',
-    glow: 'rgba(251,146,60,0.4)',
+    glow: 'rgba(251,146,60,0.40)',
     haloColor: 0xfb923c,
     halo: false,
   },
   TOXICA: {
-    bg: 'linear-gradient(180deg, rgba(127,29,29,0.6) 0%, rgba(127,29,29,0.25) 100%)',
-    border: 'rgba(248,113,113,0.8)',
+    bg: 'linear-gradient(180deg, rgba(127,29,29,0.60) 0%, rgba(127,29,29,0.25) 100%)',
+    border: 'rgba(248,113,113,0.80)',
     text: '#fecaca',
-    label: 'TÓXICA · CAUTELA',
+    label: 'TÓXICA · NO OPERAR',
     icon: '✕',
     glow: 'rgba(248,113,113,0.45)',
     haloColor: 0xdc2626,
-    halo: true,  // ← HALO PIXI ENCENDIDO
+    halo: true,
   },
-  NO_DATA: {
-    bg: 'linear-gradient(180deg, rgba(51,65,85,0.65) 0%, rgba(30,41,59,0.35) 100%)',
-    border: 'rgba(148,163,184,0.75)',
-    text: '#e2e8f0',
-    label: 'SIN DATA · NO OPERAR',
+  AGUJERO: {
+    bg: 'linear-gradient(180deg, rgba(69,10,10,0.75) 0%, rgba(24,3,3,0.45) 100%)',
+    border: 'rgba(220,38,38,1)',
+    text: '#fecaca',
+    label: 'AGUJERO NEGRO · SALIR',
     icon: '⛔',
-    glow: 'rgba(148,163,184,0.4)',
+    glow: 'rgba(220,38,38,0.75)',
+    haloColor: 0xdc2626,
+    halo: true,
+  },
+  NEUTRA: {
+    bg: 'linear-gradient(180deg, rgba(51,65,85,0.45) 0%, rgba(30,41,59,0.20) 100%)',
+    border: 'rgba(148,163,184,0.45)',
+    text: '#cbd5e1',
+    label: 'NEUTRA · SIN DECISIÓN',
+    icon: '·',
+    glow: 'rgba(148,163,184,0.25)',
     haloColor: 0x64748b,
-    halo: true,  // ← HALO PIXI ENCENDIDO
+    halo: false,
   },
 };
 
@@ -191,16 +182,20 @@ interface CardProps {
   zone: Zone;
   hud: number | null;
   ent: number | null;
-  streak: number;
+  hits: number;
+  misses: number;
   wr: number | null;
+  cellWr: number | null;
   cellLabel: string | null;
+  cellHint: string | null;
 }
 
-function MarketCardImpl({ market, zone, hud, ent, streak, wr, cellLabel }: CardProps) {
-  const s = ZONE_STYLE[zone];
-  const cap = STREAK_CAP[market];
-  const filled = Math.min(streak, cap);
+function MarketCardImpl({
+  market, zone, hud, ent, hits, misses, wr, cellWr, cellLabel, cellHint,
+}: CardProps) {
+  const s = STYLE[zone];
   const title = market === 'doc' ? 'DOCENAS' : 'COLUMNAS';
+  const total = hits + misses;
 
   return (
     <div
@@ -213,33 +208,27 @@ function MarketCardImpl({ market, zone, hud, ent, streak, wr, cellLabel }: CardP
         padding: '10px 12px 11px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 7,
+        gap: 8,
         boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 0 16px ${s.glow}`,
         overflow: 'hidden',
         minWidth: 0,
       }}
     >
-      {/* Halo Pixi (solo TOXICA / NO_DATA) */}
-      <PulsingHalo color={s.haloColor} active={s.halo} width={340} height={110} />
+      <PulsingHalo color={s.haloColor} active={s.halo} />
 
-      {/* Contenido por encima del halo */}
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {/* Encabezado: mercado + coordenadas */}
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Encabezado */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{
-            fontSize: 10, fontWeight: 800, letterSpacing: '0.25em', color: '#e2e8f0',
-          }}>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.25em', color: '#e2e8f0' }}>
             {title}
           </span>
-          <span style={{
-            fontSize: 9, color: '#94a3b8', fontFamily: 'monospace', letterSpacing: '0.1em',
-          }}>
+          <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
             HUD {hud ?? '—'} · ENT {ent ?? '—'}
-            {wr !== null && <> · {wr.toFixed(1)}%</>}
+            {cellWr !== null && <> · {cellWr.toFixed(1)}%</>}
           </span>
         </div>
 
-        {/* Chip zona + label celda (con transición Framer) */}
+        {/* Chip zona + label */}
         <AnimatePresence mode="wait">
           <motion.div
             key={zone}
@@ -250,7 +239,7 @@ function MarketCardImpl({ market, zone, hud, ent, streak, wr, cellLabel }: CardP
             style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
           >
             <span style={{
-              fontSize: 20, lineHeight: 1, color: s.text,
+              fontSize: 22, lineHeight: 1, color: s.text,
               textShadow: `0 0 10px ${s.glow}`,
             }}>
               {s.icon}
@@ -260,54 +249,46 @@ function MarketCardImpl({ market, zone, hud, ent, streak, wr, cellLabel }: CardP
             }}>
               {s.label}
             </span>
-            {cellLabel && (
-              <span style={{
-                fontSize: 9, color: '#94a3b8', fontStyle: 'italic',
-                letterSpacing: '0.08em',
-              }}>
-                · {cellLabel}
-              </span>
-            )}
           </motion.div>
         </AnimatePresence>
 
-        {/* Drawdown tracker segmentado */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            fontSize: 8.5, color: '#64748b', letterSpacing: '0.18em',
+        {/* Zona nombrada + hint */}
+        {cellLabel && (
+          <div style={{ fontSize: 9, color: '#94a3b8', lineHeight: 1.35 }}>
+            <div style={{ letterSpacing: '0.08em', fontWeight: 600, color: '#cbd5e1' }}>
+              {cellLabel}
+            </div>
+            {cellHint && (
+              <div style={{ fontSize: 8.5, marginTop: 1, fontStyle: 'italic', opacity: 0.85 }}>
+                {cellHint}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Contador de sesión */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '5px 8px',
+          borderRadius: 6,
+          background: 'rgba(15,23,42,0.55)',
+          border: '1px solid rgba(148,163,184,0.15)',
+          fontFamily: 'monospace',
+          fontSize: 10,
+        }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <span style={{ color: '#4ade80' }}>✓ {hits}</span>
+            <span style={{ color: '#f87171' }}>✗ {misses}</span>
+            <span style={{ color: '#64748b' }}>· {total}</span>
+          </div>
+          <span style={{
+            fontWeight: 700,
+            color: wr === null ? '#64748b' : wr >= 66.67 ? '#4ade80' : wr >= 60 ? '#fbbf24' : '#f87171',
           }}>
-            <span>DRAWDOWN</span>
-            <span style={{
-              color: streak >= cap - 1 ? '#f87171' : '#94a3b8',
-              fontFamily: 'monospace',
-            }}>
-              {streak}/{cap}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 2.5 }}>
-            {Array.from({ length: cap }).map((_, i) => {
-              const on = i < filled;
-              const alert = i >= cap - 2 && on;
-              return (
-                <motion.div
-                  key={i}
-                  animate={{
-                    backgroundColor: on
-                      ? alert
-                        ? 'rgba(248,113,113,0.9)'
-                        : 'rgba(251,146,60,0.78)'
-                      : 'rgba(148,163,184,0.14)',
-                  }}
-                  transition={{ duration: 0.15 }}
-                  style={{
-                    flex: 1, height: 6, borderRadius: 2,
-                    border: `1px solid ${on ? 'rgba(248,113,113,0.5)' : 'rgba(148,163,184,0.18)'}`,
-                  }}
-                />
-              );
-            })}
-          </div>
+            {wr === null ? '—' : `${wr.toFixed(1)}%`}
+          </span>
         </div>
       </div>
     </div>
@@ -325,11 +306,16 @@ export function ZoneChip() {
   const ent = useLastEnt();
   const zoneDoc = useCurrentZone('doc');
   const zoneCol = useCurrentZone('col');
-  const streakDoc = useCurrentStreak('doc');
-  const streakCol = useCurrentStreak('col');
-  const wrDoc = currentCellWr(hud, ent, 'doc');
-  const wrCol = currentCellWr(hud, ent, 'col');
+  const hitsDoc = useMarketHits('doc');
+  const missesDoc = useMarketMisses('doc');
+  const hitsCol = useMarketHits('col');
+  const missesCol = useMarketMisses('col');
+  const wrDoc = useMarketWr('doc');
+  const wrCol = useMarketWr('col');
+  const cellWrDoc = currentCellWr(hud, ent, 'doc');
+  const cellWrCol = currentCellWr(hud, ent, 'col');
   const cellLabel = currentCellLabel(hud, ent);
+  const cellHint = currentCellHint(hud, ent);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -337,7 +323,7 @@ export function ZoneChip() {
         className="text-[11px] text-cyan-500/70 px-1"
         style={{ letterSpacing: '0.3em' }}
       >
-        LECTURA DE MESA · CAOS · ESTABILIDAD · ESTADO DEL MOTOR
+        LECTURA DE MESA · CAOS · ESTABILIDAD · CONTADOR DE SESIÓN
       </span>
       <div style={{ display: 'flex', gap: 8 }}>
         <MarketCard
@@ -345,18 +331,24 @@ export function ZoneChip() {
           zone={zoneDoc}
           hud={hud}
           ent={ent}
-          streak={streakDoc}
+          hits={hitsDoc}
+          misses={missesDoc}
           wr={wrDoc}
+          cellWr={cellWrDoc}
           cellLabel={cellLabel}
+          cellHint={cellHint}
         />
         <MarketCard
           market="col"
           zone={zoneCol}
           hud={hud}
           ent={ent}
-          streak={streakCol}
+          hits={hitsCol}
+          misses={missesCol}
           wr={wrCol}
+          cellWr={cellWrCol}
           cellLabel={cellLabel}
+          cellHint={cellHint}
         />
       </div>
     </div>

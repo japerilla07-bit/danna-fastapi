@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { useGameState } from '@/hooks/useGameState';
+import { useIngestSpin } from '@/store/telemetryStore';
 
 import { HUDTopBar } from '@/components/HUDTopBar';
 import { OptimalStrip } from '@/components/OptimalStrip';
@@ -73,6 +74,17 @@ export function AppPage() {
   const spinsCount = stateQuery.data?.sequence?.count ?? 0;
   const countersRaw: any = stateQuery.data?.counters ?? {};
 
+  // ── Ingesta al store del ZoneChip (telemetría) ───────────────────────────
+  // El ingest vive ACÁ, colgado del mismo mecanismo de `lastHits`, porque es
+  // el único punto donde `counters` llega fresco y consistente con el giro.
+  // El intento anterior (dentro de Quantumpilot) leía counters desfasado y
+  // solo marcaba 1 error. `hudRef`/`entRef` guardan el último HUD/ENT
+  // calculados (condCalc/entropyCalc se computan más abajo, tras los guards);
+  // se leen dentro del effect para no duplicar la fórmula.
+  const ingestTelemetry = useIngestSpin();
+  const hudRef = useRef<number | null>(null);
+  const entRef = useRef<number | null>(null);
+
   useEffect(() => {
     const d: [number, number] = [
       Number(countersRaw?.docenas?.wins ?? 0),
@@ -84,9 +96,16 @@ export function AppPage() {
     ];
     const prev = prevCnt.current;
     if (prev) {
-      setLastHits({
-        doc: d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null,
-        col: c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null,
+      const docHit: boolean | null = d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null;
+      const colHit: boolean | null = c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
+      setLastHits({ doc: docHit, col: colHit });
+      // Mismo delta, mismo giro → al store del ZoneChip (idempotente por firma)
+      ingestTelemetry({
+        n: spinsCount,
+        hud: hudRef.current,
+        ent: entRef.current,
+        docHit,
+        colHit,
       });
     }
     prevCnt.current = { d, c };
@@ -178,6 +197,12 @@ export function AppPage() {
     const mx = Math.max(Number.isFinite(a) ? a : 0, Number.isFinite(b) ? b : 0);
     return Math.round(Math.max(0, Math.min(100, 100 - mx)));
   })();
+
+  // Publicar el HUD/ENT de ESTE giro para que el effect de ingest (arriba)
+  // los lea al alimentar el ZoneChip. Se hace en render (idempotente, no es
+  // estado) para no recomputar la fórmula dentro del effect.
+  hudRef.current = condCalc;
+  entRef.current = entropyCalc;
 
 
   return (
