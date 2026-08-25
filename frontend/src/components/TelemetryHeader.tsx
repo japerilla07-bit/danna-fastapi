@@ -1,21 +1,17 @@
 // ════════════════════════════════════════════════════════════════════════
-// TelemetryHeader — el "V.HUD" y "ENTROPY" grandes de la maqueta
+// TelemetryHeader — V.HUD y ENTROPY grandes (v2.1: sin loops)
 // ════════════════════════════════════════════════════════════════════════
-// Dos pantallas superiores con:
-//   • Número grande (78.42%)
-//   • Delta contra el giro anterior (+12.75%)
-//   • Sparkline de tendencia (últimos 30 giros)
-//
-// Cada uno se suscribe a UN solo selector del store → cambia solo cuando
-// cambia su métrica.
+// Cambio: usa selectores por PRIMITIVAS (useLastHud, useLastEnt) en vez
+// de useLastSpin — así no dispara re-renders innecesarios.
 
 import { memo } from 'react';
 import { Sparkline } from './Sparkline';
-import { useLastSpin, useCurrentDelta, useSparkline } from '@/store/telemetryStore';
-
-// ────────────────────────────────────────────────────────────────────────
-// Bloque individual (V.HUD o ENTROPY)
-// ────────────────────────────────────────────────────────────────────────
+import {
+  useLastHud,
+  useLastEnt,
+  useCurrentDelta,
+  useSparkline,
+} from '@/store/telemetryStore';
 
 interface BlockProps {
   label: string;
@@ -43,31 +39,15 @@ function TelemetryBlockImpl({ label, value, delta, spark, color, glow }: BlockPr
         minWidth: 0,
       }}
     >
-      {/* Título */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span
-          style={{
-            fontSize: 10,
-            letterSpacing: '0.3em',
-            color,
-            fontWeight: 700,
-          }}
-        >
+        <span style={{ fontSize: 10, letterSpacing: '0.3em', color, fontWeight: 700 }}>
           {label}
         </span>
-        <span
-          style={{
-            fontSize: 8.5,
-            color: '#475569',
-            fontFamily: 'monospace',
-            letterSpacing: '0.15em',
-          }}
-        >
+        <span style={{ fontSize: 8.5, color: '#475569', fontFamily: 'monospace', letterSpacing: '0.15em' }}>
           0 — 100
         </span>
       </div>
 
-      {/* Número grande + delta */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span
           style={{
@@ -98,13 +78,12 @@ function TelemetryBlockImpl({ label, value, delta, spark, color, glow }: BlockPr
         )}
       </div>
 
-      {/* Sparkline */}
       <div style={{ marginTop: 2 }}>
         <Sparkline
           values={spark}
           min={0}
           max={100}
-          width={undefined as any /* fill parent */}
+          width={undefined as any}
           height={34}
           color={color}
           fillOpacity={0.18}
@@ -116,12 +95,11 @@ function TelemetryBlockImpl({ label, value, delta, spark, color, glow }: BlockPr
 
 const TelemetryBlock = memo(TelemetryBlockImpl);
 
-// ────────────────────────────────────────────────────────────────────────
-// Header completo — se conecta al store con selectores granulares
-// ────────────────────────────────────────────────────────────────────────
+// ── Header completo (cada selector es primitiva o cacheado) ─────────
 
 export function TelemetryHeader() {
-  const last = useLastSpin();
+  const hud = useLastHud();
+  const ent = useLastEnt();
   const dHud = useCurrentDelta('hud');
   const dEnt = useCurrentDelta('ent');
   const sparkHud = useSparkline('hud', 30);
@@ -131,7 +109,7 @@ export function TelemetryHeader() {
     <div style={{ display: 'flex', gap: 10 }}>
       <TelemetryBlock
         label="VELOCITY HUD"
-        value={last?.hud ?? null}
+        value={hud}
         delta={dHud}
         spark={sparkHud}
         color="#22d3ee"
@@ -139,7 +117,7 @@ export function TelemetryHeader() {
       />
       <TelemetryBlock
         label="WHEEL ENTROPY"
-        value={last?.ent ?? null}
+        value={ent}
         delta={dEnt}
         spark={sparkEnt}
         color="#f87171"

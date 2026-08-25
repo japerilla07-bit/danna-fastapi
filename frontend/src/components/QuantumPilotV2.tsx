@@ -1,31 +1,18 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — Quantum Pilot V2 (contenedor apaisado)
+// D.A.N.N.A. — Quantum Pilot V2 (v2.1: fix loop React #185)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Reescritura desde cero del panel de decisión. Layout de 3 zonas en Grid:
+// Layout apaisado de 3 zonas en Grid:
+//   TOP    — TelemetryHeader (V.HUD / ENTROPY grandes + sparklines)
+//   CENTER — RadarCanvas (Pixi WebGL, zonas pintadas + cometa)
+//   BOTTOM — DecisionCards bifurcadas (DOC · COL)
 //
-//   ┌─────────── HEADER (drag) ────────────────────┐
-//   │  V.HUD %          |         ENTROPY %        │  ← TelemetryHeader
-//   ├──────────────────────────────────────────────┤
-//   │                                              │
-//   │         RADAR CARTESIANO (Pixi WebGL)        │  ← RadarCanvas
-//   │                                              │
-//   ├──────────────────────────────────────────────┤
-//   │   DOCENAS        |         COLUMNAS          │  ← DecisionCards
-//   └──────────────────────────────────────────────┘
-//
-// Arquitectura:
-//   • Zustand store centraliza el historial → cada sub-componente se
-//     suscribe SOLO a los selectores que necesita (re-renders granulares).
-//   • Drag por GPU vía translate3d y useRef → cero re-renders al mover.
-//   • RadarCanvas monta Pixi UNA vez; sus updates son mutación local.
-//   • DecisionCard y Sparkline son React.memo.
-//
-// El único trabajo del contenedor es:
-//   1. Detectar cambio de spinsCount y llamar `ingest(...)` en el store.
-//   2. Renderizar el layout.
-//
-// No pasa historiales por props → no hay re-render cascada.
+// Cambios v2.1:
+//   • Sub-componentes NO se suscriben al store completo — cada uno usa
+//     selectores por primitivas o arrays cacheados.
+//   • El useEffect de ingest dispara sólo cuando spinsCount avanza
+//     (guard estricto por ref), no en cada render.
+// ════════════════════════════════════════════════════════════════════════
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
@@ -34,7 +21,8 @@ import {
   useCurrentZone,
   useCurrentStreak,
   useIngestSpin,
-  useLastSpin,
+  useLastHud,
+  useLastEnt,
   useRadarTrail,
 } from '@/store/telemetryStore';
 import { TelemetryHeader } from './TelemetryHeader';
@@ -113,7 +101,7 @@ function useDrag(initial: { x: number; y: number }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Zona DOC (aislada, se conecta al store con selectores propios)
+// Zona de decisión (aislada, con selectores por primitivas)
 // ────────────────────────────────────────────────────────────────────────
 
 interface ZoneCardsProps {
@@ -129,15 +117,16 @@ const ZoneCards = memo(function ZoneCards({
   const zoneCol = useCurrentZone('col');
   const streakDoc = useCurrentStreak('doc');
   const streakCol = useCurrentStreak('col');
-  const last = useLastSpin();
+  const hud = useLastHud();
+  const ent = useLastEnt();
 
   return (
     <div style={{ display: 'flex', gap: 10 }}>
       <DecisionCard
         market="doc"
         zone={zoneDoc}
-        hud={last?.hud ?? null}
-        ent={last?.ent ?? null}
+        hud={hud}
+        ent={ent}
         streak={streakDoc}
         suggestion={
           suggestionDoc
@@ -151,8 +140,8 @@ const ZoneCards = memo(function ZoneCards({
       <DecisionCard
         market="col"
         zone={zoneCol}
-        hud={last?.hud ?? null}
-        ent={last?.ent ?? null}
+        hud={hud}
+        ent={ent}
         streak={streakCol}
         suggestion={
           suggestionCol
@@ -168,12 +157,11 @@ const ZoneCards = memo(function ZoneCards({
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// Radar aislado — se re-renderiza solo cuando cambia el trail
+// Radar aislado (trail cacheado en el store, misma ref si no cambió)
 // ────────────────────────────────────────────────────────────────────────
 
 const RadarSection = memo(function RadarSection() {
   const trail = useRadarTrail(6);
-  // El radar arranca en DOC por defecto — futura mejora: toggle DOC/COL.
   return <RadarCanvas trail={trail} market="doc" width={640} height={340} />;
 });
 
@@ -186,19 +174,22 @@ export function QuantumPilotV2(props: QuantumV2Props) {
   const { setNodeRef, onMouseDown } = useDrag({ x: 20, y: 80 });
   const [minimized, setMinimized] = useState(false);
 
-  // Ingesta al store — una sola vez por giro (idempotente adentro del store).
+  // Guard estricto: sólo llamamos ingest si REALMENTE cambió el spin,
+  // el hud o la entropía. El store también dedupea por firma — doble red.
   const ingest = useIngestSpin();
+  const lastIngestKey = useRef<string>('');
   useEffect(() => {
+    const key = `${spinsCount}|${hud ?? 'x'}|${entropy ?? 'x'}|${docHit ?? 'x'}|${colHit ?? 'x'}`;
+    if (key === lastIngestKey.current) return;
+    lastIngestKey.current = key;
     ingest({ n: spinsCount, hud, ent: entropy, docHit, colHit });
   }, [spinsCount, hud, entropy, docHit, colHit, ingest]);
 
-  // Extraer sugerencias del motor (para las tarjetas de decisión).
   const suggestionDoc =
     godBet.active_bets?.find((b) => b.bet_key === 'docenas') ?? null;
   const suggestionCol =
     godBet.active_bets?.find((b) => b.bet_key === 'columnas') ?? null;
 
-  // ── Minimizado ─────────────────────────────────────────────────────
   if (minimized) {
     return (
       <div
@@ -232,7 +223,6 @@ export function QuantumPilotV2(props: QuantumV2Props) {
     );
   }
 
-  // ── Panel principal (Grid apaisado) ────────────────────────────────
   return (
     <motion.div
       ref={setNodeRef}
@@ -264,7 +254,6 @@ export function QuantumPilotV2(props: QuantumV2Props) {
           : '0 0 0 1px rgba(34,211,238,0.08) inset, 0 0 26px rgba(34,211,238,0.18), 0 8px 32px rgba(0,0,0,0.6)',
       }}
     >
-      {/* ── Barra de arrastre (título + minimize) ────────────────── */}
       <div
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
@@ -274,8 +263,7 @@ export function QuantumPilotV2(props: QuantumV2Props) {
           alignItems: 'center',
           padding: '10px 16px',
           borderBottom: '1px solid rgba(34,211,238,0.12)',
-          background:
-            'linear-gradient(90deg, rgba(8,47,73,0.55) 0%, rgba(15,23,42,0.35) 100%)',
+          background: 'linear-gradient(90deg, rgba(8,47,73,0.55) 0%, rgba(15,23,42,0.35) 100%)',
           cursor: 'grab',
         }}
       >
@@ -312,7 +300,6 @@ export function QuantumPilotV2(props: QuantumV2Props) {
         </div>
       </div>
 
-      {/* ── Grid de 3 zonas: TOP / CENTER / BOTTOM ────────────────── */}
       <div
         style={{
           display: 'grid',
@@ -323,19 +310,13 @@ export function QuantumPilotV2(props: QuantumV2Props) {
           maxHeight: 'calc(94vh - 46px)',
         }}
       >
-        {/* TOP · Telemetría */}
         <TelemetryHeader />
 
-        {/* CENTER · Radar cartesiano */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <RadarSection />
         </div>
 
-        {/* BOTTOM · Decisión bifurcada */}
-        <ZoneCards
-          suggestionDoc={suggestionDoc}
-          suggestionCol={suggestionCol}
-        />
+        <ZoneCards suggestionDoc={suggestionDoc} suggestionCol={suggestionCol} />
       </div>
     </motion.div>
   );

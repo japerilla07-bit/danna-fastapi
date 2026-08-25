@@ -1,51 +1,34 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — Store de telemetría del Quantum Pilot V2
+// D.A.N.N.A. — Store de telemetría del Quantum Pilot V2 (v2.1: sin loops)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Client-state dedicado al semáforo bifurcado + drawdown tracker + puntos
-// del radar cartesiano. NO gestiona server-state (eso vive en useGameState
-// / TanStack Query). Este store guarda solo lo derivado y agregado que
-// alimenta la UI del Quantum V2.
-//
-// Diseño:
-//   • Los updates son push-por-giro: al detectar un giro nuevo (spinsCount
-//     ↑), el AppPage llama a `ingestSpin({...})` una única vez.
-//   • Los componentes se suscriben con selectores granulares — así el
-//     semáforo se re-renderiza cuando cambia hud/ent, el drawdown solo
-//     cuando cambia su racha, y el radar solo cuando llega un giro nuevo.
-//   • Toda derivación (zona, racha, sparkline) es pura y testeable.
-//
-// Referencias del sistema (matriz validada en 4.036 giros de auditoría):
-//   Ver frontend/src/domain/zoneMatrix.ts para la matriz canónica.
+// Cambios v2.1 (fix Maximum update depth exceeded / React #185):
+//   • Selectores por PRIMITIVAS (números, strings, bool) — nunca objetos
+//     ni arrays nuevos por render. Esto rompe el ciclo:
+//         re-render → useEffect → ingest → re-render.
+//   • Arrays derivados (trail, sparkline) cacheados por firma (lastN + len)
+//     → devuelven la MISMA referencia mientras los datos no cambian.
+//   • ingest idempotente por firma completa — si nada cambió, no muta.
+// ════════════════════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
 import { classifyZone, type Zone, type Market } from '@/domain/zoneMatrix';
 
 // ────────────────────────────────────────────────────────────────────────
-// Tipos de dominio
+// Tipos
 // ────────────────────────────────────────────────────────────────────────
 
-/**
- * Un giro registrado en la telemetría. Se guarda lo mínimo indispensable
- * para el radar (hud, ent) y el drawdown (resultados por mercado).
- */
 export interface TelemetrySpin {
-  /** Índice de giro dentro de la sesión (viene de `sequence.count`). */
   n: number;
   hud: number | null;
   ent: number | null;
-  /** Delta contra el giro anterior; null en el primero. */
   dHud: number | null;
   dEnt: number | null;
-  /** Resultado del motor por mercado; null si no aplicó. */
   docHit: boolean | null;
   colHit: boolean | null;
-  /** Timestamp de ingesta local (ms). */
   ts: number;
 }
 
-/** Payload que llega desde AppPage por giro. */
 export interface IngestPayload {
   n: number;
   hud: number | null;
@@ -54,46 +37,46 @@ export interface IngestPayload {
   colHit: boolean | null;
 }
 
-// ────────────────────────────────────────────────────────────────────────
-// Estado del store
-// ────────────────────────────────────────────────────────────────────────
-
 interface TelemetryState {
-  /** Historial rodante — se limita a HISTORY_CAP giros. */
   history: TelemetrySpin[];
-  /** Último giro procesado, para deduplicar. */
   lastN: number;
-
-  // ── acciones ──
-  /** Registra un giro (idempotente por n). */
+  lastSig: string;
   ingest: (p: IngestPayload) => void;
-  /** Limpia todo (cambio de sesión, reset manual). */
   reset: () => void;
 }
 
-/**
- * Máximo de giros a retener en memoria. 300 = suficiente para 4 sesiones
- * consecutivas típicas (~70 giros c/u) sin explotar el heap ni ralentizar
- * los selectores derivados.
- */
 export const HISTORY_CAP = 300;
 
+const sig = (p: IngestPayload) =>
+  `${p.n}|${p.hud ?? 'x'}|${p.ent ?? 'x'}|${p.docHit ?? 'x'}|${p.colHit ?? 'x'}`;
+
 // ────────────────────────────────────────────────────────────────────────
-// Implementación del store
+// Store
 // ────────────────────────────────────────────────────────────────────────
 
 export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   history: [],
   lastN: -1,
+  lastSig: '',
 
   ingest: (p) => {
-    // Idempotencia estricta: si ya vimos este n, no hacemos nada.
-    // Evita duplicados por re-renders del AppPage.
-    if (p.n === get().lastN) return;
+    const s = sig(p);
+    const st = get();
 
-    const prev = get().history[get().history.length - 1];
-    const dHud = prev && p.hud !== null && prev.hud !== null ? p.hud - prev.hud : null;
-    const dEnt = prev && p.ent !== null && prev.ent !== null ? p.ent - prev.ent : null;
+    // Dedupe fuerte: misma firma → no muto NADA (no dispara re-renders).
+    if (s === st.lastSig) return;
+
+    // n retrocedió o repite con historial: sólo actualizamos firma.
+    if (p.n <= st.lastN && st.history.length > 0) {
+      set({ lastSig: s });
+      return;
+    }
+
+    const prev = st.history[st.history.length - 1];
+    const dHud =
+      prev && p.hud !== null && prev.hud !== null ? p.hud - prev.hud : null;
+    const dEnt =
+      prev && p.ent !== null && prev.ent !== null ? p.ent - prev.ent : null;
 
     const spin: TelemetrySpin = {
       n: p.n,
@@ -106,44 +89,50 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       ts: Date.now(),
     };
 
-    set((s) => {
-      const next = s.history.length >= HISTORY_CAP
-        ? [...s.history.slice(1), spin]
-        : [...s.history, spin];
-      return { history: next, lastN: p.n };
-    });
+    const next =
+      st.history.length >= HISTORY_CAP
+        ? [...st.history.slice(1), spin]
+        : [...st.history, spin];
+
+    set({ history: next, lastN: p.n, lastSig: s });
   },
 
-  reset: () => set({ history: [], lastN: -1 }),
+  reset: () => set({ history: [], lastN: -1, lastSig: '' }),
 }));
 
 // ════════════════════════════════════════════════════════════════════════
-// SELECTORES DERIVADOS
-// ════════════════════════════════════════════════════════════════════════
-// Cada selector es un hook independiente. Los componentes se suscriben
-// SOLO al selector que necesitan → un cambio en el historial únicamente
-// re-renderiza a quien depende de esa vista derivada.
+// SELECTORES — devuelven PRIMITIVAS o arrays cacheados (misma ref)
 // ════════════════════════════════════════════════════════════════════════
 
-/** Último giro registrado, o null si el historial está vacío. */
-export const useLastSpin = (): TelemetrySpin | null =>
-  useTelemetryStore((s) => s.history[s.history.length - 1] ?? null);
-
-/**
- * Zona actual para un mercado (VERDE/PROBE/TOXICA). Recalcula solo cuando
- * cambia el último giro. Puro derivado, sin memoización manual.
- */
-export const useCurrentZone = (mkt: Market): Zone =>
+export const useLastHud = (): number | null =>
   useTelemetryStore((s) => {
-    const last = s.history[s.history.length - 1];
-    if (!last) return 'TOXICA';
-    return classifyZone(last.hud, last.ent, mkt);
+    const l = s.history[s.history.length - 1];
+    return l ? l.hud : null;
   });
 
-/**
- * Racha de errores contigua ACTUAL para un mercado. Corta al primer
- * acierto o al primer null (giro sin resultado).
- */
+export const useLastEnt = (): number | null =>
+  useTelemetryStore((s) => {
+    const l = s.history[s.history.length - 1];
+    return l ? l.ent : null;
+  });
+
+export const useLastN = (): number =>
+  useTelemetryStore((s) => s.lastN);
+
+export const useCurrentDelta = (metric: 'hud' | 'ent'): number | null =>
+  useTelemetryStore((s) => {
+    const l = s.history[s.history.length - 1];
+    if (!l) return null;
+    return metric === 'hud' ? l.dHud : l.dEnt;
+  });
+
+export const useCurrentZone = (mkt: Market): Zone =>
+  useTelemetryStore((s) => {
+    const l = s.history[s.history.length - 1];
+    if (!l) return 'TOXICA';
+    return classifyZone(l.hud, l.ent, mkt);
+  });
+
 export const useCurrentStreak = (mkt: Market): number =>
   useTelemetryStore((s) => {
     let n = 0;
@@ -156,54 +145,48 @@ export const useCurrentStreak = (mkt: Market): number =>
     return n;
   });
 
-/**
- * Últimos N giros con coordenadas válidas — insumo del radar cartesiano.
- * Devuelve una tupla estable por longitud para que useShallow evite re-renders.
- */
-export const useRadarTrail = (n = 5) =>
-  useTelemetryStore(
-    useShallow((s) => {
-      const trail: Array<{ hud: number; ent: number }> = [];
-      for (let i = s.history.length - 1; i >= 0 && trail.length < n; i--) {
-        const g = s.history[i];
-        if (g.hud !== null && g.ent !== null) trail.push({ hud: g.hud, ent: g.ent });
-      }
-      return trail.reverse();
-    })
-  );
+// ── Arrays derivados con caché por (lastN + length) ──────────────────
 
-/**
- * Sparkline de HUD o Entropía — últimos N valores para el gráfico top.
- * Devuelve solo los números, no los objetos completos.
- */
-export const useSparkline = (metric: 'hud' | 'ent', n = 30): number[] =>
-  useTelemetryStore(
-    useShallow((s) => {
-      const arr: number[] = [];
-      for (let i = Math.max(0, s.history.length - n); i < s.history.length; i++) {
-        const v = s.history[i][metric];
-        if (v !== null) arr.push(v);
-      }
-      return arr;
-    })
-  );
+let _trailCache: { key: string; data: Array<{ hud: number; ent: number }> } = {
+  key: '',
+  data: [],
+};
 
-/**
- * Delta actual (Δ contra el giro anterior) — para mostrar arriba de HUD/ENT.
- */
-export const useCurrentDelta = (metric: 'hud' | 'ent'): number | null =>
+export const useRadarTrail = (n = 5): Array<{ hud: number; ent: number }> =>
   useTelemetryStore((s) => {
-    const last = s.history[s.history.length - 1];
-    if (!last) return null;
-    return metric === 'hud' ? last.dHud : last.dEnt;
+    const key = `${s.lastN}:${s.history.length}:${n}`;
+    if (_trailCache.key === key) return _trailCache.data;
+    const trail: Array<{ hud: number; ent: number }> = [];
+    for (let i = s.history.length - 1; i >= 0 && trail.length < n; i--) {
+      const g = s.history[i];
+      if (g.hud !== null && g.ent !== null) trail.push({ hud: g.hud, ent: g.ent });
+    }
+    trail.reverse();
+    _trailCache = { key, data: trail };
+    return trail;
   });
 
-/**
- * Acción de ingesta — el AppPage la llama en su efecto de spinsCount.
- */
-export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
+const _sparkCache: Record<string, { key: string; data: number[] }> = {
+  hud: { key: '', data: [] },
+  ent: { key: '', data: [] },
+};
 
-/**
- * Acción de reset — para cuando cambia de sesión (opcional, futuro).
- */
+export const useSparkline = (metric: 'hud' | 'ent', n = 30): number[] =>
+  useTelemetryStore((s) => {
+    const key = `${s.lastN}:${s.history.length}:${n}`;
+    const c = _sparkCache[metric];
+    if (c.key === key) return c.data;
+    const arr: number[] = [];
+    const start = Math.max(0, s.history.length - n);
+    for (let i = start; i < s.history.length; i++) {
+      const v = s.history[i][metric];
+      if (v !== null) arr.push(v);
+    }
+    _sparkCache[metric] = { key, data: arr };
+    return arr;
+  });
+
+// ── Acciones ──────────────────────────────────────────────────────────
+
+export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
