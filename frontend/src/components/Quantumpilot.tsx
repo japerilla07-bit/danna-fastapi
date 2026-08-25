@@ -19,13 +19,15 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
 // V2 add-ons: bloque de lectura de mesa (semáforo bifurcado + drawdown)
+// PilotDelta y su CSS quedaron obsoletos — reemplazados por ZoneChip.
 import { ZoneChip } from '@/components/ZoneChip';
 import { useIngestSpin } from '@/store/telemetryStore';
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
-import { PilotDelta } from '@/components/PilotDelta';
-import '@/styles/pilot-delta.css';
+// PilotDelta y su CSS — desactivados, reemplazados por ZoneChip.
+// import { PilotDelta } from '@/components/PilotDelta';
+// import '@/styles/pilot-delta.css';
 
 const GOD_CATS = ['color', 'paridad', 'rango', 'docenas', 'columnas'] as const;
 type GodCat = typeof GOD_CATS[number];
@@ -1178,23 +1180,7 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 5. CONCIENCIA SITUACIONAL (sustituye a SESIÓN GOD) ═══
-             Tres bloques de lectura rápida:
-               A · W/R 14, secuencia A/E, diagnóstico de mesa
-               B · anclaje (Max−Min de HUD y Entropía en 5 giros)
-               C · Δ contra el giro anterior + acción recomendada
-             Solo lectura: no cambia ninguna decisión del motor.        ═══ */}
-        <PilotDelta
-          spinsCount={spinsCount}
-          hud={pdHud}
-          entropy={pdEntropy}
-          docHit={pdDocHit}
-          colHit={pdColHit}
-        />
-
-        {/* PROGRESIÓN L1→L4 eliminada: arrastraba un bug conocido y ya no
-            es funcional para la operación. Si algún día vuelve, está en
-            Quantumpilot_PRE3.tsx.bak. */}
+        {/* ═══ 5. (eliminado) PilotDelta — reemplazado por ZoneChip arriba ═══ */}
 
         {/* ═══ 6. EFICIENCIA POR CATEGORÍA ═══ */}
         <div className="flex flex-col">
