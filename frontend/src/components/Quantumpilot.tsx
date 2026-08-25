@@ -322,51 +322,61 @@ export function QuantumPilot({
   const [minimized, setMinimized] = useState(false);
 
   // ── V2 add-on: alimentar el store de telemetría (ZoneChip) ─────────
-  // Ingesta idempotente al store — deriva docHit/colHit del counters
-  // (mismo mecanismo que usa AppPage para lastHits, pero acá adentro).
-  // Trigger: cambio de spinsCount. Robusto: no depende de pdDocHit/pdColHit
-  // que llegan tarde o null desde AppPage.
+  // ── Ingesta al store: patrón sincrónico durante el render ───────────
+  // El useEffect anterior fallaba porque el orden de actualización de
+  // React hacía que `counters` llegara con valores viejos. Solución:
+  // leemos counters SIEMPRE en cada render, comparamos con la ref del
+  // render previo, y si spinsCount avanzó y hubo delta, ingerimos inline
+  // (dentro de un useEffect vacío pero con la comparación fuera).
+  //
+  // Este patrón es el mismo que usa AppPage con prevCnt.current y es
+  // el único que sobrevive al ciclo de React en este árbol.
   const ingest = useIngestSpin();
   const lastSpinIngested = useRef<number>(-1);
   const prevWinLoss = useRef<{ d: [number, number]; c: [number, number] } | null>(null);
-  useEffect(() => {
-    // Solo actuamos cuando el número de giro avanzó de verdad
-    if (spinsCount === lastSpinIngested.current) return;
+  const pendingIngest = useRef<{
+    n: number; hud: number | null; ent: number | null;
+    docHit: boolean | null; colHit: boolean | null;
+  } | null>(null);
 
-    const d: [number, number] = [
-      Number(counters?.docenas?.wins ?? 0),
-      Number(counters?.docenas?.losses ?? 0),
-    ];
-    const c: [number, number] = [
-      Number(counters?.columnas?.wins ?? 0),
-      Number(counters?.columnas?.losses ?? 0),
-    ];
+  // Cálculo durante el render — lee counters siempre en su versión actual.
+  const currD: [number, number] = [
+    Number(counters?.docenas?.wins ?? 0),
+    Number(counters?.docenas?.losses ?? 0),
+  ];
+  const currC: [number, number] = [
+    Number(counters?.columnas?.wins ?? 0),
+    Number(counters?.columnas?.losses ?? 0),
+  ];
+
+  if (spinsCount !== lastSpinIngested.current) {
     const prev = prevWinLoss.current;
-
-    // Primer giro: solo registramos baseline, no ingerimos aún (no hay delta)
     if (prev === null) {
-      prevWinLoss.current = { d, c };
+      // baseline al primer giro visto
+      prevWinLoss.current = { d: currD, c: currC };
       lastSpinIngested.current = spinsCount;
-      return;
+    } else {
+      const docHit: boolean | null =
+        currD[0] > prev.d[0] ? true : currD[1] > prev.d[1] ? false : null;
+      const colHit: boolean | null =
+        currC[0] > prev.c[0] ? true : currC[1] > prev.c[1] ? false : null;
+
+      pendingIngest.current = {
+        n: spinsCount, hud: pdHud, ent: pdEntropy, docHit, colHit,
+      };
+      prevWinLoss.current = { d: currD, c: currC };
+      lastSpinIngested.current = spinsCount;
     }
+  }
 
-    // Deriva hit por delta contra el conteo anterior
-    const docHit: boolean | null =
-      d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null;
-    const colHit: boolean | null =
-      c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
-
-    ingest({
-      n: spinsCount,
-      hud: pdHud,
-      ent: pdEntropy,
-      docHit,
-      colHit,
-    });
-
-    prevWinLoss.current = { d, c };
-    lastSpinIngested.current = spinsCount;
-  }, [spinsCount, counters, pdHud, pdEntropy, ingest]);
+  // Effect vacío que dispara la ingesta calculada en el render.
+  // Es seguro: no muta estado local, solo empuja al store externo.
+  useEffect(() => {
+    if (pendingIngest.current) {
+      ingest(pendingIngest.current);
+      pendingIngest.current = null;
+    }
+  });
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
