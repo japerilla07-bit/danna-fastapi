@@ -32,7 +32,7 @@ import { NeuralBackground } from '@/components/NeuralBackground';
 import { ChaosPanel } from '@/components/ChaosPanel';
 import { SessionRecorder } from '@/components/SessionRecorder';
 
-import { QuantumPilot } from '@/components/Quantumpilot';
+import { QuantumPilotV2 } from '@/components/QuantumPilotV2';
 import { SidebarDrawer } from '@/components/SidebarDrawer';
 
 import '@/styles/hud.css';
@@ -70,11 +70,6 @@ export function AppPage() {
     doc: null,
     col: null,
   });
-  // Historiales rodantes por mercado (últimos 60 giros) — se mutan por ref
-  // para NO forzar re-render en cada giro. El re-render llega solo cuando
-  // cambia lastHits (una vez por giro) o spinsCount (que ya cambia con el query).
-  const docHistRef = useRef<{ isError: boolean }[]>([]);
-  const colHistRef = useRef<{ isError: boolean }[]>([]);
   const spinsCount = stateQuery.data?.sequence?.count ?? 0;
   const countersRaw: any = stateQuery.data?.counters ?? {};
 
@@ -89,23 +84,10 @@ export function AppPage() {
     ];
     const prev = prevCnt.current;
     if (prev) {
-      const docHit: boolean | null =
-        d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null;
-      const colHit: boolean | null =
-        c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
-      setLastHits({ doc: docHit, col: colHit });
-      // mutar los refs (no dispara re-render extra) — el re-render que ya
-      // viene de setLastHits + query alcanza para que Quantum lea los nuevos valores.
-      if (docHit !== null) {
-        const h = docHistRef.current;
-        h.push({ isError: !docHit });
-        if (h.length > 60) h.shift();
-      }
-      if (colHit !== null) {
-        const h = colHistRef.current;
-        h.push({ isError: !colHit });
-        if (h.length > 60) h.shift();
-      }
+      setLastHits({
+        doc: d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null,
+        col: c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null,
+      });
     }
     prevCnt.current = { d, c };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,18 +192,16 @@ export function AppPage() {
       />
 
       {/* QUANTUM PILOT overlay (flotante draggable) */}
-      <QuantumPilot
-        godBet={(data as any).god_bet ?? { active: false, cond_state: 'caution', radar_score: 0, counters_god: {} }}
+      <QuantumPilotV2
+        godBet={(data as any).god_bet ?? { active: false, cond_state: 'caution', radar_score: 0, counters_god: {}, active_bets: [] }}
         payload={data.payload}
         bankroll={data.bankroll}
         counters={(data.counters ?? {}) as any}
         spinsCount={data.sequence.count}
-        pdHud={condCalc}
-        pdEntropy={entropyCalc}
-        pdDocHit={lastHits.doc}
-        pdColHit={lastHits.col}
-        pdDocHist={docHistRef.current}
-        pdColHist={colHistRef.current}
+        hud={condCalc}
+        entropy={entropyCalc}
+        docHit={lastHits.doc}
+        colHit={lastHits.col}
       />
 
       <div className="app-wrap">
