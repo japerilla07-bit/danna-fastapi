@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — Store de telemetría (v3: contadores acumulados)
+// D.A.N.N.A. — Store de telemetría (v3.1: contadores + racha de errores)
 // ════════════════════════════════════════════════════════════════════════
 //
 // Cambios v3:
@@ -8,6 +8,10 @@
 //     nulls entre medio. Fácil de leer, coincide con lo que ves en mesa.
 //   • Selectores por primitivas → cero loops de re-render.
 //   • Ingesta idempotente por firma.
+// Cambios v3.1:
+//   • Racha de errores SEGUIDOS por mercado (actual) + su MÁXIMO de sesión.
+//     Regla: acierto → racha = 0; error → racha += 1 (y actualiza máx);
+//     null (ese mercado no se evaluó) → NO toca la racha.
 //
 // Regla del motor: apuesta siempre (BET forzado). El semáforo del
 // ZoneChip es solo lectura visual — no bloquea al motor.
@@ -44,7 +48,17 @@ interface Counters {
   docMisses: number;
   colHits: number;
   colMisses: number;
+  // Racha de errores SEGUIDOS (actual) + máximo de sesión, por mercado
+  docStreak: number;
+  docMaxStreak: number;
+  colStreak: number;
+  colMaxStreak: number;
 }
+
+const EMPTY_COUNTERS: Counters = {
+  docHits: 0, docMisses: 0, colHits: 0, colMisses: 0,
+  docStreak: 0, docMaxStreak: 0, colStreak: 0, colMaxStreak: 0,
+};
 
 interface TelemetryState {
   history: TelemetrySpin[];
@@ -68,7 +82,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   history: [],
   lastN: -1,
   lastSig: '',
-  counters: { docHits: 0, docMisses: 0, colHits: 0, colMisses: 0 },
+  counters: { ...EMPTY_COUNTERS },
 
   ingest: (p) => {
     const s = sig(p);
@@ -92,12 +106,27 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       ? [...st.history.slice(1), spin]
       : [...st.history, spin];
 
-    // ── Contadores acumulados: sumar el hit/miss de este giro ──
+    // ── Contadores acumulados + racha de errores seguidos ──
     const c = { ...st.counters };
-    if (p.docHit === true) c.docHits += 1;
-    else if (p.docHit === false) c.docMisses += 1;
-    if (p.colHit === true) c.colHits += 1;
-    else if (p.colHit === false) c.colMisses += 1;
+
+    if (p.docHit === true) {
+      c.docHits += 1;
+      c.docStreak = 0;                       // acierto corta la racha
+    } else if (p.docHit === false) {
+      c.docMisses += 1;
+      c.docStreak += 1;                      // error suma a la racha
+      if (c.docStreak > c.docMaxStreak) c.docMaxStreak = c.docStreak;
+    }
+    // p.docHit === null → mercado no evaluado: la racha NO se toca.
+
+    if (p.colHit === true) {
+      c.colHits += 1;
+      c.colStreak = 0;
+    } else if (p.colHit === false) {
+      c.colMisses += 1;
+      c.colStreak += 1;
+      if (c.colStreak > c.colMaxStreak) c.colMaxStreak = c.colStreak;
+    }
 
     set({ history: next, lastN: p.n, lastSig: s, counters: c });
   },
@@ -107,7 +136,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       history: [],
       lastN: -1,
       lastSig: '',
-      counters: { docHits: 0, docMisses: 0, colHits: 0, colMisses: 0 },
+      counters: { ...EMPTY_COUNTERS },
     }),
 }));
 
@@ -141,7 +170,7 @@ export const useCurrentZone = (mkt: Market): Zone =>
     return classifyZone(l.hud, l.ent, mkt);
   });
 
-// ── Contadores acumulados (nuevo — reemplaza rachas contiguas) ──────
+// ── Contadores acumulados (reemplaza rachas contiguas) ──────────────
 
 export const useMarketHits = (mkt: Market): number =>
   useTelemetryStore((s) => mkt === 'doc' ? s.counters.docHits : s.counters.colHits);
@@ -156,6 +185,14 @@ export const useMarketWr = (mkt: Market): number | null =>
     const t = h + m;
     return t > 0 ? (h / t) * 100 : null;
   });
+
+// ── Racha de errores seguidos: actual + máximo de sesión ────────────
+
+export const useMarketStreak = (mkt: Market): number =>
+  useTelemetryStore((s) => mkt === 'doc' ? s.counters.docStreak : s.counters.colStreak);
+
+export const useMarketMaxStreak = (mkt: Market): number =>
+  useTelemetryStore((s) => mkt === 'doc' ? s.counters.docMaxStreak : s.counters.colMaxStreak);
 
 // ── Acciones ─────────────────────────────────────────────────────────
 

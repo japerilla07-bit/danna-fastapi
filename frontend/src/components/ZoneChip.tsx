@@ -20,6 +20,8 @@ import {
   useMarketHits,
   useMarketMisses,
   useMarketWr,
+  useMarketStreak,
+  useMarketMaxStreak,
 } from '@/store/telemetryStore';
 import {
   currentCellWr,
@@ -185,13 +187,15 @@ interface CardProps {
   hits: number;
   misses: number;
   wr: number | null;
+  streak: number;
+  maxStreak: number;
   cellWr: number | null;
   cellLabel: string | null;
   cellHint: string | null;
 }
 
 function MarketCardImpl({
-  market, zone, hud, ent, hits, misses, wr, cellWr, cellLabel, cellHint,
+  market, zone, hud, ent, hits, misses, wr, streak, maxStreak, cellWr, cellLabel, cellHint,
 }: CardProps) {
   const s = STYLE[zone];
   const title = market === 'doc' ? 'DOCENAS' : 'COLUMNAS';
@@ -290,6 +294,36 @@ function MarketCardImpl({
             {wr === null ? '—' : `${wr.toFixed(1)}%`}
           </span>
         </div>
+
+        {/* Racha de errores seguidos (actual) + máximo de sesión.
+            Color escala con el riesgo: ≥6 rojo (umbral de aguante),
+            3-5 ámbar, 0-2 gris. */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '4px 8px',
+          borderRadius: 6,
+          background: streak >= 6 ? 'rgba(127,29,29,0.45)' : 'rgba(15,23,42,0.55)',
+          border: `1px solid ${streak >= 6 ? 'rgba(248,113,113,0.5)' : 'rgba(148,163,184,0.15)'}`,
+          fontFamily: 'monospace',
+          fontSize: 10,
+        }}>
+          <span style={{ color: '#94a3b8', letterSpacing: '0.05em' }}>
+            RACHA ✗
+          </span>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span style={{
+              fontWeight: 800,
+              color: streak >= 6 ? '#f87171' : streak >= 3 ? '#fbbf24' : '#cbd5e1',
+            }}>
+              {streak} seg.
+            </span>
+            <span style={{ color: '#64748b' }}>
+              máx {maxStreak}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -312,6 +346,10 @@ export function ZoneChip() {
   const missesCol = useMarketMisses('col');
   const wrDoc = useMarketWr('doc');
   const wrCol = useMarketWr('col');
+  const streakDoc = useMarketStreak('doc');
+  const streakCol = useMarketStreak('col');
+  const maxStreakDoc = useMarketMaxStreak('doc');
+  const maxStreakCol = useMarketMaxStreak('col');
   const cellWrDoc = currentCellWr(hud, ent, 'doc');
   const cellWrCol = currentCellWr(hud, ent, 'col');
   const cellLabel = currentCellLabel(hud, ent);
@@ -334,6 +372,8 @@ export function ZoneChip() {
           hits={hitsDoc}
           misses={missesDoc}
           wr={wrDoc}
+          streak={streakDoc}
+          maxStreak={maxStreakDoc}
           cellWr={cellWrDoc}
           cellLabel={cellLabel}
           cellHint={cellHint}
@@ -346,6 +386,8 @@ export function ZoneChip() {
           hits={hitsCol}
           misses={missesCol}
           wr={wrCol}
+          streak={streakCol}
+          maxStreak={maxStreakCol}
           cellWr={cellWrCol}
           cellLabel={cellLabel}
           cellHint={cellHint}

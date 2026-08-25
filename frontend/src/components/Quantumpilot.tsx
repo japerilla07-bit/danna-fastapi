@@ -21,7 +21,6 @@ import type { EnginePayload } from '@/types/api';
 // V2 add-ons: bloque de lectura de mesa (semáforo bifurcado + drawdown)
 // PilotDelta y su CSS quedaron obsoletos — reemplazados por ZoneChip.
 import { ZoneChip } from '@/components/ZoneChip';
-import { useIngestSpin } from '@/store/telemetryStore';
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
@@ -321,62 +320,10 @@ export function QuantumPilot({
   const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
 
-  // ── V2 add-on: alimentar el store de telemetría (ZoneChip) ─────────
-  // ── Ingesta al store: patrón sincrónico durante el render ───────────
-  // El useEffect anterior fallaba porque el orden de actualización de
-  // React hacía que `counters` llegara con valores viejos. Solución:
-  // leemos counters SIEMPRE en cada render, comparamos con la ref del
-  // render previo, y si spinsCount avanzó y hubo delta, ingerimos inline
-  // (dentro de un useEffect vacío pero con la comparación fuera).
-  //
-  // Este patrón es el mismo que usa AppPage con prevCnt.current y es
-  // el único que sobrevive al ciclo de React en este árbol.
-  const ingest = useIngestSpin();
-  const lastSpinIngested = useRef<number>(-1);
-  const prevWinLoss = useRef<{ d: [number, number]; c: [number, number] } | null>(null);
-  const pendingIngest = useRef<{
-    n: number; hud: number | null; ent: number | null;
-    docHit: boolean | null; colHit: boolean | null;
-  } | null>(null);
-
-  // Cálculo durante el render — lee counters siempre en su versión actual.
-  const currD: [number, number] = [
-    Number(counters?.docenas?.wins ?? 0),
-    Number(counters?.docenas?.losses ?? 0),
-  ];
-  const currC: [number, number] = [
-    Number(counters?.columnas?.wins ?? 0),
-    Number(counters?.columnas?.losses ?? 0),
-  ];
-
-  if (spinsCount !== lastSpinIngested.current) {
-    const prev = prevWinLoss.current;
-    if (prev === null) {
-      // baseline al primer giro visto
-      prevWinLoss.current = { d: currD, c: currC };
-      lastSpinIngested.current = spinsCount;
-    } else {
-      const docHit: boolean | null =
-        currD[0] > prev.d[0] ? true : currD[1] > prev.d[1] ? false : null;
-      const colHit: boolean | null =
-        currC[0] > prev.c[0] ? true : currC[1] > prev.c[1] ? false : null;
-
-      pendingIngest.current = {
-        n: spinsCount, hud: pdHud, ent: pdEntropy, docHit, colHit,
-      };
-      prevWinLoss.current = { d: currD, c: currC };
-      lastSpinIngested.current = spinsCount;
-    }
-  }
-
-  // Effect vacío que dispara la ingesta calculada en el render.
-  // Es seguro: no muta estado local, solo empuja al store externo.
-  useEffect(() => {
-    if (pendingIngest.current) {
-      ingest(pendingIngest.current);
-      pendingIngest.current = null;
-    }
-  });
+  // ── ZoneChip: el ingest al store se hace en AppPage.tsx ────────────
+  // (mismo mecanismo que lastHits, único punto donde counters llega
+  // fresco). Acá el Quantumpilot solo RENDERIZA <ZoneChip />, no ingiere:
+  // el ingest interno anterior leía counters desfasado y marcaba nulls.
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
