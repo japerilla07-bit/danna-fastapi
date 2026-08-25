@@ -32,7 +32,7 @@ import { NeuralBackground } from '@/components/NeuralBackground';
 import { ChaosPanel } from '@/components/ChaosPanel';
 import { SessionRecorder } from '@/components/SessionRecorder';
 
-import { QuantumPilotV2 } from '@/components/QuantumPilotV2';
+import { QuantumPilot } from '@/components/Quantumpilot';
 import { SidebarDrawer } from '@/components/SidebarDrawer';
 
 import '@/styles/hud.css';
@@ -192,16 +192,16 @@ export function AppPage() {
       />
 
       {/* QUANTUM PILOT overlay (flotante draggable) */}
-      <QuantumPilotV2
-        godBet={(data as any).god_bet ?? { active: false, cond_state: 'caution', radar_score: 0, counters_god: {}, active_bets: [] }}
+      <QuantumPilot
+        godBet={(data as any).god_bet ?? { active: false, cond_state: 'caution', radar_score: 0, counters_god: {} }}
         payload={data.payload}
         bankroll={data.bankroll}
         counters={(data.counters ?? {}) as any}
         spinsCount={data.sequence.count}
-        hud={condCalc}
-        entropy={entropyCalc}
-        docHit={lastHits.doc}
-        colHit={lastHits.col}
+        pdHud={condCalc}
+        pdEntropy={entropyCalc}
+        pdDocHit={lastHits.doc}
+        pdColHit={lastHits.col}
       />
 
       <div className="app-wrap">

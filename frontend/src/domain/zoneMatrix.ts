@@ -1,116 +1,194 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — Matriz canónica de zonas (dominio puro)
+// D.A.N.N.A. — Matriz canónica de zonas 3×3 (auditoría 2412 giros)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Este módulo NO importa React. Es dominio puro, testeable con unit tests
-// sin montar componentes. La matriz proviene de la auditoría forense sobre
-// 4.036 giros de columnas y docenas (11 sesiones agregadas):
+// Cortes canónicos:
+//   HUD    → Bajo 0-45   · Medio 46-69   · Alto 70-100
+//   ENT    → Baja 0-15   · Media 16-45   · Alta 46-100
 //
-//   • Regla estricta: una celda es OPERABLE si su WR histórico > 66,67%.
-//   • Las celdas se derivan del cruce de bandas HUD × Entropía.
-//   • Cada celda tiene resultado independiente para DOC y COL.
+// 9 celdas físicas de la mesa. Cada celda tiene WR histórico por mercado
+// y decisión operativa (VERDE si > 66.67%, ROJO si no). La celda 9 no
+// tiene muestra suficiente → estado especial NO_DATA (no operar).
 //
-// Complejidad: `classifyZone` es O(1) — recorre la matriz una vez sin
-// loops anidados. No requiere memoización.
+// Regla PROBE (transición): una celda es PROBE para un mercado si ese
+// mercado está en rojo PERO el otro mercado está verde. Señaliza rotación.
 // ════════════════════════════════════════════════════════════════════════
 
-export type Zone = 'VERDE' | 'PROBE' | 'TOXICA';
+export type Zone = 'VERDE' | 'PROBE' | 'TOXICA' | 'NO_DATA';
 export type Market = 'doc' | 'col';
+export type HudBand = 'ALTO' | 'MEDIO' | 'BAJO';
+export type EntBand = 'BAJA' | 'MEDIA' | 'ALTA';
 
 /**
- * Regla de matriz.
- * [entMin, entMax, hudMin, hudMax, verdeDoc, verdeCol]
- * Rangos inclusivos en ambos extremos.
+ * Definición de una celda de la matriz.
+ * `verdeDoc` / `verdeCol` = true si el WR histórico supera 66.67%.
+ * `noData` = true si la muestra es insuficiente para decidir.
  */
-type Rule = readonly [number, number, number, number, boolean, boolean];
-
-/**
- * Matriz validada por auditoría (4036 giros). Cada regla se corresponde
- * con una fila del semáforo estricto documentado.
- */
-const MATRIX: readonly Rule[] = [
-  //  entMin entMax  hudMin hudMax  DOC   COL
-  [    0,    15,     0,    40,   true,  true ],
-  [    0,    15,    41,    45,   false, true ],
-  [   16,    30,    41,    45,   false, true ],
-  [   16,    30,    46,    55,   true,  false],
-  [   31,    45,     0,    45,   true,  true ],
-  [   46,    60,    46,    50,   true,  false],
-  [   61,   100,     0,    40,   true,  false],
-  [   61,   100,    46,    50,   true,  true ],
-] as const;
-
-/**
- * Devuelve true si (hud, ent) cae en una celda operable para el mercado
- * indicado. Recorre la matriz linealmente — O(8) → constante.
- */
-export function isGreen(hud: number, ent: number, mkt: Market): boolean {
-  for (const [eLo, eHi, hLo, hHi, dOk, cOk] of MATRIX) {
-    if (ent >= eLo && ent <= eHi && hud >= hLo && hud <= hHi) {
-      return mkt === 'doc' ? dOk : cOk;
-    }
-  }
-  return false;
+interface Cell {
+  hud: HudBand;
+  ent: EntBand;
+  wrDoc: number;
+  wrCol: number;
+  verdeDoc: boolean;
+  verdeCol: boolean;
+  noData?: boolean;
+  label: string;
+  diagnosis: string;
 }
 
 /**
- * Clasifica la zona de un giro para un mercado.
+ * Matriz completa 3×3 — tal cual la auditoría entregada.
+ */
+export const CELLS: readonly Cell[] = [
+  // 1. HUD Alto + Entropía Baja
+  {
+    hud: 'ALTO', ent: 'BAJA', wrDoc: 62.61, wrCol: 59.91,
+    verdeDoc: false, verdeCol: false,
+    label: 'TRAMPA DE VELOCIDAD',
+    diagnosis: 'Destrucción total — prohibido operar.',
+  },
+  // 2. HUD Alto + Entropía Media
+  {
+    hud: 'ALTO', ent: 'MEDIA', wrDoc: 60.00, wrCol: 67.62,
+    verdeDoc: false, verdeCol: true,
+    label: 'TRANSICIÓN RÁPIDA',
+    diagnosis: 'Exclusivo columnas con precaución.',
+  },
+  // 3. HUD Alto + Entropía Alta
+  {
+    hud: 'ALTO', ent: 'ALTA', wrDoc: 58.67, wrCol: 61.33,
+    verdeDoc: false, verdeCol: false,
+    label: 'CAOS EN ALTA VELOCIDAD',
+    diagnosis: 'Zona tóxica crítica — muestra inestable.',
+  },
+  // 4. HUD Medio + Entropía Baja
+  {
+    hud: 'MEDIO', ent: 'BAJA', wrDoc: 63.87, wrCol: 67.10,
+    verdeDoc: false, verdeCol: true,
+    label: 'INERCIA ESTABLE',
+    diagnosis: 'Exclusivo columnas — progresiones limpias.',
+  },
+  // 5. HUD Medio + Entropía Media
+  {
+    hud: 'MEDIO', ent: 'MEDIA', wrDoc: 65.19, wrCol: 66.35,
+    verdeDoc: false, verdeCol: false,
+    label: 'ZONA DE TRANSICIÓN',
+    diagnosis: 'Sub-óptimo — al borde del umbral.',
+  },
+  // 6. HUD Medio + Entropía Alta
+  {
+    hud: 'MEDIO', ent: 'ALTA', wrDoc: 66.88, wrCol: 64.50,
+    verdeDoc: true, verdeCol: false,
+    label: 'CAOS ESTABLE',
+    diagnosis: 'Exclusivo docenas — sectores del cilindro.',
+  },
+  // 7. HUD Bajo + Entropía Baja
+  {
+    hud: 'BAJO', ent: 'BAJA', wrDoc: 61.38, wrCol: 64.14,
+    verdeDoc: false, verdeCol: false,
+    label: 'MESA MUERTA',
+    diagnosis: 'Pérdida de inercia — ambos ciegos.',
+  },
+  // 8. HUD Bajo + Entropía Media  ← EL SANTUARIO
+  {
+    hud: 'BAJO', ent: 'MEDIA', wrDoc: 66.79, wrCol: 71.79,
+    verdeDoc: true, verdeCol: true,
+    label: 'SANTUARIO LENTO',
+    diagnosis: 'El mejor entorno — rentable en ambos.',
+  },
+  // 9. HUD Bajo + Entropía Alta  ← SIN DATA
+  {
+    hud: 'BAJO', ent: 'ALTA', wrDoc: 0, wrCol: 0,
+    verdeDoc: false, verdeCol: false, noData: true,
+    label: 'DATA INSUFICIENTE',
+    diagnosis: 'Sin muestra confiable — mejor no operar.',
+  },
+] as const;
+
+// ────────────────────────────────────────────────────────────────────────
+// Utilidades de bandas
+// ────────────────────────────────────────────────────────────────────────
+
+export function hudBand(hud: number): HudBand {
+  if (hud >= 70) return 'ALTO';
+  if (hud >= 46) return 'MEDIO';
+  return 'BAJO';
+}
+
+export function entBand(ent: number): EntBand {
+  if (ent >= 46) return 'ALTA';
+  if (ent >= 16) return 'MEDIA';
+  return 'BAJA';
+}
+
+/**
+ * Encuentra la celda actual dado (hud, ent). Nunca devuelve null si hay
+ * ambos valores — las 9 celdas cubren todo el espacio 0-100 × 0-100.
+ */
+export function findCell(hud: number | null, ent: number | null): Cell | null {
+  if (hud === null || ent === null) return null;
+  const hb = hudBand(hud);
+  const eb = entBand(ent);
+  return CELLS.find((c) => c.hud === hb && c.ent === eb) ?? null;
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Clasificación operativa por mercado
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * Clasifica la zona operativa para un mercado.
  *
- *   VERDE  → celda operable para este mercado.
- *   PROBE  → celda operable para el OTRO mercado (indica transición;
- *            el operador podría considerar rotar de mercado).
- *   TOXICA → fuera de zonas operables para ambos mercados.
- *
- * El diseño PROBE = "operable en el otro" viene del hallazgo estructural
- * de que los errores DOC/COL no coinciden (~12,8% de solape). Cuando un
- * mercado entra en tóxica y el otro no, hay oportunidad de rotación —
- * y ese es exactamente el semáforo ámbar.
+ *   NO_DATA → celda sin muestra suficiente (fila 9).
+ *   VERDE   → WR > 66.67% para este mercado.
+ *   PROBE   → este mercado en rojo, pero el OTRO está verde
+ *             (oportunidad de rotación).
+ *   TOXICA  → ambos mercados debajo del umbral en esta celda.
  */
 export function classifyZone(
   hud: number | null,
   ent: number | null,
   mkt: Market
 ): Zone {
-  if (hud === null || ent === null) return 'TOXICA';
-  if (isGreen(hud, ent, mkt)) return 'VERDE';
-  const other: Market = mkt === 'doc' ? 'col' : 'doc';
-  if (isGreen(hud, ent, other)) return 'PROBE';
+  const c = findCell(hud, ent);
+  if (!c) return 'TOXICA';
+  if (c.noData) return 'NO_DATA';
+  const mine = mkt === 'doc' ? c.verdeDoc : c.verdeCol;
+  const other = mkt === 'doc' ? c.verdeCol : c.verdeDoc;
+  if (mine) return 'VERDE';
+  if (other) return 'PROBE';
   return 'TOXICA';
 }
 
 /**
- * Exposición de la matriz para el radar cartesiano.
- * Devuelve todas las celdas verdes para pintarlas como polígonos de fondo.
+ * Devuelve el WR histórico de la celda actual para un mercado (0-100).
+ * Útil para mostrarlo en el chip: "COL 67,1% — INERCIA ESTABLE".
  */
-export function greenCellsFor(mkt: Market): Array<{
-  entMin: number; entMax: number;
-  hudMin: number; hudMax: number;
-}> {
-  return MATRIX
-    .filter(([, , , , dOk, cOk]) => (mkt === 'doc' ? dOk : cOk))
-    .map(([eLo, eHi, hLo, hHi]) => ({
-      entMin: eLo, entMax: eHi, hudMin: hLo, hudMax: hHi,
-    }));
+export function currentCellWr(
+  hud: number | null,
+  ent: number | null,
+  mkt: Market
+): number | null {
+  const c = findCell(hud, ent);
+  if (!c || c.noData) return null;
+  return mkt === 'doc' ? c.wrDoc : c.wrCol;
 }
 
 /**
- * Zonas tóxicas conocidas — útiles para pintar bandas rojas de advertencia.
- * Se computan como complemento de las verdes en bandas cardinales.
+ * Etiqueta operativa de la celda actual (p. ej. "SANTUARIO LENTO").
  */
-export const TOXIC_BANDS = {
-  /** Trampa de velocidad: HUD≥70 y Ent≤10. WR col 60,7%. */
-  velocityTrap: { hudMin: 70, hudMax: 100, entMin: 0, entMax: 10 },
-  /** Fricción total: HUD≥90. WR col 56,6% (peor celda del tablero). */
-  totalFriction: { hudMin: 90, hudMax: 100, entMin: 0, entMax: 100 },
-  /** Franja central bajo alta entropía. */
-  centralChaos: { hudMin: 46, hudMax: 55, entMin: 50, entMax: 100 },
-} as const;
+export function currentCellLabel(
+  hud: number | null,
+  ent: number | null
+): string | null {
+  const c = findCell(hud, ent);
+  return c ? c.label : null;
+}
 
-/**
- * Capacidad de racha por mercado (semáforo estricto).
- * Documental: en la auditoría, con el filtro estricto, DOC toleró rachas
- * de 3-4 y COL solo llegó a 3. El drawdown tracker usa estas capacidades.
- */
+// ────────────────────────────────────────────────────────────────────────
+// Capacidad de racha por mercado (drawdown tracker)
+// ────────────────────────────────────────────────────────────────────────
+
 export const STREAK_CAP: Record<Market, number> = {
   doc: 7,
   col: 5,
