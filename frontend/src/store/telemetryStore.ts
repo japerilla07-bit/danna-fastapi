@@ -190,3 +190,14 @@ export const useSparkline = (metric: 'hud' | 'ent', n = 30): number[] =>
 
 export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
+
+// ════════════════════════════════════════════════════════════════════════
+// DEBUG · exposición en window (solo dev — inspección desde consola)
+// ════════════════════════════════════════════════════════════════════════
+// Uso en DevTools:
+//   __telemetry.getState().history.slice(-5)   ← ver últimos 5 giros
+//   __telemetry.getState().lastN               ← último n registrado
+//   __telemetry.getState().reset()             ← limpiar historial
+if (typeof window !== 'undefined') {
+  (window as any).__telemetry = useTelemetryStore;
+}

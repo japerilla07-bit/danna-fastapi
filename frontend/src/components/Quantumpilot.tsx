@@ -322,16 +322,51 @@ export function QuantumPilot({
   const [minimized, setMinimized] = useState(false);
 
   // ── V2 add-on: alimentar el store de telemetría (ZoneChip) ─────────
-  // Ingesta idempotente por firma completa — solo dispara cuando algún
-  // valor real cambia. El store también dedupea internamente (doble red).
+  // Ingesta idempotente al store — deriva docHit/colHit del counters
+  // (mismo mecanismo que usa AppPage para lastHits, pero acá adentro).
+  // Trigger: cambio de spinsCount. Robusto: no depende de pdDocHit/pdColHit
+  // que llegan tarde o null desde AppPage.
   const ingest = useIngestSpin();
-  const lastIngestKey = useRef<string>('');
+  const lastSpinIngested = useRef<number>(-1);
+  const prevWinLoss = useRef<{ d: [number, number]; c: [number, number] } | null>(null);
   useEffect(() => {
-    const key = `${spinsCount}|${pdHud ?? 'x'}|${pdEntropy ?? 'x'}|${pdDocHit ?? 'x'}|${pdColHit ?? 'x'}`;
-    if (key === lastIngestKey.current) return;
-    lastIngestKey.current = key;
-    ingest({ n: spinsCount, hud: pdHud, ent: pdEntropy, docHit: pdDocHit, colHit: pdColHit });
-  }, [spinsCount, pdHud, pdEntropy, pdDocHit, pdColHit, ingest]);
+    // Solo actuamos cuando el número de giro avanzó de verdad
+    if (spinsCount === lastSpinIngested.current) return;
+
+    const d: [number, number] = [
+      Number(counters?.docenas?.wins ?? 0),
+      Number(counters?.docenas?.losses ?? 0),
+    ];
+    const c: [number, number] = [
+      Number(counters?.columnas?.wins ?? 0),
+      Number(counters?.columnas?.losses ?? 0),
+    ];
+    const prev = prevWinLoss.current;
+
+    // Primer giro: solo registramos baseline, no ingerimos aún (no hay delta)
+    if (prev === null) {
+      prevWinLoss.current = { d, c };
+      lastSpinIngested.current = spinsCount;
+      return;
+    }
+
+    // Deriva hit por delta contra el conteo anterior
+    const docHit: boolean | null =
+      d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null;
+    const colHit: boolean | null =
+      c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
+
+    ingest({
+      n: spinsCount,
+      hud: pdHud,
+      ent: pdEntropy,
+      docHit,
+      colHit,
+    });
+
+    prevWinLoss.current = { d, c };
+    lastSpinIngested.current = spinsCount;
+  }, [spinsCount, counters, pdHud, pdEntropy, ingest]);
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
