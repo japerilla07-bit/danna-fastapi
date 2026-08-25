@@ -18,13 +18,13 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
+// V2 add-ons: bloque de lectura de mesa (semáforo bifurcado + drawdown)
+import { ZoneChip } from '@/components/ZoneChip';
+import { useIngestSpin } from '@/store/telemetryStore';
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
-// PilotDelta reemplazado por ZoneSemaphore en v2 (semáforo bifurcado + drawdown).
-// Se conserva el archivo por si se reactiva; el import queda aquí comentado.
-// import { PilotDelta } from '@/components/PilotDelta';
-import { ZoneSemaphore } from '@/components/ZoneSemaphore';
+import { PilotDelta } from '@/components/PilotDelta';
 import '@/styles/pilot-delta.css';
 
 const GOD_CATS = ['color', 'paridad', 'rango', 'docenas', 'columnas'] as const;
@@ -159,81 +159,57 @@ interface Props {
   /** Resultado del último giro en docenas / columnas. */
   pdDocHit?: boolean | null;
   pdColHit?: boolean | null;
-  /** Historial rodante de resultados por mercado (para ZoneSemaphore/drawdown). */
-  pdDocHist?: { isError: boolean }[];
-  pdColHist?: { isError: boolean }[];
 }
 
 // ── Hook draggable ────────────────────────────────────────────────
-// Muta el DOM directamente con translate3d (GPU) — no dispara re-renders
-// de React durante el arrastre. Devuelve una ref para que el consumidor
-// la enganche al div raíz.
 
 function useDrag(initialPos: { x: number; y: number }) {
-  const nodeRef = useRef<HTMLDivElement | null>(null);
-  const posRef = useRef({ ...initialPos });
-  const draggingRef = useRef(false);
+  const [pos, setPos] = useState(initialPos);
+  const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const posStart = useRef({ x: 0, y: 0 });
 
-  // aplica la transform al nodo actual (si está montado)
-  const applyTransform = useCallback(() => {
-    const el = nodeRef.current;
-    if (!el) return;
-    el.style.transform = `translate3d(${posRef.current.x}px, ${posRef.current.y}px, 0)`;
-  }, []);
-
-  // ref-callback: enganchamos al div y aplicamos la posición inicial
-  const setNodeRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      nodeRef.current = el;
-      if (el) {
-        el.style.willChange = 'transform';
-        applyTransform();
-      }
-    },
-    [applyTransform]
-  );
-
   const onMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+      setIsDragging(true);
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
       dragStart.current = { x: clientX, y: clientY };
-      posStart.current = { ...posRef.current };
-      draggingRef.current = true;
+      posStart.current = { ...pos };
       e.stopPropagation();
     },
-    []
+    [pos]
   );
 
   useEffect(() => {
+    if (!isDragging) return;
+
     const onMove = (e: MouseEvent | TouchEvent) => {
-      if (!draggingRef.current) return;
       const clientX = 'touches' in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-      posRef.current = {
-        x: posStart.current.x + (clientX - dragStart.current.x),
-        y: posStart.current.y + (clientY - dragStart.current.y),
-      };
-      applyTransform();
+      const dx = clientX - dragStart.current.x;
+      const dy = clientY - dragStart.current.y;
+      setPos({
+        x: posStart.current.x + dx,
+        y: posStart.current.y + dy,
+      });
     };
-    const onUp = () => {
-      draggingRef.current = false;
-    };
+    const onUp = () => setIsDragging(false);
+
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
+
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [applyTransform]);
+  }, [isDragging]);
 
-  return { setNodeRef, onMouseDown };
+  return { pos, onMouseDown };
 }
 
 // ── Canvas de partículas ──────────────────────────────────────────
@@ -339,14 +315,21 @@ export function QuantumPilot({
   pdEntropy = null,
   pdDocHit = null,
   pdColHit = null,
-  pdDocHist = [],
-  pdColHist = [],
 }: Props) {
-  const { setNodeRef, onMouseDown } = useDrag({ x: 20, y: 100 });
+  const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
-  // Pestaña "MÁS": esconde Sugerencias del paño + Eficiencia por categoría.
-  // false por defecto → no se renderizan → rinde más rápido en cada giro.
-  const [showMore, setShowMore] = useState(false);
+
+  // ── V2 add-on: alimentar el store de telemetría (ZoneChip) ─────────
+  // Ingesta idempotente por firma completa — solo dispara cuando algún
+  // valor real cambia. El store también dedupea internamente (doble red).
+  const ingest = useIngestSpin();
+  const lastIngestKey = useRef<string>('');
+  useEffect(() => {
+    const key = `${spinsCount}|${pdHud ?? 'x'}|${pdEntropy ?? 'x'}|${pdDocHit ?? 'x'}|${pdColHit ?? 'x'}`;
+    if (key === lastIngestKey.current) return;
+    lastIngestKey.current = key;
+    ingest({ n: spinsCount, hud: pdHud, ent: pdEntropy, docHit: pdDocHit, colHit: pdColHit });
+  }, [spinsCount, pdHud, pdEntropy, pdDocHit, pdColHit, ingest]);
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
@@ -550,11 +533,10 @@ export function QuantumPilot({
   if (minimized) {
     return (
       <div
-        ref={setNodeRef}
         className="fixed z-50 flex items-center justify-center rounded-full w-12 h-12 cursor-grab active:cursor-grabbing"
         style={{
-          top: 0,
-          left: 0,
+          left: pos.x,
+          top: pos.y,
           background:
             'linear-gradient(135deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
           backdropFilter: 'blur(20px)',
@@ -587,11 +569,10 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      ref={setNodeRef}
-      className="fixed z-50 w-[900px] max-w-[97vw] max-h-[94vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[480px] max-w-[95vw] max-h-[92vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
-        top: 0,
-        left: 0,
+        left: pos.x,
+        top: pos.y,
         background:
           'linear-gradient(145deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.92) 50%, rgba(8, 12, 22, 0.95) 100%)',
         backdropFilter: 'blur(20px) saturate(140%)',
@@ -836,6 +817,12 @@ export function QuantumPilot({
           </span>
         </div>
 
+        {/* ═══ 1.5. LECTURA DE MESA (V2 add-on) ═══
+             Semáforo bifurcado DOC / COL con matriz 3×3 auditada + halo
+             Pixi en zonas tóxicas + drawdown segmentado por mercado.
+             Autocontenido: solo consume el store de telemetría.       ═══ */}
+        <ZoneChip />
+
         {/* ═══ 2. TARGET LOCK (top pick) ═══ */}
         {topPick ? (
           <button
@@ -992,8 +979,7 @@ export function QuantumPilot({
           </div>
         )}
 
-        {/* ═══ 3. OTRAS SUGERENCIAS (pestaña MÁS) ═══ */}
-        {showMore && (
+        {/* ═══ 3. OTRAS SUGERENCIAS ═══ */}
         <div
           className="flex flex-col rounded-md overflow-hidden"
           style={{
@@ -1136,7 +1122,6 @@ export function QuantumPilot({
             )}
           </div>
         </div>
-        )}
 
         {/* ═══ 4. ERRORES (ancho completo) ═══ */}
         <div
@@ -1193,41 +1178,25 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 5. SEMÁFORO DE ZONA · BIFURCADO (v2) ═══
-             Reemplaza a Anclaje / Alerta de Choque / Estado del Motor.
-             Dos tarjetas gemelas DOCENAS · COLUMNAS con:
-               • VERDE / PROBE / TÓXICA según celda HUD × ENT (matriz validada 4036 giros)
-               • Drawdown tracker segmentado (7 bloques doc, 5 col)
-             Solo aviso — no bloquea ni altera la sugerencia del motor.  ═══ */}
-        <ZoneSemaphore
+        {/* ═══ 5. CONCIENCIA SITUACIONAL (sustituye a SESIÓN GOD) ═══
+             Tres bloques de lectura rápida:
+               A · W/R 14, secuencia A/E, diagnóstico de mesa
+               B · anclaje (Max−Min de HUD y Entropía en 5 giros)
+               C · Δ contra el giro anterior + acción recomendada
+             Solo lectura: no cambia ninguna decisión del motor.        ═══ */}
+        <PilotDelta
+          spinsCount={spinsCount}
           hud={pdHud}
           entropy={pdEntropy}
-          docHist={pdDocHist}
-          colHist={pdColHist}
+          docHit={pdDocHit}
+          colHit={pdColHit}
         />
 
-        {/* markers para consumir vars sin advertencias TS */}
-        {(() => { void spinsCount; void pdDocHit; void pdColHit; return null; })()}
+        {/* PROGRESIÓN L1→L4 eliminada: arrastraba un bug conocido y ya no
+            es funcional para la operación. Si algún día vuelve, está en
+            Quantumpilot_PRE3.tsx.bak. */}
 
-        {/* Toggle de pestaña MÁS/MENOS — muestra u oculta las secciones
-             "Sugerencias del paño" y "Eficiencia por categoría". Colapsado
-             por defecto para que el layout quede limpio y rinda más. */}
-        <button
-          onClick={() => setShowMore((v) => !v)}
-          className="self-center text-[10px] px-3 py-1 rounded-full transition-opacity hover:opacity-90"
-          style={{
-            fontFamily: 'monospace',
-            letterSpacing: '0.25em',
-            color: '#67e8f9',
-            background: 'rgba(8, 47, 73, 0.35)',
-            border: '1px solid rgba(34, 211, 238, 0.25)',
-          }}
-        >
-          {showMore ? '▲ menos' : '▼ más'}
-        </button>
-
-        {/* ═══ 6. EFICIENCIA POR CATEGORÍA (pestaña MÁS) ═══ */}
-        {showMore && (
+        {/* ═══ 6. EFICIENCIA POR CATEGORÍA ═══ */}
         <div className="flex flex-col">
           <span
             className="text-[12px] text-cyan-500/70 mb-1.5 px-1"
@@ -1298,7 +1267,6 @@ export function QuantumPilot({
             })}
           </div>
         </div>
-        )}
       </div>
     </div>
   );
