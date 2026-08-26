@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
-  useCellReg, type CellRec,
+  useCellReg, useResetTelemetry, type CellRec,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, cellStatsByKey, labelByKey,
@@ -208,11 +208,40 @@ const MarketColumn = memo(MarketColumnImpl);
 // ────────────────────────────────────────────────────────────────────────
 
 export function MatrixPanel() {
+  const resetTelemetry = useResetTelemetry();
+
+  function handleReset() {
+    if (window.confirm('¿Resetear el mapa? Borra lo acumulado de esta sesión (contador, casillas y rachas). NO toca la matriz base de tus sesiones.')) {
+      resetTelemetry();
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-      <span style={{ fontSize: 10, color: '#22d3ee', opacity: 0.7, letterSpacing: '0.3em', paddingLeft: 2 }}>
-        CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
-      </span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 2 }}>
+        <span style={{ fontSize: 10, color: '#22d3ee', opacity: 0.7, letterSpacing: '0.3em' }}>
+          CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
+        </span>
+        <button
+          onClick={handleReset}
+          style={{
+            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
+            color: '#94a3b8', cursor: 'pointer',
+            background: 'rgba(2,6,23,0.6)', border: '1px solid rgba(148,163,184,0.28)',
+            borderRadius: 6, padding: '4px 10px',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#f87171';
+            e.currentTarget.style.borderColor = 'rgba(248,113,113,0.55)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#94a3b8';
+            e.currentTarget.style.borderColor = 'rgba(148,163,184,0.28)';
+          }}
+        >
+          ⟲ RESET MAPA
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: 11 }}>
         <MarketColumn mkt="doc" />
         <MarketColumn mkt="col" />
