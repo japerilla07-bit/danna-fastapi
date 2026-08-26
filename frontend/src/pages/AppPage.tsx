@@ -84,6 +84,9 @@ export function AppPage() {
   const ingestTelemetry = useIngestSpin();
   const hudRef = useRef<number | null>(null);
   const entRef = useRef<number | null>(null);
+  const spinRef = useRef<number | null>(null);
+  const docPickRef = useRef<string>('');
+  const colPickRef = useRef<string>('');
 
   useEffect(() => {
     const d: [number, number] = [
@@ -99,16 +102,21 @@ export function AppPage() {
       const docHit: boolean | null = d[0] > prev.d[0] ? true : d[1] > prev.d[1] ? false : null;
       const colHit: boolean | null = c[0] > prev.c[0] ? true : c[1] > prev.c[1] ? false : null;
       setLastHits({ doc: docHit, col: colHit });
-      // Mismo delta, mismo giro → al store del ZoneChip (idempotente por firma)
-      ingestTelemetry({
-        n: spinsCount,
-        hud: hudRef.current,
-        ent: entRef.current,
-        docHit,
-        colHit,
-      });
     }
     prevCnt.current = { d, c };
+
+    // Telemetría del panel: se manda el PICK + el número que salió, NO el hit
+    // por contador (que solo se mueve en BET). El store resuelve el pick del
+    // giro anterior contra este número (mismo criterio que el SessionRecorder,
+    // que es de donde salió la matriz). Se ingiere cada giro.
+    ingestTelemetry({
+      n: spinsCount,
+      hud: hudRef.current,
+      ent: entRef.current,
+      spin: spinRef.current,
+      docPick: docPickRef.current,
+      colPick: colPickRef.current,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spinsCount]);
 
@@ -203,6 +211,14 @@ export function AppPage() {
   // estado) para no recomputar la fórmula dentro del effect.
   hudRef.current = condCalc;
   entRef.current = entropyCalc;
+  // Número que salió en ESTE giro (contra el que se evalúa el pick anterior)
+  // y los picks TOP-2 de ESTE giro (que se resolverán en el giro siguiente).
+  spinRef.current =
+    Array.isArray(data.sequence.spins) && data.sequence.spins.length > 0
+      ? Number(data.sequence.spins[data.sequence.spins.length - 1])
+      : null;
+  docPickRef.current = String((data.payload as any)?.decision?.bet_advice?.docenas?.pick ?? '');
+  colPickRef.current = String((data.payload as any)?.decision?.bet_advice?.columnas?.pick ?? '');
 
 
   return (

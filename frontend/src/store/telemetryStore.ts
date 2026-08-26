@@ -1,22 +1,55 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — Store de telemetría (v6: global + registro por celda)
+// D.A.N.N.A. — Store de telemetría (v7: resolución DIFERIDA del pick)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Tres capas de conteo, todas de la SESIÓN de hoy (se resetean al reset):
-//   1) GLOBAL por mercado — aciertos, errores, racha actual y racha máx.
-//      Toma cada sugerencia como apuesta, sin importar estado ni condición
-//      del motor. Es el marcador del día.
-//   2) POR CELDA (HUD×ENT) — cada celda visitada guarda sus aciertos,
-//      errores y racha máx propia. Regla de racha PAUSADA: un giro en OTRA
-//      celda no toca la racha de esta; solo un ACIERTO en la misma celda la
-//      reinicia a 0.
-//   3) La celda actual sale del último giro (último hud/ent).
+// CÓMO SE CUENTA EL ACIERTO (igual que el SessionRecorder → coincide con la
+// matriz, que salió de esos CSV):
+//   • El acierto NO viene del contador del API (solo se mueve en BET → fallaba).
+//   • El pick TOP-2 ("13-24 / 1-12", "Columna 3 / Columna 2") se convierte al
+//     conjunto de números que cubre y se compara con el número que salió.
+//   • ALINEACIÓN: el pick del giro N es la sugerencia PARA el giro N+1, así que
+//     se evalúa contra el spin del giro N+1. Por eso el resultado llega un giro
+//     tarde: el store guarda el giro como "pendiente" y lo resuelve cuando
+//     entra el número siguiente. Toma CADA sugerencia como apuesta.
 //
-// El motor apuesta siempre BET; el panel es solo lectura.
+// El registro (aciertos/errores/racha) se imputa a la celda HUD×ENT del giro
+// en que se hizo la sugerencia (el pendiente), no a la del giro que lo resuelve.
+//
+// Tres capas de conteo, todas de la SESIÓN (se resetean con reset):
+//   1) GLOBAL por mercado — aciertos, errores, racha viva y racha máx.
+//   2) POR CELDA — cada celda visitada con sus aciertos/errores/racha máx
+//      (racha pausada: otra celda no la toca; solo un acierto en la misma
+//      celda la reinicia).
+//   3) La celda ACTUAL sale del último giro (aún sin resolver).
 // ════════════════════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
 import { classifyZone, cellKeyOf, type Zone, type Market } from '@/domain/zoneMatrix';
+
+// ────────────────────────────────────────────────────────────────────────
+// Resolución de pick (copiado 1:1 del SessionRecorder)
+// ────────────────────────────────────────────────────────────────────────
+
+/** Convierte un pick de texto en el conjunto de números que cubre. */
+function numerosDe(pick: string): number[] {
+  const out = new Set<number>();
+  const t = (pick || '').toLowerCase();
+  if (/\b1\s*-\s*12\b/.test(t))  for (let n = 1;  n <= 12; n++) out.add(n);
+  if (/\b13\s*-\s*24\b/.test(t)) for (let n = 13; n <= 24; n++) out.add(n);
+  if (/\b25\s*-\s*36\b/.test(t)) for (let n = 25; n <= 36; n++) out.add(n);
+  for (const m of t.matchAll(/col(?:umna)?\s*([123])/g)) {
+    const c = Number(m[1]);
+    for (let n = 1; n <= 36; n++) if (n % 3 === c % 3) out.add(n);
+  }
+  return [...out];
+}
+
+/** true=acierto, false=error, null=sin pick evaluable. */
+function resolvePick(pick: string, spin: number): boolean | null {
+  const nums = numerosDe(pick);
+  if (nums.length === 0) return null;
+  return nums.includes(spin);
+}
 
 // ────────────────────────────────────────────────────────────────────────
 // Tipos
@@ -26,27 +59,33 @@ export interface TelemetrySpin {
   n: number;
   hud: number | null;
   ent: number | null;
-  dHud: number | null;
-  dEnt: number | null;
-  docHit: boolean | null;
-  colHit: boolean | null;
   ts: number;
 }
 
+/** Lo que manda el AppPage por giro: estado + pick + número que salió. */
 export interface IngestPayload {
   n: number;
   hud: number | null;
   ent: number | null;
-  docHit: boolean | null;
-  colHit: boolean | null;
+  spin: number | null;   // número que salió en ESTE giro (resuelve el pendiente)
+  docPick: string;
+  colPick: string;
 }
 
-/** Registro de sesión de una celda para un mercado. */
+/** Giro cuya sugerencia aún no se resolvió (se resuelve con el spin siguiente). */
+interface Pending {
+  n: number;
+  hud: number | null;
+  ent: number | null;
+  docPick: string;
+  colPick: string;
+}
+
 export interface CellRec {
   hits: number;
   misses: number;
-  streak: number;     // racha de errores actual EN esta celda (pausada)
-  maxStreak: number;  // racha máx de errores vivida hoy en esta celda
+  streak: number;
+  maxStreak: number;
 }
 
 interface Counters {
@@ -54,13 +93,12 @@ interface Counters {
   docStreak: number; docMaxStreak: number; colStreak: number; colMaxStreak: number;
 }
 
-/** cellReg[mkt][cellKey] = CellRec */
 type CellReg = { doc: Record<string, CellRec>; col: Record<string, CellRec> };
 
 interface TelemetryState {
   history: TelemetrySpin[];
   lastN: number;
-  lastSig: string;
+  pending: Pending | null;
   counters: Counters;
   cellReg: CellReg;
   ingest: (p: IngestPayload) => void;
@@ -74,26 +112,11 @@ const EMPTY_COUNTERS: Counters = {
   docStreak: 0, docMaxStreak: 0, colStreak: 0, colMaxStreak: 0,
 };
 
-const sig = (p: IngestPayload) =>
-  `${p.n}|${p.hud ?? 'x'}|${p.ent ?? 'x'}|${p.docHit ?? 'x'}|${p.colHit ?? 'x'}`;
-
-// Actualiza el registro de UNA celda de UN mercado con el resultado del giro.
-// Devuelve un nuevo objeto cellReg[mkt] (inmutable) con la celda actualizada.
-function bumpCell(
-  reg: Record<string, CellRec>,
-  key: string,
-  hit: boolean,
-): Record<string, CellRec> {
+function bumpCell(reg: Record<string, CellRec>, key: string, hit: boolean): Record<string, CellRec> {
   const prev = reg[key] ?? { hits: 0, misses: 0, streak: 0, maxStreak: 0 };
   let { hits, misses, streak, maxStreak } = prev;
-  if (hit) {
-    hits += 1;
-    streak = 0;                 // acierto EN esta celda reinicia su racha
-  } else {
-    misses += 1;
-    streak += 1;                // error suma a la racha de esta celda
-    if (streak > maxStreak) maxStreak = streak;
-  }
+  if (hit) { hits += 1; streak = 0; }
+  else { misses += 1; streak += 1; if (streak > maxStreak) maxStreak = streak; }
   return { ...reg, [key]: { hits, misses, streak, maxStreak } };
 }
 
@@ -104,66 +127,69 @@ function bumpCell(
 export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   history: [],
   lastN: -1,
-  lastSig: '',
+  pending: null,
   counters: { ...EMPTY_COUNTERS },
   cellReg: { doc: {}, col: {} },
 
   ingest: (p) => {
-    const s = sig(p);
     const st = get();
-    if (s === st.lastSig) return;
-    if (p.n <= st.lastN && st.history.length > 0) {
-      set({ lastSig: s });
-      return;
-    }
+    if (p.n === st.lastN) return;                              // mismo giro (re-render)
+    if (p.n < st.lastN && st.history.length > 0) return;       // giro viejo
 
-    const prev = st.history[st.history.length - 1];
-    const dHud = prev && p.hud !== null && prev.hud !== null ? p.hud - prev.hud : null;
-    const dEnt = prev && p.ent !== null && prev.ent !== null ? p.ent - prev.ent : null;
-
-    const spin: TelemetrySpin = {
-      n: p.n, hud: p.hud, ent: p.ent, dHud, dEnt,
-      docHit: p.docHit, colHit: p.colHit, ts: Date.now(),
-    };
-    const next = st.history.length >= HISTORY_CAP
-      ? [...st.history.slice(1), spin]
-      : [...st.history, spin];
-
-    // ── Global por mercado ──
-    const c = { ...st.counters };
-    if (p.docHit === true)  { c.docHits += 1; c.docStreak = 0; }
-    else if (p.docHit === false) { c.docMisses += 1; c.docStreak += 1; if (c.docStreak > c.docMaxStreak) c.docMaxStreak = c.docStreak; }
-    if (p.colHit === true)  { c.colHits += 1; c.colStreak = 0; }
-    else if (p.colHit === false) { c.colMisses += 1; c.colStreak += 1; if (c.colStreak > c.colMaxStreak) c.colMaxStreak = c.colStreak; }
-
-    // ── Por celda (solo la celda del giro; las demás quedan intactas = pausadas) ──
-    const key = cellKeyOf(p.hud, p.ent);
+    let counters = st.counters;
     let cellReg = st.cellReg;
-    if (key) {
-      let doc = cellReg.doc, col = cellReg.col;
-      if (p.docHit !== null) doc = bumpCell(doc, key, p.docHit);
-      if (p.colHit !== null) col = bumpCell(col, key, p.colHit);
-      if (doc !== cellReg.doc || col !== cellReg.col) cellReg = { doc, col };
+
+    // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
+    const pend = st.pending;
+    if (pend && p.spin !== null && Number.isFinite(p.spin)) {
+      const spin = Number(p.spin);
+      const docHit = resolvePick(pend.docPick, spin);
+      const colHit = resolvePick(pend.colPick, spin);
+      const key = cellKeyOf(pend.hud, pend.ent);
+
+      if (docHit !== null || colHit !== null) {
+        const c = { ...counters };
+        if (docHit === true)  { c.docHits += 1; c.docStreak = 0; }
+        else if (docHit === false) { c.docMisses += 1; c.docStreak += 1; if (c.docStreak > c.docMaxStreak) c.docMaxStreak = c.docStreak; }
+        if (colHit === true)  { c.colHits += 1; c.colStreak = 0; }
+        else if (colHit === false) { c.colMisses += 1; c.colStreak += 1; if (c.colStreak > c.colMaxStreak) c.colMaxStreak = c.colStreak; }
+        counters = c;
+
+        if (key) {
+          let doc = cellReg.doc, col = cellReg.col;
+          if (docHit !== null) doc = bumpCell(doc, key, docHit);
+          if (colHit !== null) col = bumpCell(col, key, colHit);
+          if (doc !== cellReg.doc || col !== cellReg.col) cellReg = { doc, col };
+        }
+      }
     }
 
-    set({ history: next, lastN: p.n, lastSig: s, counters: c, cellReg });
+    // ── 2) Registrar ESTE giro en history (para mostrar la celda actual) ──
+    const spinRow: TelemetrySpin = { n: p.n, hud: p.hud, ent: p.ent, ts: Date.now() };
+    const history = st.history.length >= HISTORY_CAP
+      ? [...st.history.slice(1), spinRow]
+      : [...st.history, spinRow];
+
+    // ── 3) ESTE giro pasa a ser el nuevo pendiente ──
+    const pending: Pending = { n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick };
+
+    set({ history, lastN: p.n, pending, counters, cellReg });
   },
 
   reset: () =>
     set({
-      history: [], lastN: -1, lastSig: '',
+      history: [], lastN: -1, pending: null,
       counters: { ...EMPTY_COUNTERS },
       cellReg: { doc: {}, col: {} },
     }),
 }));
 
 // ════════════════════════════════════════════════════════════════════════
-// SELECTORES (primitivas o referencias estables → sin loops de re-render)
+// SELECTORES
 // ════════════════════════════════════════════════════════════════════════
 
 export const useLastHud = (): number | null =>
   useTelemetryStore((s) => { const l = s.history[s.history.length - 1]; return l ? l.hud : null; });
-
 export const useLastEnt = (): number | null =>
   useTelemetryStore((s) => { const l = s.history[s.history.length - 1]; return l ? l.ent : null; });
 
@@ -174,7 +200,6 @@ export const useCurrentZone = (mkt: Market): Zone =>
     return classifyZone(l.hud, l.ent, mkt);
   });
 
-// ── Global por mercado ──
 export const useMarketHits = (mkt: Market): number =>
   useTelemetryStore((s) => mkt === 'doc' ? s.counters.docHits : s.counters.colHits);
 export const useMarketMisses = (mkt: Market): number =>
@@ -191,16 +216,11 @@ export const useMarketWr = (mkt: Market): number | null =>
     return t > 0 ? (h / t) * 100 : null;
   });
 
-// ── Por celda ──
-// Referencia estable: cellReg[mkt] solo cambia cuando ingest lo actualiza.
 export const useCellReg = (mkt: Market): Record<string, CellRec> =>
   useTelemetryStore((s) => s.cellReg[mkt]);
-
-/** Registro de sesión de una celda concreta (o null si no visitada). */
 export const useCellRec = (mkt: Market, key: string | null): CellRec | null =>
   useTelemetryStore((s) => (key ? (s.cellReg[mkt][key] ?? null) : null));
 
-// ── Acciones ──
 export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
 
