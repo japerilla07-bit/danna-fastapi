@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
-  useCellReg, useResetTelemetry, type CellRec,
+  useCellReg, useCellRec, useResetTelemetry, type CellRec,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, cellStatsByKey, labelByKey,
@@ -70,8 +70,11 @@ function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: Ce
         <span style={{ color: '#4ade80' }}>{rec.hits} aciertos</span>
         {' · '}
         <span style={{ color: '#f87171' }}>{rec.misses} errores</span>
-        {' · peor racha '}
-        <span style={{ color: rec.maxStreak >= 4 ? '#f87171' : '#cbd5e1', fontWeight: 700 }}>{rec.maxStreak}</span>
+      </span>
+      <span style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 1 }}>
+        racha ahora <b style={{ color: rec.streak >= 3 ? '#f87171' : rec.streak >= 1 ? '#fbbf24' : '#4ade80' }}>{rec.streak}</b>
+        {' · peor '}
+        <b style={{ color: rec.maxStreak >= 4 ? '#f87171' : '#cbd5e1' }}>{rec.maxStreak}</b>
       </span>
     </div>
   );
@@ -93,6 +96,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
   const key = cellKeyOf(hud, ent);
   const map = cellStats(hud, ent, mkt);
+  const live = useCellRec(mkt, key);          // racha viva en esta celda, esta sesión
   const estado: Zone = map?.estado ?? 'NEUTRA';
   const st = STYLE[estado];
   const title = mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS';
@@ -171,8 +175,9 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
           {map ? (
             <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3, fontFamily: 'monospace' }}>
               acierto <b style={{ color: '#e2e8f0' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
-              {'  ·  peor racha '}
+              {'  ·  aguanta hasta '}
               <b style={{ color: map.maxRun >= 5 ? '#f87171' : '#e2e8f0' }}>{map.maxRun}</b>
+              {' errores'}
               <span style={{ color: '#64748b' }}>{'  '}({map.n} giros)</span>
             </div>
           ) : (
@@ -180,6 +185,33 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
               sin datos en esta casilla
             </div>
           )}
+
+          {/* EN VIVO — racha de errores actual en esta celda vs el techo histórico */}
+          {(() => {
+            const cur = live?.streak ?? 0;
+            const techo = map?.maxRun ?? 0;
+            const anomalo = techo > 0 && cur >= techo;
+            const cerca = techo > 0 && cur === techo - 1;
+            const color = anomalo ? '#f87171' : cerca ? '#fbbf24' : cur > 0 ? '#fbbf24' : '#4ade80';
+            return (
+              <div style={{
+                marginTop: 7, padding: '6px 9px', borderRadius: 7,
+                background: anomalo ? 'rgba(127,29,29,0.35)' : 'rgba(2,6,23,0.5)',
+                border: `1px solid ${anomalo ? 'rgba(248,113,113,0.6)' : `${st.color}25`}`,
+              }}>
+                <span style={{ fontSize: 8.5, color: '#64748b', letterSpacing: '0.16em' }}>EN VIVO</span>
+                <div style={{ fontSize: 13, marginTop: 2, fontFamily: 'monospace' }}>
+                  racha de errores ahora: <b style={{ color }}>{cur}</b>
+                  {techo > 0 && <span style={{ color: '#64748b', fontSize: 11 }}>{'  '}/ techo {techo}</span>}
+                </div>
+                {anomalo && (
+                  <div style={{ fontSize: 10.5, color: '#f87171', fontWeight: 700, marginTop: 2 }}>
+                    ⚠ igualaste/superaste el techo histórico — anómalo, considerá salir
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
