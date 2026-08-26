@@ -19,8 +19,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
 // V2 add-ons: bloque de lectura de mesa (semáforo bifurcado + drawdown)
-// PilotDelta y su CSS quedaron obsoletos — reemplazados por ZoneChip.
-import { ZoneChip } from '@/components/ZoneChip';
+// PilotDelta y su CSS quedaron obsoletos — reemplazados por MatrixPanel.
+import { MatrixPanel } from '@/components/MatrixPanel';
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
@@ -815,7 +815,7 @@ export function QuantumPilot({
              Semáforo bifurcado DOC / COL con matriz 3×3 auditada + halo
              Pixi en zonas tóxicas + drawdown segmentado por mercado.
              Autocontenido: solo consume el store de telemetría.       ═══ */}
-        <ZoneChip />
+        <MatrixPanel />
 
         {/* ═══ 2. TARGET LOCK (top pick) ═══ */}
         {topPick ? (
