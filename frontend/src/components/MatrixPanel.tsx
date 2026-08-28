@@ -198,6 +198,20 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
             </div>
           )}
 
+          {/* HOY EN ESTA CASILLA — siempre visible: lo que llevás hoy en esta celda */}
+          <div style={{ marginTop: 7 }}>
+            <span style={{ fontSize: 8.5, color: '#64748b', letterSpacing: '0.16em' }}>HOY EN ESTA CASILLA</span>
+            <div style={{ fontSize: 12.5, color: '#cbd5e1', marginTop: 3, fontFamily: 'monospace' }}>
+              <span style={{ color: '#4ade80' }}>{live?.hits ?? 0} ✓</span>
+              {'  '}
+              <span style={{ color: '#f87171' }}>{live?.misses ?? 0} ✗</span>
+              <span style={{ color: '#64748b' }}>{'  ·  racha ahora '}</span>
+              <b style={{ color: (live?.streak ?? 0) >= 3 ? '#f87171' : (live?.streak ?? 0) >= 1 ? '#fbbf24' : '#4ade80' }}>
+                {live?.streak ?? 0}
+              </b>
+            </div>
+          </div>
+
           {/* EN VIVO — racha de errores actual en esta celda vs el techo histórico */}
           {(() => {
             const cur = live?.streak ?? 0;

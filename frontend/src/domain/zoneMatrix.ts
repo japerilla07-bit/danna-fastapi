@@ -322,7 +322,7 @@ export function currentCellHint(h:number|null,e:number|null):string|null {
 // lo que ya pasó en la sesión. Es tu termómetro en vivo de la mesa actual.
 
 export const LIVE_WEIGHT = 4;   // cada giro de hoy pesa como 4 históricos
-export const LIVE_MIN = 3;      // giros vivos mínimos para alterar el estado
+export const LIVE_MIN = 2;      // giros vivos mínimos para alterar el estado
 
 export interface LiveRec { hits: number; misses: number; maxStreak: number; }
 
