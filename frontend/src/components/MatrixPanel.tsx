@@ -19,7 +19,8 @@ import {
   useCellReg, useCellRec, useResetTelemetry, type CellRec,
 } from '@/store/telemetryStore';
 import {
-  cellKeyOf, cellStats, cellStatsByKey, labelByKey,
+  cellKeyOf, cellStats, labelByKey,
+  fusedZone, fusedZoneByKey, liveDeviation,
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
 
@@ -49,8 +50,8 @@ const rangeText = (key: string) => labelByKey(key);
 // ────────────────────────────────────────────────────────────────────────
 
 function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: CellRec }) {
-  const map = cellStatsByKey(cKey, mkt);
-  const st = STYLE[map?.estado ?? 'NEUTRA'];
+  const estado = fusedZoneByKey(cKey, mkt, rec);
+  const st = STYLE[estado];
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 2,
@@ -97,7 +98,8 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
   const key = cellKeyOf(hud, ent);
   const map = cellStats(hud, ent, mkt);
   const live = useCellRec(mkt, key);          // racha viva en esta celda, esta sesión
-  const estado: Zone = map?.estado ?? 'NEUTRA';
+  const estado: Zone = fusedZone(hud, ent, mkt, live);   // estado FUSIONADO (historial + hoy)
+  const deviation = liveDeviation(hud, ent, mkt, live);  // 'mejor' | 'peor' | null
   const st = STYLE[estado];
   const title = mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS';
   const gTotal = gHits + gMiss;
@@ -148,18 +150,28 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 9, color: st.color, letterSpacing: '0.2em', opacity: 0.9 }}>▸ ESTÁS AQUÍ</span>
-          <AnimatePresence mode="wait">
-            <motion.span key={estado}
-              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{
-                fontSize: 12, fontWeight: 800, letterSpacing: '0.12em', color: st.color,
-                padding: '3px 11px', borderRadius: 999, border: `1px solid ${st.color}`,
-                textShadow: `0 0 8px ${st.glow}`,
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {deviation && (
+              <span style={{
+                fontSize: 8.5, fontWeight: 700, letterSpacing: '0.05em',
+                color: deviation === 'peor' ? '#f87171' : '#4ade80',
               }}>
-              ● {st.label}
-            </motion.span>
-          </AnimatePresence>
+                {deviation === 'peor' ? '▼ hoy peor' : '▲ hoy mejor'}
+              </span>
+            )}
+            <AnimatePresence mode="wait">
+              <motion.span key={estado}
+                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  fontSize: 12, fontWeight: 800, letterSpacing: '0.12em', color: st.color,
+                  padding: '3px 11px', borderRadius: 999, border: `1px solid ${st.color}`,
+                  textShadow: `0 0 8px ${st.glow}`,
+                }}>
+                ● {st.label}
+              </motion.span>
+            </AnimatePresence>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontFamily: 'monospace' }}>
