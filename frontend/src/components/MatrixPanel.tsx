@@ -1,4 +1,3 @@
-
 // ════════════════════════════════════════════════════════════════════════
 // D.A.N.N.A. — MatrixPanel: centro de mando (v3 · legible)
 // ════════════════════════════════════════════════════════════════════════
@@ -17,7 +16,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
-  useCellReg, useCellRec, useResetTelemetry, useTermometro, type CellRec,
+  useCellReg, useCellRec, useResetTelemetry,
+  useTermoHits, useTermoTotal, useTermoStreak, type CellRec,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, labelByKey,
@@ -104,7 +104,9 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
   const st = STYLE[estado];
   const title = mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS';
   const gTotal = gHits + gMiss;
-  const termo = useTermometro(mkt, 10);   // cómo venís en los últimos 10 giros
+  const termoHits = useTermoHits(mkt, 10);
+  const termoTotal = useTermoTotal(mkt, 10);
+  const termoStreak = useTermoStreak(mkt, 10);
 
   const visited = Object.entries(reg)
     .sort((a, b) => b[1].maxStreak - a[1].maxStreak || b[1].misses - a[1].misses)
@@ -121,7 +123,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
       {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
       {(() => {
-        const { hits, total, liveStreak } = termo;
+        const hits = termoHits, total = termoTotal, liveStreak = termoStreak;
         // semáforo: verde 7+/10, amarillo 5-6, rojo <=4 (sobre giros resueltos)
         const ratio = total > 0 ? hits / total : 0;
         const luz = total < 3 ? '#64748b' : ratio >= 0.7 ? '#34d399' : ratio >= 0.5 ? '#fbbf24' : '#f87171';
