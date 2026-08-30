@@ -1,3 +1,4 @@
+
 // ════════════════════════════════════════════════════════════════════════
 // D.A.N.N.A. — MatrixPanel: centro de mando (v3 · legible)
 // ════════════════════════════════════════════════════════════════════════
@@ -16,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
-  useCellReg, useCellRec, useResetTelemetry, type CellRec,
+  useCellReg, useCellRec, useResetTelemetry, useTermometro, type CellRec,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, labelByKey,
@@ -103,6 +104,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
   const st = STYLE[estado];
   const title = mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS';
   const gTotal = gHits + gMiss;
+  const termo = useTermometro(mkt, 10);   // cómo venís en los últimos 10 giros
 
   const visited = Object.entries(reg)
     .sort((a, b) => b[1].maxStreak - a[1].maxStreak || b[1].misses - a[1].misses)
@@ -116,6 +118,39 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
       border: '1px solid rgba(148,163,184,0.14)',
     }}>
       <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.3em', color: '#e2e8f0' }}>{title}</span>
+
+      {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
+      {(() => {
+        const { hits, total, liveStreak } = termo;
+        // semáforo: verde 7+/10, amarillo 5-6, rojo <=4 (sobre giros resueltos)
+        const ratio = total > 0 ? hits / total : 0;
+        const luz = total < 3 ? '#64748b' : ratio >= 0.7 ? '#34d399' : ratio >= 0.5 ? '#fbbf24' : '#f87171';
+        const txt = total < 3 ? 'juntando datos…'
+          : ratio >= 0.7 ? 'VENÍS BIEN — aprovechá'
+          : ratio >= 0.5 ? 'PAREJO'
+          : 'MESA DURA — aflojá o rotá';
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '7px 11px', borderRadius: 9,
+            background: 'rgba(2,6,23,0.55)', border: `1px solid ${luz}55`,
+          }}>
+            <span style={{ width: 11, height: 11, borderRadius: '50%', background: luz, boxShadow: `0 0 8px ${luz}`, flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span style={{ fontSize: 8, color: '#64748b', letterSpacing: '0.18em' }}>ÚLTIMOS {total} GIROS</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: luz, fontFamily: 'monospace' }}>
+                {total > 0 ? `${hits}/${total}` : '—'}
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#cbd5e1', marginLeft: 8 }}>{txt}</span>
+              </span>
+            </div>
+            {liveStreak >= 2 && (
+              <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: '#f87171', fontFamily: 'monospace', flexShrink: 0 }}>
+                {liveStreak} seguidas ✗
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 1 · SESIÓN — marcador de la partida */}
       <div style={{
