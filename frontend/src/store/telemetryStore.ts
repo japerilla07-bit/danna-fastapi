@@ -235,28 +235,32 @@ export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
 
 // ── Termómetro en vivo: cómo venís en los últimos N giros de un mercado ──
-export interface Termometro {
-  hits: number;      // aciertos en la ventana
-  total: number;     // giros resueltos en la ventana
-  liveStreak: number; // racha de errores viva al final de la ventana
+// IMPORTANTE: cada selector devuelve un NÚMERO (primitiva), no un objeto.
+// Devolver un objeto nuevo aquí causaría un loop infinito de re-render en zustand.
+function ventanaResuelta(history: TelemetrySpin[], mkt: Market, ventana: number): boolean[] {
+  const res: boolean[] = [];
+  for (let i = history.length - 1; i >= 0 && res.length < ventana; i--) {
+    const h = mkt === 'doc' ? history[i].docHit : history[i].colHit;
+    if (h !== null && h !== undefined) res.push(h);
+  }
+  return res; // más reciente primero
 }
-export function useTermometro(mkt: Market, ventana = 10): Termometro {
+export function useTermoHits(mkt: Market, ventana = 10): number {
+  return useTelemetryStore((s) => ventanaResuelta(s.history, mkt, ventana).filter((x) => x).length);
+}
+export function useTermoTotal(mkt: Market, ventana = 10): number {
+  return useTelemetryStore((s) => ventanaResuelta(s.history, mkt, ventana).length);
+}
+export function useTermoStreak(mkt: Market, ventana = 10): number {
   return useTelemetryStore((s) => {
-    // recorro el history de atrás para adelante juntando giros RESUELTOS de este mercado
-    const res: (boolean)[] = [];
-    for (let i = s.history.length - 1; i >= 0 && res.length < ventana; i--) {
-      const h = mkt === 'doc' ? s.history[i].docHit : s.history[i].colHit;
-      if (h !== null && h !== undefined) res.push(h);
-    }
-    // res está en orden inverso (más reciente primero)
-    const hits = res.filter((x) => x).length;
-    // racha viva: cuántos errores seguidos desde el más reciente
-    let liveStreak = 0;
-    for (const r of res) { if (!r) liveStreak++; else break; }
-    return { hits, total: res.length, liveStreak };
+    const res = ventanaResuelta(s.history, mkt, ventana);
+    let n = 0;
+    for (const r of res) { if (!r) n++; else break; }
+    return n;
   });
 }
 
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
 }
+
