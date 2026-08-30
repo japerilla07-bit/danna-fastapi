@@ -59,6 +59,8 @@ export interface TelemetrySpin {
   n: number;
   hud: number | null;
   ent: number | null;
+  docHit: boolean | null;   // resultado del pick DOC resuelto en este giro
+  colHit: boolean | null;   // resultado del pick COL resuelto en este giro
   ts: number;
 }
 
@@ -138,6 +140,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
 
     let counters = st.counters;
     let cellReg = st.cellReg;
+    let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
 
     // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
     const pend = st.pending;
@@ -161,14 +164,21 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
           if (colHit !== null) col = bumpCell(col, key, colHit);
           if (doc !== cellReg.doc || col !== cellReg.col) cellReg = { doc, col };
         }
+
+        // Escribir el resultado en la fila del PENDIENTE (última del history)
+        if (st.history.length > 0) {
+          const last = st.history[st.history.length - 1];
+          const actualizada: TelemetrySpin = { ...last, docHit, colHit };
+          histResuelto = [...st.history.slice(0, -1), actualizada];
+        }
       }
     }
 
-    // ── 2) Registrar ESTE giro en history (para mostrar la celda actual) ──
-    const spinRow: TelemetrySpin = { n: p.n, hud: p.hud, ent: p.ent, ts: Date.now() };
-    const history = st.history.length >= HISTORY_CAP
-      ? [...st.history.slice(1), spinRow]
-      : [...st.history, spinRow];
+    // ── 2) Registrar ESTE giro en history (aún sin resolver → docHit/colHit null) ──
+    const spinRow: TelemetrySpin = { n: p.n, hud: p.hud, ent: p.ent, docHit: null, colHit: null, ts: Date.now() };
+    const history = histResuelto.length >= HISTORY_CAP
+      ? [...histResuelto.slice(1), spinRow]
+      : [...histResuelto, spinRow];
 
     // ── 3) ESTE giro pasa a ser el nuevo pendiente ──
     const pending: Pending = { n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick };
@@ -223,6 +233,29 @@ export const useCellRec = (mkt: Market, key: string | null): CellRec | null =>
 
 export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
+
+// ── Termómetro en vivo: cómo venís en los últimos N giros de un mercado ──
+export interface Termometro {
+  hits: number;      // aciertos en la ventana
+  total: number;     // giros resueltos en la ventana
+  liveStreak: number; // racha de errores viva al final de la ventana
+}
+export function useTermometro(mkt: Market, ventana = 10): Termometro {
+  return useTelemetryStore((s) => {
+    // recorro el history de atrás para adelante juntando giros RESUELTOS de este mercado
+    const res: (boolean)[] = [];
+    for (let i = s.history.length - 1; i >= 0 && res.length < ventana; i--) {
+      const h = mkt === 'doc' ? s.history[i].docHit : s.history[i].colHit;
+      if (h !== null && h !== undefined) res.push(h);
+    }
+    // res está en orden inverso (más reciente primero)
+    const hits = res.filter((x) => x).length;
+    // racha viva: cuántos errores seguidos desde el más reciente
+    let liveStreak = 0;
+    for (const r of res) { if (!r) liveStreak++; else break; }
+    return { hits, total: res.length, liveStreak };
+  });
+}
 
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
