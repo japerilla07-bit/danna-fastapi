@@ -21,9 +21,10 @@ import {
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, labelByKey,
-  fusedZone, fusedZoneByKey, liveDeviation,
+  fusedZone, fusedZoneByKey, liveDeviation, currentCellWr, currentCellMaxRun,
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
+import { decidir, type MarketRead } from '@/domain/copilot';
 
 const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: string }> = {
   SANTUARIO: { label: 'SANTUARIO', color: '#34d399', glow: 'rgba(52,211,153,0.60)', dim: 'rgba(52,211,153,0.15)' },
@@ -299,8 +300,58 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 const MarketColumn = memo(MarketColumnImpl);
 
 // ────────────────────────────────────────────────────────────────────────
-// Panel exportado
+// COPILOTO — lee ambos mercados y da UNA decisión de entrada segura
 // ────────────────────────────────────────────────────────────────────────
+
+function useMarketRead(mkt: Market): MarketRead {
+  const hud = useLastHud();
+  const ent = useLastEnt();
+  const key = cellKeyOf(hud, ent);
+  const live = useCellRec(mkt, key);
+  const estado = fusedZone(hud, ent, mkt, live);
+  const cellWr = currentCellWr(hud, ent, mkt);
+  const cellCeiling = currentCellMaxRun(hud, ent, mkt);
+  const termoHits = useTermoHits(mkt, 10);
+  const termoTotal = useTermoTotal(mkt, 10);
+  const termoStreak = useTermoStreak(mkt, 10);
+  return {
+    mkt, estado, cellWr, termoHits, termoTotal, termoStreak,
+    liveStreak: live?.streak ?? 0, cellCeiling,
+  };
+}
+
+function Copilot() {
+  const doc = useMarketRead('doc');
+  const col = useMarketRead('col');
+  const d = decidir(doc, col);
+
+  const color = d.nivel === 'ok' ? '#34d399' : d.nivel === 'precaucion' ? '#fbbf24' : '#f87171';
+  const glow = d.nivel === 'ok' ? 'rgba(52,211,153,0.45)' : d.nivel === 'precaucion' ? 'rgba(251,191,36,0.45)' : 'rgba(248,113,113,0.5)';
+
+  return (
+    <div style={{
+      borderRadius: 13, padding: '13px 15px', marginBottom: 2,
+      background: `linear-gradient(180deg, ${color}18 0%, rgba(2,6,23,0.6) 100%)`,
+      border: `1.5px solid ${color}`, boxShadow: `0 0 24px ${glow}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` }} />
+        <span style={{ fontSize: 8.5, color: '#94a3b8', letterSpacing: '0.24em' }}>COPILOTO · ENTRADA SEGURA</span>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div key={d.titulo}
+          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.22 }}>
+          <div style={{ fontSize: 19, fontWeight: 800, color, letterSpacing: '0.02em', textShadow: `0 0 10px ${glow}` }}>
+            {d.titulo}
+          </div>
+          <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3 }}>{d.motivo}</div>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
 
 export function MatrixPanel() {
   const resetTelemetry = useResetTelemetry();
@@ -337,6 +388,10 @@ export function MatrixPanel() {
           ⟲ RESET MAPA
         </button>
       </div>
+
+      {/* COPILOTO — la decisión de entrada segura, arriba de todo */}
+      <Copilot />
+
       <div style={{ display: 'flex', gap: 11 }}>
         <MarketColumn mkt="doc" />
         <MarketColumn mkt="col" />
@@ -346,3 +401,4 @@ export function MatrixPanel() {
 }
 
 export default MatrixPanel;
+
