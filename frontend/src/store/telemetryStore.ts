@@ -263,4 +263,3 @@ export function useTermoStreak(mkt: Market, ventana = 10): number {
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
 }
-
