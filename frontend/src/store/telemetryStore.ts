@@ -81,6 +81,7 @@ interface Pending {
   ent: number | null;
   docPick: string;
   colPick: string;
+  copSug: 'doc' | 'col' | null;  // qué mercado sugirió el copiloto en este giro (null = esperar/parar)
 }
 
 export interface CellRec {
@@ -95,6 +96,11 @@ interface Counters {
   docStreak: number; docMaxStreak: number; colStreak: number; colMaxStreak: number;
 }
 
+// Marcador propio del COPILOTO: aciertos/errores/racha de lo que D.A.N.N.A. sugiere.
+interface CopScore {
+  hits: number; misses: number; streak: number; maxStreak: number;
+}
+
 type CellReg = { doc: Record<string, CellRec>; col: Record<string, CellRec> };
 
 interface TelemetryState {
@@ -103,7 +109,10 @@ interface TelemetryState {
   pending: Pending | null;
   counters: Counters;
   cellReg: CellReg;
+  copScore: CopScore;
+  copSugNext: 'doc' | 'col' | null;  // lo que el copiloto sugiere para el PRÓXIMO giro
   ingest: (p: IngestPayload) => void;
+  setCopSug: (mkt: 'doc' | 'col' | null) => void;
   reset: () => void;
 }
 
@@ -132,6 +141,12 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   pending: null,
   counters: { ...EMPTY_COUNTERS },
   cellReg: { doc: {}, col: {} },
+  copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+  copSugNext: null,
+
+  setCopSug: (mkt) => {
+    if (get().copSugNext !== mkt) set({ copSugNext: mkt });
+  },
 
   ingest: (p) => {
     const st = get();
@@ -140,6 +155,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
 
     let counters = st.counters;
     let cellReg = st.cellReg;
+    let copScore = st.copScore;
     let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
 
     // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
@@ -149,6 +165,18 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       const docHit = resolvePick(pend.docPick, spin);
       const colHit = resolvePick(pend.colPick, spin);
       const key = cellKeyOf(pend.hud, pend.ent);
+
+      // ── Marcador del COPILOTO: si D.A.N.N.A. sugirió un mercado ese giro,
+      //    ¿acertó? (usa el resultado del mercado que sugirió) ──
+      if (pend.copSug) {
+        const cop = pend.copSug === 'doc' ? docHit : colHit;
+        if (cop !== null) {
+          const cs = { ...st.copScore };
+          if (cop === true) { cs.hits += 1; cs.streak = 0; }
+          else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
+          copScore = cs;
+        }
+      }
 
       if (docHit !== null || colHit !== null) {
         const c = { ...counters };
@@ -180,10 +208,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       ? [...histResuelto.slice(1), spinRow]
       : [...histResuelto, spinRow];
 
-    // ── 3) ESTE giro pasa a ser el nuevo pendiente ──
-    const pending: Pending = { n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick };
+    // ── 3) ESTE giro pasa a ser el nuevo pendiente (con lo que sugirió el copiloto) ──
+    const pending: Pending = { n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick, copSug: st.copSugNext };
 
-    set({ history, lastN: p.n, pending, counters, cellReg });
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore });
   },
 
   reset: () =>
@@ -191,6 +219,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       history: [], lastN: -1, pending: null,
       counters: { ...EMPTY_COUNTERS },
       cellReg: { doc: {}, col: {} },
+      copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+      copSugNext: null,
     }),
 }));
 
@@ -233,6 +263,16 @@ export const useCellRec = (mkt: Market, key: string | null): CellRec | null =>
 
 export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
+
+// ── Marcador del COPILOTO (lo que sugiere D.A.N.N.A.) ──
+export const useSetCopSug = () => useTelemetryStore((s) => s.setCopSug);
+export const useCopHits = (): number => useTelemetryStore((s) => s.copScore.hits);
+export const useCopMisses = (): number => useTelemetryStore((s) => s.copScore.misses);
+export const useCopStreak = (): number => useTelemetryStore((s) => s.copScore.maxStreak);
+export const useCopWr = (): number | null => useTelemetryStore((s) => {
+  const t = s.copScore.hits + s.copScore.misses;
+  return t > 0 ? (s.copScore.hits / t) * 100 : null;
+});
 
 // ── Termómetro en vivo: cómo venís en los últimos N giros de un mercado ──
 // IMPORTANTE: cada selector devuelve un NÚMERO (primitiva), no un objeto.
