@@ -11,13 +11,14 @@
 // Lectura pura del store + la matriz. No decide ni bloquea al motor.
 // ════════════════════════════════════════════════════════════════════════
 
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
-  useTermoHits, useTermoTotal, useTermoStreak, type CellRec,
+  useTermoHits, useTermoTotal, useTermoStreak,
+  useSetCopSug, useCopHits, useCopMisses, useCopStreak, useCopWr, type CellRec,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, labelByKey,
@@ -334,30 +335,68 @@ function Copilot() {
   const doc = useMarketRead('doc');
   const col = useMarketRead('col');
   const d = decidir(doc, col);
+  const setCopSug = useSetCopSug();
 
-  const color = d.nivel === 'ok' ? '#34d399' : d.nivel === 'precaucion' ? '#fbbf24' : '#f87171';
-  const glow = d.nivel === 'ok' ? 'rgba(52,211,153,0.45)' : d.nivel === 'precaucion' ? 'rgba(251,191,36,0.45)' : 'rgba(248,113,113,0.5)';
+  // avisar al store qué sugiere D.A.N.N.A. este giro (para su marcador)
+  useEffect(() => { setCopSug(d.mercado); }, [d.mercado, setCopSug]);
+
+  const copHits = useCopHits();
+  const copMisses = useCopMisses();
+  const copStreak = useCopStreak();
+  const copWr = useCopWr();
+
+  const color = d.nivel === 'ok' ? '#2af5b0' : d.nivel === 'precaucion' ? '#ffc247' : '#ff5c6c';
+  const glow = d.nivel === 'ok' ? 'rgba(42,245,176,0.5)' : d.nivel === 'precaucion' ? 'rgba(255,194,71,0.45)' : 'rgba(255,92,108,0.5)';
+  const clip = 'polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px)';
 
   return (
     <div style={{
-      borderRadius: 13, padding: '13px 15px', marginBottom: 2,
-      background: `linear-gradient(180deg, ${color}18 0%, rgba(2,6,23,0.6) 100%)`,
-      border: `1.5px solid ${color}`, boxShadow: `0 0 24px ${glow}`,
+      padding: '15px 17px', marginBottom: 4, position: 'relative', overflow: 'hidden',
+      clipPath: clip,
+      background: `linear-gradient(135deg, ${color}22 0%, rgba(6,10,20,0.85) 58%)`,
+      border: `1.5px solid ${color}`, boxShadow: `0 0 30px ${glow}, inset 0 0 34px ${color}10`,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` }} />
-        <span style={{ fontSize: 8.5, color: '#94a3b8', letterSpacing: '0.24em' }}>COPILOTO · ENTRADA SEGURA</span>
+      {/* halo de fondo */}
+      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(420px 140px at 0% 0%, ${color}20, transparent 68%)`, pointerEvents: 'none' }} />
+
+      {/* encabezado: escudo + nombre */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, position: 'relative' }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" />
+        </svg>
+        <span style={{ fontSize: 9, color, letterSpacing: '0.24em', fontWeight: 700 }}>D.A.N.N.A. · ENTRADA SEGURA</span>
       </div>
+
+      {/* orden principal */}
       <AnimatePresence mode="wait">
         <motion.div key={d.titulo}
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.22 }}>
-          <div style={{ fontSize: 19, fontWeight: 800, color, letterSpacing: '0.02em', textShadow: `0 0 10px ${glow}` }}>
+          transition={{ duration: 0.22 }} style={{ position: 'relative' }}>
+          <div style={{ fontSize: 23, fontWeight: 800, color, letterSpacing: '0.01em', textShadow: `0 0 14px ${glow}`, lineHeight: 1.1 }}>
             {d.titulo}
           </div>
-          <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3 }}>{d.motivo}</div>
+          <div style={{ fontSize: 12.5, color: '#8092b5', marginTop: 3 }}>{d.motivo}</div>
         </motion.div>
       </AnimatePresence>
+
+      {/* MARCADOR PROPIO DE D.A.N.N.A. — aciertos/errores/efectividad/racha de lo que sugiere */}
+      <div style={{
+        display: 'flex', marginTop: 13, position: 'relative',
+        clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
+        background: 'rgba(6,10,20,0.55)', border: `1px solid ${color}44`,
+      }}>
+        {[
+          { k: 'ACIERTOS', v: copHits, c: '#2af5b0' },
+          { k: 'ERRORES', v: copMisses, c: '#ff5c6c' },
+          { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#eaf2ff' },
+          { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff5c6c' : '#ffc247' },
+        ].map((s, i) => (
+          <div key={s.k} style={{ flex: 1, padding: '8px 10px', borderRight: i < 3 ? '1px solid rgba(90,150,220,0.14)' : 'none' }}>
+            <div style={{ fontSize: 8, color: '#4e5d7e', letterSpacing: '0.12em' }}>{s.k}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 17, fontWeight: 800, color: s.c, marginTop: 1 }}>{s.v}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -367,48 +406,4 @@ export function MatrixPanel() {
   const resetTelemetry = useResetTelemetry();
 
   function handleReset() {
-    if (window.confirm('¿Resetear el mapa? Borra lo acumulado de esta sesión (contador, casillas y rachas). NO toca la matriz base de tus sesiones.')) {
-      resetTelemetry();
-    }
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 2 }}>
-        <span style={{ fontSize: 10, color: '#22d3ee', opacity: 0.7, letterSpacing: '0.3em' }}>
-          CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
-        </span>
-        <button
-          onClick={handleReset}
-          style={{
-            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
-            color: '#94a3b8', cursor: 'pointer',
-            background: 'rgba(2,6,23,0.6)', border: '1px solid rgba(148,163,184,0.28)',
-            borderRadius: 6, padding: '4px 10px',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#f87171';
-            e.currentTarget.style.borderColor = 'rgba(248,113,113,0.55)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = '#94a3b8';
-            e.currentTarget.style.borderColor = 'rgba(148,163,184,0.28)';
-          }}
-        >
-          ⟲ RESET MAPA
-        </button>
-      </div>
-
-      {/* COPILOTO — la decisión de entrada segura, arriba de todo */}
-      <Copilot />
-
-      <div style={{ display: 'flex', gap: 11 }}>
-        <MarketColumn mkt="doc" />
-        <MarketColumn mkt="col" />
-      </div>
-    </div>
-  );
-}
-
-export default MatrixPanel;
-                
+    if (window.confirm('¿Resetear el mapa? Borra lo acumulado de esta sesión (contador, c
