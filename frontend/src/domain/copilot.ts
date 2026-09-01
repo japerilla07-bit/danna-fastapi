@@ -51,11 +51,15 @@ function seguridad(m: MarketRead): number {
   s += estadoScore[m.estado];
 
   // 2. Termómetro en vivo — cómo viene la mesa AHORA
+  //    Peso subido (20→28): el PRESENTE debe pesar casi como el histórico, porque
+  //    el histórico de celda es ruidoso y "hoy viene mejor" es un hecho real. Esto
+  //    hace que el copiloto rote al mercado que viene mejor HOY cuando corresponde,
+  //    en vez de quedarse clavado en el de mejor histórico.
   if (m.termoTotal >= 3) {
     const ratio = m.termoHits / m.termoTotal;
-    if (ratio >= 0.7) s += 20;         // venís bien
-    else if (ratio >= 0.5) s += 8;     // parejo
-    else s -= 15;                       // mesa dura ahora
+    if (ratio >= 0.7) s += 28;         // venís bien
+    else if (ratio >= 0.5) s += 11;    // parejo
+    else s -= 21;                       // mesa dura ahora
     // racha viva en la ventana = peligro inmediato
     if (m.termoStreak >= 3) s -= 25;
     else if (m.termoStreak === 2) s -= 12;
