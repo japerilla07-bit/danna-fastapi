@@ -11,7 +11,7 @@
 // Lectura pura del store + la matriz. No decide ni bloquea al motor.
 // ════════════════════════════════════════════════════════════════════════
 
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
@@ -337,8 +337,10 @@ function Copilot() {
   const d = decidir(doc, col);
   const setCopSug = useSetCopSug();
 
-  // avisar al store qué sugiere D.A.N.N.A. este giro (para su marcador)
-  useEffect(() => { setCopSug(d.mercado); }, [d.mercado, setCopSug]);
+  // Escribir la sugerencia actual de D.A.N.N.A. de forma SINCRÓNICA en cada render,
+  // no con un efecto (que llega tarde). Así el store cuenta exactamente lo que se
+  // ve: si D.A.N.N.A. dice esperar/parar (mercado null), ese giro NO se cuenta.
+  setCopSug(d.mercado);
 
   const copHits = useCopHits();
   const copMisses = useCopMisses();
@@ -403,50 +405,4 @@ function Copilot() {
 
 
 export function MatrixPanel() {
-  const resetTelemetry = useResetTelemetry();
-
-  function handleReset() {
-    if (window.confirm('¿Resetear el mapa? Borra lo acumulado de esta sesión (contador, casillas y rachas). NO toca la matriz base de tus sesiones.')) {
-      resetTelemetry();
-    }
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 2 }}>
-        <span style={{ fontSize: 10, color: '#22d3ee', opacity: 0.7, letterSpacing: '0.3em' }}>
-          CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
-        </span>
-        <button
-          onClick={handleReset}
-          style={{
-            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em',
-            color: '#94a3b8', cursor: 'pointer',
-            background: 'rgba(2,6,23,0.6)', border: '1px solid rgba(148,163,184,0.28)',
-            borderRadius: 6, padding: '4px 10px',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#f87171';
-            e.currentTarget.style.borderColor = 'rgba(248,113,113,0.55)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = '#94a3b8';
-            e.currentTarget.style.borderColor = 'rgba(148,163,184,0.28)';
-          }}
-        >
-          ⟲ RESET MAPA
-        </button>
-      </div>
-
-      {/* COPILOTO — la decisión de entrada segura, arriba de todo */}
-      <Copilot />
-
-      <div style={{ display: 'flex', gap: 11 }}>
-        <MarketColumn mkt="doc" />
-        <MarketColumn mkt="col" />
-      </div>
-    </div>
-  );
-}
-
-export default MatrixPanel;
+  const resetTelemetry = useResetTelemetry()
