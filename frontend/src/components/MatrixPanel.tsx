@@ -57,9 +57,10 @@ function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: Ce
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 2,
-      padding: '8px 11px', borderRadius: 8,
-      background: 'rgba(2,6,23,0.45)', borderLeft: `3px solid ${st.color}`,
-      border: '1px solid rgba(148,163,184,0.10)', borderLeftWidth: 3, borderLeftColor: st.color,
+      padding: '7px 10px',
+      clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px)',
+      background: 'rgba(6,10,20,0.45)',
+      borderLeft: `3px solid ${st.color}`, boxShadow: `inset 0 0 12px ${st.dim}`,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 11, fontWeight: 800, color: st.color, letterSpacing: '0.06em' }}>
@@ -115,12 +116,14 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
   return (
     <div style={{
-      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12,
-      borderRadius: 12, padding: '13px 14px',
-      background: 'linear-gradient(180deg, rgba(15,23,42,0.75) 0%, rgba(2,6,23,0.55) 100%)',
-      border: '1px solid rgba(148,163,184,0.14)',
+      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9,
+      padding: '12px 13px',
+      clipPath: 'polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px)',
+      background: 'linear-gradient(180deg, rgba(13,20,36,0.92) 0%, rgba(6,10,20,0.7) 100%)',
+      border: `1px solid ${st.color}44`,
+      boxShadow: `inset 0 0 24px ${st.dim}`,
     }}>
-      <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.3em', color: '#e2e8f0' }}>{title}</span>
+      <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.18em', color: st.color, textShadow: `0 0 10px ${st.glow}` }}>{title}</span>
 
       {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
       {(() => {
@@ -135,8 +138,9 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         return (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10,
-            padding: '7px 11px', borderRadius: 9,
-            background: 'rgba(2,6,23,0.55)', border: `1px solid ${luz}55`,
+            padding: '7px 11px',
+            clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
+            background: 'rgba(6,10,20,0.55)', border: `1px solid ${luz}55`,
           }}>
             <span style={{ width: 11, height: 11, borderRadius: '50%', background: luz, boxShadow: `0 0 8px ${luz}`, flexShrink: 0 }} />
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -157,34 +161,36 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
       {/* 1 · SESIÓN — marcador de la partida */}
       <div style={{
-        display: 'flex', flexDirection: 'column', gap: 5,
-        padding: '11px 13px', borderRadius: 10,
-        background: 'rgba(2,6,23,0.65)', border: '1px solid rgba(34,211,238,0.22)',
+        display: 'flex', flexDirection: 'column', gap: 4,
+        padding: '10px 12px',
+        clipPath: 'polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)',
+        background: 'rgba(6,10,20,0.6)', border: '1px solid rgba(34,211,238,0.22)',
       }}>
-        <span style={{ fontSize: 9, color: '#22d3ee', letterSpacing: '0.24em', opacity: 0.85 }}>
+        <span style={{ fontSize: 8.5, color: '#22d3ee', letterSpacing: '0.2em', opacity: 0.85 }}>
           CÓMO VENÍS HOY
         </span>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 18, fontFamily: 'monospace' }}>
-          <span style={{ fontSize: 28, fontWeight: 800, color: '#4ade80', lineHeight: 1 }}>✓ {gHits}</span>
-          <span style={{ fontSize: 28, fontWeight: 800, color: '#f87171', lineHeight: 1 }}>✗ {gMiss}</span>
-          <span style={{ fontSize: 16, color: '#94a3b8', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, fontFamily: 'monospace' }}>
+          <span style={{ fontSize: 26, fontWeight: 800, color: '#2af5b0', lineHeight: 1 }}>✓ {gHits}</span>
+          <span style={{ fontSize: 26, fontWeight: 800, color: '#ff5c6c', lineHeight: 1 }}>✗ {gMiss}</span>
+          <span style={{ fontSize: 16, color: '#8092b5', marginLeft: 'auto' }}>
             {gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}
           </span>
         </div>
         <span style={{
-          fontFamily: 'monospace', fontSize: 12,
-          color: gMax >= 6 ? '#f87171' : gMax >= 4 ? '#fbbf24' : '#94a3b8',
+          fontFamily: 'monospace', fontSize: 11.5,
+          color: gMax >= 6 ? '#ff5c6c' : gMax >= 4 ? '#ffc247' : '#8092b5',
         }}>
           peor racha de errores hoy: <b style={{ color: gMax >= 4 ? undefined : '#cbd5e1' }}>{gMax}</b>
-          {gCur > 0 && <span style={{ color: '#fbbf24' }}> · venís perdiendo {gCur} seguidas</span>}
+          {gCur > 0 && <span style={{ color: '#ffc247' }}> · venís perdiendo {gCur} seguidas</span>}
         </span>
       </div>
 
       {/* 2 · ESTÁS AQUÍ — celda actual + su reputación (MAPA) */}
       <div style={{
-        borderRadius: 10, padding: '11px 13px',
-        background: st.dim, border: `1.5px solid ${st.color}`,
-        boxShadow: `0 0 20px ${st.dim}`,
+        padding: '10px 12px',
+        clipPath: 'polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)',
+        background: st.dim, border: `1px solid ${st.color}`,
+        boxShadow: `0 0 18px ${st.dim}`,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 9, color: st.color, letterSpacing: '0.2em', opacity: 0.9 }}>▸ ESTÁS AQUÍ</span>
@@ -280,9 +286,13 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
       </div>
 
       {/* 3 · INSTRUCCIÓN */}
-      <div style={{ padding: '9px 12px', borderRadius: 8, background: 'rgba(2,6,23,0.5)', borderLeft: `3px solid ${st.color}` }}>
-        <span style={{ fontSize: 8, color: '#64748b', letterSpacing: '0.18em' }}>QUÉ HACER</span>
-        <div style={{ fontSize: 13, fontWeight: 700, color: st.color, marginTop: 2 }}>{INSTRUCCION[estado]}</div>
+      <div style={{
+        padding: '9px 12px',
+        clipPath: 'polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px)',
+        background: `${st.dim}`, borderLeft: `3px solid ${st.color}`,
+      }}>
+        <span style={{ fontSize: 8, color: '#8092b5', letterSpacing: '0.18em' }}>QUÉ HACER</span>
+        <div style={{ fontSize: 13, fontWeight: 700, color: st.color, marginTop: 2, textShadow: `0 0 8px ${st.glow}` }}>{INSTRUCCION[estado]}</div>
       </div>
 
       {/* 4 · CELDAS VISITADAS — en palabras */}
@@ -401,4 +411,4 @@ export function MatrixPanel() {
 }
 
 export default MatrixPanel;
-
+                
