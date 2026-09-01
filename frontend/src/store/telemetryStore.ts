@@ -110,7 +110,6 @@ interface TelemetryState {
   counters: Counters;
   cellReg: CellReg;
   copScore: CopScore;
-  copSugNext: 'doc' | 'col' | null;  // lo que el copiloto sugiere para el PRÓXIMO giro
   ingest: (p: IngestPayload) => void;
   setCopSug: (mkt: 'doc' | 'col' | null) => void;
   reset: () => void;
@@ -135,6 +134,12 @@ function bumpCell(reg: Record<string, CellRec>, key: string, hit: boolean): Reco
 // Store
 // ────────────────────────────────────────────────────────────────────────
 
+// Sugerencia actual del copiloto (ref sincrónica a nivel módulo). El copiloto la
+// escribe en cada render; el ingest la lee en el instante exacto de registrar el
+// giro pendiente. Así el marcador cuenta SOLO lo que D.A.N.N.A. mostraba en ese
+// giro — si decía "esperar"/"parar" (null), ese giro no se cuenta.
+let copSugRef: 'doc' | 'col' | null = null;
+
 export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   history: [],
   lastN: -1,
@@ -142,10 +147,12 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   counters: { ...EMPTY_COUNTERS },
   cellReg: { doc: {}, col: {} },
   copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
-  copSugNext: null,
 
   setCopSug: (mkt) => {
-    if (get().copSugNext !== mkt) set({ copSugNext: mkt });
+    // ref sincrónica: la sugerencia actual del copiloto, disponible al instante
+    // para el ingest, sin depender del timing de un useEffect (evita contar
+    // giros donde D.A.N.N.A. decía "esperar").
+    copSugRef = mkt;
   },
 
   ingest: (p) => {
@@ -209,19 +216,20 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       : [...histResuelto, spinRow];
 
     // ── 3) ESTE giro pasa a ser el nuevo pendiente (con lo que sugirió el copiloto) ──
-    const pending: Pending = { n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick, copSug: st.copSugNext };
+    const pending: Pending = { n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick, copSug: copSugRef };
 
     set({ history, lastN: p.n, pending, counters, cellReg, copScore });
   },
 
-  reset: () =>
+  reset: () => {
     set({
       history: [], lastN: -1, pending: null,
       counters: { ...EMPTY_COUNTERS },
       cellReg: { doc: {}, col: {} },
       copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
-      copSugNext: null,
-    }),
+    });
+    copSugRef = null;
+  },
 }));
 
 // ════════════════════════════════════════════════════════════════════════
@@ -302,4 +310,4 @@ export function useTermoStreak(mkt: Market, ventana = 10): number {
 
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
-}
+            }
