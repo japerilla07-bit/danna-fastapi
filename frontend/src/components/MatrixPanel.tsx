@@ -339,7 +339,7 @@ function Copilot() {
   // Recorre cada giro resuelto, reconstruye qué habría sugerido D.A.N.N.A. en ESE
   // giro, y cuenta SOLO si sugirió entrar (no cuenta esperar/parar).
   const history = useHistory();
-  const { copHits, copMisses, copStreak } = useMemo(() => {
+  const { copHits, copMisses, copStreak, copLive } = useMemo(() => {
     // reconstruir estado en vivo giro a giro
     const termo: Record<Market, number[]> = { doc: [], col: [] };
     const cellReg: Record<Market, Record<string, { h: number; m: number; streak: number; mx: number }>> = { doc: {}, col: {} };
@@ -388,7 +388,7 @@ function Copilot() {
         }
       });
     }
-    return { copHits: hits, copMisses: misses, copStreak: maxStreak };
+    return { copHits: hits, copMisses: misses, copStreak: maxStreak, copLive: streak };
   }, [history]);
 
   const copWr = (copHits + copMisses) > 0 ? (copHits / (copHits + copMisses)) * 100 : null;
@@ -427,9 +427,9 @@ function Copilot() {
         </motion.div>
       </AnimatePresence>
 
-      {/* MARCADOR PROPIO DE D.A.N.N.A. — aciertos/errores/efectividad/racha de lo que sugiere */}
+      {/* MARCADOR PROPIO DE D.A.N.N.A. — aciertos/errores/efectividad/racha */}
       <div style={{
-        display: 'flex', marginTop: 13, position: 'relative',
+        display: 'flex', marginTop: 13, position: 'relative', flexWrap: 'wrap',
         clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
         background: 'rgba(6,10,20,0.55)', border: `1px solid ${color}44`,
       }}>
@@ -437,11 +437,12 @@ function Copilot() {
           { k: 'ACIERTOS', v: copHits, c: '#2af5b0' },
           { k: 'ERRORES', v: copMisses, c: '#ff5c6c' },
           { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#eaf2ff' },
+          { k: 'RACHA AHORA', v: copLive, c: copLive >= 3 ? '#ff5c6c' : copLive >= 1 ? '#ffc247' : '#2af5b0' },
           { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff5c6c' : '#ffc247' },
-        ].map((s, i) => (
-          <div key={s.k} style={{ flex: 1, padding: '8px 10px', borderRight: i < 3 ? '1px solid rgba(90,150,220,0.14)' : 'none' }}>
-            <div style={{ fontSize: 8, color: '#4e5d7e', letterSpacing: '0.12em' }}>{s.k}</div>
-            <div style={{ fontFamily: 'monospace', fontSize: 17, fontWeight: 800, color: s.c, marginTop: 1 }}>{s.v}</div>
+        ].map((s, i, arr) => (
+          <div key={s.k} style={{ flex: '1 1 20%', minWidth: 64, padding: '9px 11px', borderRight: i < arr.length - 1 ? '1px solid rgba(90,150,220,0.14)' : 'none' }}>
+            <div style={{ fontSize: 8.5, color: '#8092b5', letterSpacing: '0.1em' }}>{s.k}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 19, fontWeight: 800, color: s.c, marginTop: 2 }}>{s.v}</div>
           </div>
         ))}
       </div>
