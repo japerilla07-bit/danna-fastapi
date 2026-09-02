@@ -272,6 +272,9 @@ export const useCellRec = (mkt: Market, key: string | null): CellRec | null =>
 export const useIngestSpin = () => useTelemetryStore((s) => s.ingest);
 export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
 
+// History completo (para recalcular el marcador del copiloto sin depender de timing).
+export const useHistory = (): TelemetrySpin[] => useTelemetryStore((s) => s.history);
+
 // ── Marcador del COPILOTO (lo que sugiere D.A.N.N.A.) ──
 export const useSetCopSug = () => useTelemetryStore((s) => s.setCopSug);
 export const useCopHits = (): number => useTelemetryStore((s) => s.copScore.hits);
@@ -310,4 +313,4 @@ export function useTermoStreak(mkt: Market, ventana = 10): number {
 
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
-            }
+}
