@@ -91,12 +91,15 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
     };
   }
 
-  // ── Ningún mercado seguro para entrar, pero no crítico ──
-  if (mejorS < 10) {
+  // ── No hay ningún mercado REALMENTE bueno → esperar (no entrar en "el menos malo") ──
+  //    Umbral subido de 10 a 25: entrar solo cuando hay una opción sólida, no la
+  //    menos mala de dos flojas. Medido: esas entradas rendían 59% y a veces caían
+  //    dentro de rachas; evitarlas corta rachas de 4/6/7 sin perder WR ni volumen.
+  if (mejorS < 25) {
     return {
       mercado: null, accion: 'ESPERAR', exposicion: 'CERO',
       titulo: '⏸ ESPERÁ una mejor',
-      motivo: `Ni ${nombre('doc')} ni ${nombre('col')} están en zona segura. Aguantá.`,
+      motivo: `Ni ${nombre('doc')} ni ${nombre('col')} están en zona sólida. No entres en la menos mala.`,
       nivel: 'precaucion',
     };
   }
