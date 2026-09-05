@@ -115,7 +115,11 @@ interface TelemetryState {
   reset: () => void;
 }
 
-export const HISTORY_CAP = 300;
+// Cap alto: una sesión son ~500 giros. Con 2000 el history NUNCA se recorta
+// durante una sesión, así el marcador del copiloto (peor racha incluida) se
+// calcula sobre TODOS los giros y nunca "baja mágicamente" por perder los viejos.
+// El reset limpia todo al empezar una mesa nueva.
+export const HISTORY_CAP = 2000;
 
 const EMPTY_COUNTERS: Counters = {
   docHits: 0, docMisses: 0, colHits: 0, colMisses: 0,
