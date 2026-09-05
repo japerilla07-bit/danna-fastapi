@@ -50,26 +50,21 @@ function seguridad(m: MarketRead): number {
   };
   s += estadoScore[m.estado];
 
-  // 2. Termómetro en vivo — cómo viene la mesa AHORA
-  //    Peso subido (20→28): el PRESENTE debe pesar casi como el histórico, porque
-  //    el histórico de celda es ruidoso y "hoy viene mejor" es un hecho real. Esto
-  //    hace que el copiloto rote al mercado que viene mejor HOY cuando corresponde,
-  //    en vez de quedarse clavado en el de mejor histórico.
+  // 2. Termómetro en vivo — cómo viene la mesa AHORA (sin la racha, ver punto 3)
   if (m.termoTotal >= 3) {
     const ratio = m.termoHits / m.termoTotal;
     if (ratio >= 0.7) s += 28;         // venís bien
     else if (ratio >= 0.5) s += 11;    // parejo
     else s -= 21;                       // mesa dura ahora
-    // racha viva en la ventana = peligro inmediato
-    if (m.termoStreak >= 3) s -= 25;
-    else if (m.termoStreak === 2) s -= 12;
   }
 
-  // 3. Racha viva de la celda vs su techo — peligro de exceso
-  if (m.cellCeiling && m.cellCeiling > 0) {
-    if (m.liveStreak >= m.cellCeiling) s -= 30;      // ya superaste lo histórico: anómalo
-    else if (m.liveStreak === m.cellCeiling - 1) s -= 12; // al borde del techo
-  }
+  // 3. Racha viva de la celda — penaliza venir perdiendo AHORA, una sola vez.
+  //    Corrección: antes se penalizaba dos veces (termoStreak + racha de celda,
+  //    construidas de los mismos giros) y además contra el "techo histórico", que
+  //    NO predice el peligro futuro (la ruleta es independiente). Ahora se usa solo
+  //    la racha viva real de la celda, que es un hecho del presente.
+  if (m.liveStreak >= 3) s -= 25;
+  else if (m.liveStreak === 2) s -= 12;
   return s;
 }
 
@@ -77,7 +72,9 @@ function seguridad(m: MarketRead): number {
 export function decidir(doc: MarketRead, col: MarketRead): Decision {
   const sDoc = seguridad(doc);
   const sCol = seguridad(col);
-  const mejor = sDoc >= sCol ? doc : col;
+  // Empate: en vez de favorecer siempre docenas, desempata por el mejor WR de celda.
+  const docGana = sDoc > sCol || (sDoc === sCol && (doc.cellWr ?? 0) >= (col.cellWr ?? 0));
+  const mejor = docGana ? doc : col;
   const mejorS = Math.max(sDoc, sCol);
   const nombre = (mkt: Market) => (mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS');
 
@@ -107,17 +104,15 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
   // ── Hay un mercado jugable: graduar la exposición según seguridad ──
   const m = mejor;
   const otro = m.mkt === 'doc' ? col : doc;
-  const rota = mejor === (sDoc >= sCol ? doc : col) && Math.abs(sDoc - sCol) > 15;
+  const rota = Math.abs(sDoc - sCol) > 15;
 
   let accion: Accion, exposicion: Exposicion, nivel: Decision['nivel'];
   if (mejorS >= 45) { accion = 'ENTRAR'; exposicion = 'NORMAL'; nivel = 'ok'; }
   else if (mejorS >= 28) { accion = 'ENTRAR'; exposicion = 'REDUCIDA'; nivel = 'ok'; }
   else { accion = 'SUAVE'; exposicion = 'MÍNIMA'; nivel = 'precaucion'; }
 
-  // Ajuste por peligro inminente: si la racha viva está al borde del techo, frená la mano
-  if (m.cellCeiling && m.liveStreak >= m.cellCeiling - 1 && m.cellCeiling > 0) {
-    exposicion = 'MÍNIMA'; nivel = 'precaucion';
-  }
+  // Si venís con 2+ errores en esta celda, bajá la mano (racha viva, no techo histórico).
+  if (m.liveStreak >= 2) { exposicion = 'MÍNIMA'; nivel = 'precaucion'; }
 
   const motivoRotacion = rota ? ` (mejor que ${nombre(otro.mkt)} ahora)` : '';
   const expoTxt: Record<Exposicion, string> = {
