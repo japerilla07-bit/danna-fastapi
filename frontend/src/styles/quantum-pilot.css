@@ -32,7 +32,8 @@
 .qp-overlay {
   position: fixed;
   z-index: 9999;
-  width: 760px;
+  width: 1100px;
+  max-width: 97vw;
   display: flex; flex-direction: column;
   border-radius: 6px;
   overflow: hidden;
@@ -855,4 +856,3 @@
 
 /* Ampliar columna stake-base input para que el L1 no se vea apretado */
 .qp-stake-cur { min-width: 24px; text-align: center; }
-
