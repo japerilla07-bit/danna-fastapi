@@ -112,7 +112,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
   const visited = Object.entries(reg)
     .sort((a, b) => b[1].maxStreak - a[1].maxStreak || b[1].misses - a[1].misses)
-    .slice(0, 6);
+    .slice(0, 3);
 
   return (
     <div style={{
@@ -125,6 +125,8 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
     }}>
       <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.18em', color: st.color, textShadow: `0 0 10px ${st.glow}` }}>{title}</span>
 
+      {/* Fila superior: termómetro + cómo venís hoy, lado a lado (menos altura) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
       {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
       {(() => {
         const hits = termoHits, total = termoTotal, liveStreak = termoStreak;
@@ -184,6 +186,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
           {gCur > 0 && <span style={{ color: '#ffc247' }}> · venís perdiendo {gCur} seguidas</span>}
         </span>
       </div>
+      </div>{/* cierre grilla superior */}
 
       {/* 2 · ESTÁS AQUÍ — celda actual + su reputación (MAPA) */}
       <div style={{
