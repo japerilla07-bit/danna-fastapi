@@ -71,15 +71,14 @@ function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: Ce
         </span>
       </div>
       <span style={{ fontSize: 9.5, color: '#cbd5e1' }}>
-        <span style={{ color: '#4ade80' }}>{rec.hits}✓</span>
+        <span style={{ color: '#4ade80' }}>{rec.hits} aciertos</span>
         {' · '}
-        <span style={{ color: '#f87171' }}>{rec.misses}✗</span>
-        {' · '}
-        <span style={{ color: '#94a3b8' }}>
-          racha <b style={{ color: rec.streak >= 3 ? '#f87171' : rec.streak >= 1 ? '#fbbf24' : '#4ade80' }}>{rec.streak}</b>
-          {' / '}
-          <b style={{ color: rec.maxStreak >= 4 ? '#f87171' : '#cbd5e1' }}>{rec.maxStreak}</b>
-        </span>
+        <span style={{ color: '#f87171' }}>{rec.misses} errores</span>
+      </span>
+      <span style={{ fontSize: 9.5, color: '#94a3b8', marginTop: 1 }}>
+        racha ahora <b style={{ color: rec.streak >= 3 ? '#f87171' : rec.streak >= 1 ? '#fbbf24' : '#4ade80' }}>{rec.streak}</b>
+        {' · peor '}
+        <b style={{ color: rec.maxStreak >= 4 ? '#f87171' : '#cbd5e1' }}>{rec.maxStreak}</b>
       </span>
     </div>
   );
@@ -134,10 +133,10 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         // semáforo: verde 7+/10, amarillo 5-6, rojo <=4 (sobre giros resueltos)
         const ratio = total > 0 ? hits / total : 0;
         const luz = total < 3 ? '#64748b' : ratio >= 0.7 ? '#34d399' : ratio >= 0.5 ? '#fbbf24' : '#f87171';
-        const txt = total < 3 ? 'datos…'
-          : ratio >= 0.7 ? 'BIEN'
+        const txt = total < 3 ? 'juntando datos…'
+          : ratio >= 0.7 ? 'VENÍS BIEN — aprovechá'
           : ratio >= 0.5 ? 'PAREJO'
-          : 'DURA';
+          : 'MESA DURA — aflojá o rotá';
         return (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
@@ -147,7 +146,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
           }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: luz, boxShadow: `0 0 8px ${luz}`, flexShrink: 0 }} />
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>ÚLTIMOS {total}</span>
+              <span style={{ fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>ÚLTIMOS {total} GIROS</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: luz, fontFamily: 'monospace' }}>
                 {total > 0 ? `${hits}/${total}` : '—'}
                 <span style={{ fontSize: 9.5, fontWeight: 600, color: '#cbd5e1', marginLeft: 6 }}>{txt}</span>
@@ -155,7 +154,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
             </div>
             {liveStreak >= 2 && (
               <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, color: '#f87171', fontFamily: 'monospace', flexShrink: 0 }}>
-                {liveStreak} ✗
+                {liveStreak} seguidas ✗
               </span>
             )}
           </div>
@@ -170,15 +169,23 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         background: 'rgba(6,10,20,0.6)', border: '1px solid rgba(34,211,238,0.22)',
       }}>
         <span style={{ fontSize: 7.5, color: '#22d3ee', letterSpacing: '0.1em', opacity: 0.85 }}>
-          SESIÓN HOY
+          CÓMO VENÍS HOY
         </span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, fontFamily: 'monospace' }}>
-          <span style={{ fontSize: 18, fontWeight: 800, color: '#2af5b0', lineHeight: 1 }}>✓{gHits}</span>
-          <span style={{ fontSize: 18, fontWeight: 800, color: '#ff5c6c', lineHeight: 1 }}>✗{gMiss}</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: '#2af5b0', lineHeight: 1 }}>✓ {gHits}</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: '#ff5c6c', lineHeight: 1 }}>✗ {gMiss}</span>
           <span style={{ fontSize: 13, color: '#8092b5', marginLeft: 'auto' }}>
             {gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}
           </span>
         </div>
+        <span style={{
+          fontFamily: 'monospace', fontSize: 10,
+          color: gMax >= 6 ? '#ff5c6c' : gMax >= 4 ? '#ffc247' : '#8092b5',
+          marginTop: 1
+        }}>
+          peor racha de errores hoy: <b style={{ color: gMax >= 4 ? undefined : '#cbd5e1' }}>{gMax}</b>
+          {gCur > 0 && <span style={{ color: '#ffc247' }}> · venís perdiendo {gCur} seguidas</span>}
+        </span>
       </div>
       </div>{/* cierre grilla superior */}
 
@@ -190,14 +197,14 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         boxShadow: `0 0 18px ${st.dim}`,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ fontSize: 8.5, color: st.color, letterSpacing: '0.1em', opacity: 0.9 }}>▸ AQUÍ</span>
+          <span style={{ fontSize: 8.5, color: st.color, letterSpacing: '0.1em', opacity: 0.9 }}>▸ ESTÁS AQUÍ</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {deviation && (
               <span style={{
                 fontSize: 8, fontWeight: 700, letterSpacing: '0.05em',
                 color: deviation === 'peor' ? '#f87171' : '#4ade80',
               }}>
-                {deviation === 'peor' ? '▼ peor' : '▲ mejor'}
+                {deviation === 'peor' ? '▼ hoy peor' : '▲ hoy mejor'}
               </span>
             )}
             <AnimatePresence mode="wait">
@@ -216,22 +223,22 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, fontFamily: 'monospace' }}>
-          <span style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 }}>H:{hud ?? '—'}</span>
-          <span style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 }}>E:{ent ?? '—'}</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 }}>HUD {hud ?? '—'}</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 }}>ENT {ent ?? '—'}</span>
         </div>
 
         {/* MAPA — reputación histórica de la celda, en palabras */}
         <div style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${st.color}30` }}>
           <span style={{ fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>
-            HISTÓRICO DE CASILLA
+            HISTÓRICO DE ESTA CASILLA
           </span>
           {map ? (
             <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, fontFamily: 'monospace' }}>
               acierto <b style={{ color: '#e2e8f0' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
-              {' · soporta '}
+              {'  ·  aguanta hasta '}
               <b style={{ color: map.maxRun >= 5 ? '#f87171' : '#e2e8f0' }}>{map.maxRun}</b>
-              {' err'}
-              <span style={{ color: '#64748b' }}>{' '}({map.n})</span>
+              {' errores'}
+              <span style={{ color: '#64748b' }}>{'  '}({map.n} giros)</span>
             </div>
           ) : (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontFamily: 'monospace' }}>
@@ -241,12 +248,12 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
           {/* HOY EN ESTA CASILLA — siempre visible: lo que llevás hoy en esta celda */}
           <div style={{ marginTop: 4 }}>
-            <div style={{ fontSize: 11, color: '#cbd5e1', fontFamily: 'monospace' }}>
-              <span style={{ color: '#64748b', fontSize: 7.5, letterSpacing: '0.1em' }}>HOY: </span>
+            <span style={{ fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>HOY EN ESTA CASILLA</span>
+            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 1, fontFamily: 'monospace' }}>
               <span style={{ color: '#4ade80' }}>{live?.hits ?? 0} ✓</span>
-              {' '}
+              {'  '}
               <span style={{ color: '#f87171' }}>{live?.misses ?? 0} ✗</span>
-              <span style={{ color: '#64748b' }}>{' · racha '}</span>
+              <span style={{ color: '#64748b' }}>{'  ·  racha ahora '}</span>
               <b style={{ color: (live?.streak ?? 0) >= 3 ? '#f87171' : (live?.streak ?? 0) >= 1 ? '#fbbf24' : '#4ade80' }}>
                 {live?.streak ?? 0}
               </b>
@@ -269,13 +276,13 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>EN VIVO</span>
                   <div style={{ fontSize: 11, fontFamily: 'monospace' }}>
-                    racha: <b style={{ color }}>{cur}</b>
-                    {techo > 0 && <span style={{ color: '#64748b', fontSize: 10 }}>/{techo}</span>}
+                    racha de errores ahora: <b style={{ color }}>{cur}</b>
+                    {techo > 0 && <span style={{ color: '#64748b', fontSize: 10 }}>{'  '}/ techo {techo}</span>}
                   </div>
                 </div>
                 {anomalo && (
                   <div style={{ fontSize: 9, color: '#f87171', fontWeight: 700, marginTop: 1 }}>
-                    ⚠ techo superado — considerá salir
+                    ⚠ igualaste/superaste el techo histórico — anómalo, considerá salir
                   </div>
                 )}
               </div>
@@ -290,14 +297,15 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         clipPath: 'polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px)',
         background: `${st.dim}`, borderLeft: `3px solid ${st.color}`,
       }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: st.color, textShadow: `0 0 8px ${st.glow}` }}>{INSTRUCCION[estado]}</div>
+        <span style={{ fontSize: 7.5, color: '#8092b5', letterSpacing: '0.1em' }}>QUÉ HACER</span>
+        <div style={{ fontSize: 11, fontWeight: 700, color: st.color, textShadow: `0 0 8px ${st.glow}`, marginTop: 1 }}>{INSTRUCCION[estado]}</div>
       </div>
 
       {/* 4 · CELDAS VISITADAS — en palabras */}
       {visited.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em', paddingLeft: 2 }}>
-            PASASTE HOY · {Object.keys(reg).length}
+            CASILLAS QUE PASASTE HOY · {Object.keys(reg).length}
           </span>
           {visited.map(([k, rec]) => <VisitedRow key={k} mkt={mkt} cKey={k} rec={rec} />)}
         </div>
@@ -435,8 +443,8 @@ function Copilot() {
           { k: 'ACIERTOS', v: copHits, c: '#2af5b0' },
           { k: 'ERRORES', v: copMisses, c: '#ff5c6c' },
           { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#eaf2ff' },
-          { k: 'RACHA', v: copLive, c: copLive >= 3 ? '#ff5c6c' : copLive >= 1 ? '#ffc247' : '#2af5b0' },
-          { k: 'PEOR', v: copStreak, c: copStreak >= 4 ? '#ff5c6c' : '#ffc247' },
+          { k: 'RACHA AHORA', v: copLive, c: copLive >= 3 ? '#ff5c6c' : copLive >= 1 ? '#ffc247' : '#2af5b0' },
+          { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff5c6c' : '#ffc247' },
         ].map((s, i, arr) => (
           <div key={s.k} style={{ flex: '1', padding: '4px 6px', borderRight: i < arr.length - 1 ? '1px solid rgba(90,150,220,0.14)' : 'none' }}>
             <div style={{ fontSize: 7.5, color: '#8092b5', letterSpacing: '0.05em' }}>{s.k}</div>
@@ -462,7 +470,7 @@ export function MatrixPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 2 }}>
         <span style={{ fontSize: 9, color: '#22d3ee', opacity: 0.7, letterSpacing: '0.2em' }}>
-          MANDO · MATRIZ HUD × ENTROPÍA
+          CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
         </span>
         <button
           onClick={handleReset}
@@ -481,7 +489,7 @@ export function MatrixPanel() {
             e.currentTarget.style.borderColor = 'rgba(148,163,184,0.28)';
           }}
         >
-          ⟲ RESET
+          ⟲ RESET MAPA
         </button>
       </div>
 
