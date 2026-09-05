@@ -1,14 +1,18 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — MatrixPanel: centro de mando (v3 · legible)
+// D.A.N.N.A. — MatrixPanel · COCKPIT (v4 · cabina)
 // ════════════════════════════════════════════════════════════════════════
 //
-// Dos preguntas, dos lugares:
-//   • SESIÓN (arriba, grande) = cómo venís HOY en total por mercado.
-//   • CELDA (MAPA) = reputación histórica de la casilla donde estás.
-// Se quitó el "HOY por celda" (casi siempre 0/0, no aportaba).
-// Celdas visitadas escritas en palabras (estado con nombre + rango + conteo).
+// Reemplazo COMPLETO de MatrixPanel.tsx. Misma lógica que v3, solo cambia
+// la cara (presentación):
+//   - Lectura pura del store + la matriz. No decide ni bloquea al motor.
+//   - Todos los hooks y cálculos se conservan VERBATIM (store, zoneMatrix,
+//     copilot.decidir, marcador reconstruido del history).
+//   - Estética de cabina, jerarquía por importancia, y el medidor EN VIVO
+//     racha/techo como pieza estrella (protege el bankroll).
 //
-// Lectura pura del store + la matriz. No decide ni bloquea al motor.
+// Exporta { MatrixPanel } y default, igual que el original: ningún otro
+// import cambia. ANTES de pegar: guardá una copia del MatrixPanel.tsx
+// original por si querés volver atrás.
 // ════════════════════════════════════════════════════════════════════════
 
 import { memo, useMemo } from 'react';
@@ -25,6 +29,17 @@ import {
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
 import { decidir, type MarketRead } from '@/domain/copilot';
+
+// ── Tokens de cabina (solo pintura) ──────────────────────────────────────
+const FONT_NUM = "'JetBrains Mono', ui-monospace, monospace";
+const FONT_DISP = "'Rajdhani', 'Chakra Petch', system-ui, sans-serif";
+const BG_DEEP = '#05070d';
+const INK = '#dbe6f5';
+const INK_DIM = '#64748b';
+const INK_MUT = '#8092b5';
+const ICE = '#5fd0ff';
+const clip = (r: number) =>
+  `polygon(${r}px 0, 100% 0, 100% calc(100% - ${r}px), calc(100% - ${r}px) 100%, 0 100%, 0 ${r}px)`;
 
 const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: string }> = {
   SANTUARIO: { label: 'SANTUARIO', color: '#34d399', glow: 'rgba(52,211,153,0.60)', dim: 'rgba(52,211,153,0.15)' },
@@ -44,29 +59,70 @@ const INSTRUCCION: Record<Zone, string> = {
   NEUTRA:    'Sin registro suficiente — a criterio.',
 };
 
-// "HUD 50-54 · ENT 25-29" a partir de la clave
+// Etiqueta de operabilidad (solo chrome — deriva del estado ya calculado)
+const OP: Record<Zone, string> = {
+  SANTUARIO: 'OPERAR', VERDE: 'OPERAR', PROBE: 'PROBE',
+  TOXICA: 'ESPERAR', AGUJERO: 'NO OPERAR', NEUTRA: 'SIN DATOS',
+};
+
 const rangeText = (key: string) => labelByKey(key);
+
+// ── Esquinas de targeting (decorativo, por color de zona) ─────────────────
+function Brackets({ color, on }: { color: string; on: boolean }) {
+  if (!on) return null;
+  const base: React.CSSProperties = { position: 'absolute', width: 13, height: 13, border: `2px solid ${color}`, pointerEvents: 'none', filter: `drop-shadow(0 0 5px ${color})` };
+  return (
+    <>
+      <span style={{ ...base, top: 7, left: 7, borderRight: 'none', borderBottom: 'none' }} />
+      <span style={{ ...base, top: 7, right: 7, borderLeft: 'none', borderBottom: 'none' }} />
+      <span style={{ ...base, bottom: 7, left: 7, borderRight: 'none', borderTop: 'none' }} />
+      <span style={{ ...base, bottom: 7, right: 7, borderLeft: 'none', borderTop: 'none' }} />
+    </>
+  );
+}
+
+// ── Medidor EN VIVO racha vs techo (pieza estrella) ───────────────────────
+function StreakGauge({ cur, techo, color }: { cur: number; techo: number; color: string }) {
+  const n = Math.max(techo, 1);
+  return (
+    <div style={{ display: 'flex', gap: 4, marginTop: 7 }}>
+      {Array.from({ length: n }, (_, i) => {
+        const on = i < cur;
+        const isCap = i === n - 1;
+        return (
+          <span key={i} style={{
+            flex: 1, height: 13, borderRadius: 3,
+            background: on ? color : 'rgba(15,22,34,0.9)',
+            border: `1px solid ${on ? color : isCap ? 'rgba(120,150,180,0.5)' : 'rgba(90,120,150,0.22)'}`,
+            borderStyle: isCap && !on ? 'dashed' : 'solid',
+            boxShadow: on ? `0 0 7px ${color}88` : 'none',
+            transition: 'all 250ms',
+          }} />
+        );
+      })}
+    </div>
+  );
+}
 
 // ────────────────────────────────────────────────────────────────────────
 // Celda visitada — en palabras
 // ────────────────────────────────────────────────────────────────────────
-
 function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: CellRec }) {
   const estado = fusedZoneByKey(cKey, mkt, rec);
   const st = STYLE[estado];
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 2,
-      padding: '7px 10px',
+      padding: '7px 11px',
       clipPath: 'polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px)',
-      background: 'rgba(6,10,20,0.45)',
+      background: 'rgba(6,10,20,0.55)',
       borderLeft: `3px solid ${st.color}`, boxShadow: `inset 0 0 12px ${st.dim}`,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 11, fontWeight: 800, color: st.color, letterSpacing: '0.06em' }}>
           {st.label}
         </span>
-        <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>
+        <span style={{ fontSize: 10, color: '#94a3b8', fontFamily: FONT_NUM }}>
           {rangeText(cKey)}
         </span>
       </div>
@@ -88,8 +144,8 @@ const VisitedRow = memo(VisitedRowImpl);
 // ────────────────────────────────────────────────────────────────────────
 // Columna de mercado
 // ────────────────────────────────────────────────────────────────────────
-
 function MarketColumnImpl({ mkt }: { mkt: Market }) {
+  // ── DATOS (verbatim del original) ──
   const hud = useLastHud();
   const ent = useLastEnt();
   const gHits = useMarketHits(mkt);
@@ -100,9 +156,9 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
   const key = cellKeyOf(hud, ent);
   const map = cellStats(hud, ent, mkt);
-  const live = useCellRec(mkt, key);          // racha viva en esta celda, esta sesión
-  const estado: Zone = fusedZone(hud, ent, mkt, live);   // estado FUSIONADO (historial + hoy)
-  const deviation = liveDeviation(hud, ent, mkt, live);  // 'mejor' | 'peor' | null
+  const live = useCellRec(mkt, key);
+  const estado: Zone = fusedZone(hud, ent, mkt, live);
+  const deviation = liveDeviation(hud, ent, mkt, live);
   const st = STYLE[estado];
   const title = mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS';
   const gTotal = gHits + gMiss;
@@ -114,95 +170,102 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
     .sort((a, b) => b[1].maxStreak - a[1].maxStreak || b[1].misses - a[1].misses)
     .slice(0, 3);
 
+  const operable = estado === 'VERDE' || estado === 'SANTUARIO';
+
+  // ── PRESENTACIÓN ──
   return (
     <div style={{
-      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9,
-      padding: '12px 13px',
-      clipPath: 'polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px)',
-      background: 'linear-gradient(180deg, rgba(13,20,36,0.92) 0%, rgba(6,10,20,0.7) 100%)',
-      border: `1px solid ${st.color}44`,
-      boxShadow: `inset 0 0 24px ${st.dim}`,
+      flex: 1, minWidth: 0, position: 'relative',
+      display: 'flex', flexDirection: 'column', gap: 9,
+      padding: '13px 14px',
+      clipPath: clip(15),
+      background: operable
+        ? `linear-gradient(180deg, ${st.color}14 0%, ${BG_DEEP} 62%)`
+        : `linear-gradient(180deg, rgba(13,20,36,0.92) 0%, rgba(6,10,20,0.72) 100%)`,
+      border: `1px solid ${st.color}${operable ? '77' : '3a'}`,
+      boxShadow: operable
+        ? `inset 0 0 26px ${st.dim}, 0 0 26px ${st.color}22`
+        : `inset 0 0 22px ${st.dim}`,
+      filter: operable ? 'none' : 'saturate(0.92)',
     }}>
-      <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.18em', color: st.color, textShadow: `0 0 10px ${st.glow}` }}>{title}</span>
+      <Brackets color={st.color} on={operable} />
 
-      {/* Fila superior: termómetro + cómo venís hoy, lado a lado (menos altura) */}
+      {/* Nombre + operabilidad */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: FONT_DISP, fontSize: 17, fontWeight: 700, letterSpacing: '0.22em', color: st.color, textShadow: `0 0 12px ${st.glow}` }}>{title}</span>
+        <span style={{
+          fontFamily: FONT_NUM, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.14em',
+          padding: '3px 9px', borderRadius: 5, color: operable ? '#04231a' : st.color,
+          background: operable ? st.color : `${st.color}22`,
+          border: `1px solid ${st.color}${operable ? 'ff' : '55'}`,
+        }}>{OP[estado]}</span>
+      </div>
+
+      {/* Fila superior: termómetro + cómo venís hoy */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-      {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
-      {(() => {
-        const hits = termoHits, total = termoTotal, liveStreak = termoStreak;
-        // semáforo: verde 7+/10, amarillo 5-6, rojo <=4 (sobre giros resueltos)
-        const ratio = total > 0 ? hits / total : 0;
-        const luz = total < 3 ? '#64748b' : ratio >= 0.7 ? '#34d399' : ratio >= 0.5 ? '#fbbf24' : '#f87171';
-        const txt = total < 3 ? 'juntando datos…'
-          : ratio >= 0.7 ? 'VENÍS BIEN — aprovechá'
-          : ratio >= 0.5 ? 'PAREJO'
-          : 'MESA DURA — aflojá o rotá';
-        return (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '7px 11px',
-            clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
-            background: 'rgba(6,10,20,0.55)', border: `1px solid ${luz}55`,
-          }}>
-            <span style={{ width: 11, height: 11, borderRadius: '50%', background: luz, boxShadow: `0 0 8px ${luz}`, flexShrink: 0 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ fontSize: 8, color: '#64748b', letterSpacing: '0.18em' }}>ÚLTIMOS {total} GIROS</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: luz, fontFamily: 'monospace' }}>
-                {total > 0 ? `${hits}/${total}` : '—'}
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: '#cbd5e1', marginLeft: 8 }}>{txt}</span>
-              </span>
+        {/* 0 · TERMÓMETRO EN VIVO (últimos 10 giros) */}
+        {(() => {
+          const hits = termoHits, total = termoTotal, liveStreak = termoStreak;
+          const ratio = total > 0 ? hits / total : 0;
+          const luz = total < 3 ? '#64748b' : ratio >= 0.7 ? '#34d399' : ratio >= 0.5 ? '#fbbf24' : '#f87171';
+          const txt = total < 3 ? 'juntando datos…'
+            : ratio >= 0.7 ? 'VENÍS BIEN — aprovechá'
+            : ratio >= 0.5 ? 'PAREJO'
+            : 'MESA DURA — aflojá o rotá';
+          return (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '7px 11px', clipPath: clip(8),
+              background: 'rgba(6,10,20,0.6)', border: `1px solid ${luz}55`,
+            }}>
+              <span style={{ width: 11, height: 11, borderRadius: '50%', background: luz, boxShadow: `0 0 8px ${luz}`, flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                <span style={{ fontSize: 8, color: INK_DIM, letterSpacing: '0.18em' }}>ÚLTIMOS {total} GIROS</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: luz, fontFamily: FONT_NUM }}>
+                  {total > 0 ? `${hits}/${total}` : '—'}
+                  <span style={{ fontSize: 10.5, fontWeight: 600, color: '#cbd5e1', marginLeft: 8 }}>{txt}</span>
+                </span>
+              </div>
+              {liveStreak >= 2 && (
+                <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: '#f87171', fontFamily: FONT_NUM, flexShrink: 0 }}>
+                  {liveStreak} seguidas ✗
+                </span>
+              )}
             </div>
-            {liveStreak >= 2 && (
-              <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: '#f87171', fontFamily: 'monospace', flexShrink: 0 }}>
-                {liveStreak} seguidas ✗
-              </span>
-            )}
-          </div>
-        );
-      })()}
+          );
+        })()}
 
-      {/* 1 · SESIÓN — marcador de la partida */}
-      <div style={{
-        display: 'flex', flexDirection: 'column', gap: 4,
-        padding: '10px 12px',
-        clipPath: 'polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)',
-        background: 'rgba(6,10,20,0.6)', border: '1px solid rgba(34,211,238,0.22)',
-      }}>
-        <span style={{ fontSize: 8.5, color: '#22d3ee', letterSpacing: '0.2em', opacity: 0.85 }}>
-          CÓMO VENÍS HOY
-        </span>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, fontFamily: 'monospace' }}>
-          <span style={{ fontSize: 26, fontWeight: 800, color: '#2af5b0', lineHeight: 1 }}>✓ {gHits}</span>
-          <span style={{ fontSize: 26, fontWeight: 800, color: '#ff5c6c', lineHeight: 1 }}>✗ {gMiss}</span>
-          <span style={{ fontSize: 16, color: '#8092b5', marginLeft: 'auto' }}>
-            {gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}
+        {/* 1 · SESIÓN — marcador de la partida */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 4,
+          padding: '10px 12px', clipPath: clip(9),
+          background: 'rgba(6,10,20,0.62)', border: '1px solid rgba(34,211,238,0.22)',
+        }}>
+          <span style={{ fontSize: 8.5, color: ICE, letterSpacing: '0.2em', opacity: 0.85 }}>CÓMO VENÍS HOY</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, fontFamily: FONT_NUM }}>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#2af5b0', lineHeight: 1 }}>✓ {gHits}</span>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#ff5c6c', lineHeight: 1 }}>✗ {gMiss}</span>
+            <span style={{ fontSize: 16, color: INK_MUT, marginLeft: 'auto' }}>
+              {gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}
+            </span>
+          </div>
+          <span style={{ fontFamily: FONT_NUM, fontSize: 11.5, color: gMax >= 6 ? '#ff5c6c' : gMax >= 4 ? '#ffc247' : INK_MUT }}>
+            peor racha de errores hoy: <b style={{ color: gMax >= 4 ? undefined : '#cbd5e1' }}>{gMax}</b>
+            {gCur > 0 && <span style={{ color: '#ffc247' }}> · venís perdiendo {gCur} seguidas</span>}
           </span>
         </div>
-        <span style={{
-          fontFamily: 'monospace', fontSize: 11.5,
-          color: gMax >= 6 ? '#ff5c6c' : gMax >= 4 ? '#ffc247' : '#8092b5',
-        }}>
-          peor racha de errores hoy: <b style={{ color: gMax >= 4 ? undefined : '#cbd5e1' }}>{gMax}</b>
-          {gCur > 0 && <span style={{ color: '#ffc247' }}> · venís perdiendo {gCur} seguidas</span>}
-        </span>
       </div>
-      </div>{/* cierre grilla superior */}
 
-      {/* 2 · ESTÁS AQUÍ — celda actual + su reputación (MAPA) */}
+      {/* 2 · ESTÁS AQUÍ — celda actual + reputación */}
       <div style={{
-        padding: '10px 12px',
-        clipPath: 'polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px)',
-        background: st.dim, border: `1px solid ${st.color}`,
-        boxShadow: `0 0 18px ${st.dim}`,
+        padding: '10px 12px', clipPath: clip(9),
+        background: st.dim, border: `1px solid ${st.color}`, boxShadow: `0 0 18px ${st.dim}`,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 9, color: st.color, letterSpacing: '0.2em', opacity: 0.9 }}>▸ ESTÁS AQUÍ</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {deviation && (
-              <span style={{
-                fontSize: 8.5, fontWeight: 700, letterSpacing: '0.05em',
-                color: deviation === 'peor' ? '#f87171' : '#4ade80',
-              }}>
+              <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.05em', color: deviation === 'peor' ? '#f87171' : '#4ade80' }}>
                 {deviation === 'peor' ? '▼ hoy peor' : '▲ hoy mejor'}
               </span>
             )}
@@ -212,8 +275,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
                 transition={{ duration: 0.2 }}
                 style={{
                   fontSize: 12, fontWeight: 800, letterSpacing: '0.12em', color: st.color,
-                  padding: '3px 11px', borderRadius: 999, border: `1px solid ${st.color}`,
-                  textShadow: `0 0 8px ${st.glow}`,
+                  padding: '3px 11px', borderRadius: 999, border: `1px solid ${st.color}`, textShadow: `0 0 8px ${st.glow}`,
                 }}>
                 ● {st.label}
               </motion.span>
@@ -221,45 +283,39 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontFamily: 'monospace' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontFamily: FONT_NUM }}>
           <span style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 }}>HUD {hud ?? '—'}</span>
           <span style={{ fontSize: 24, fontWeight: 800, color: '#f1f5f9', lineHeight: 1 }}>ENT {ent ?? '—'}</span>
         </div>
 
-        {/* MAPA — reputación histórica de la celda, en palabras */}
         <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${st.color}30` }}>
-          <span style={{ fontSize: 8.5, color: '#64748b', letterSpacing: '0.16em' }}>
-            HISTÓRICO DE ESTA CASILLA
-          </span>
+          <span style={{ fontSize: 8.5, color: INK_DIM, letterSpacing: '0.16em' }}>HISTÓRICO DE ESTA CASILLA</span>
           {map ? (
-            <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3, fontFamily: 'monospace' }}>
+            <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3, fontFamily: FONT_NUM }}>
               acierto <b style={{ color: '#e2e8f0' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
               {'  ·  aguanta hasta '}
               <b style={{ color: map.maxRun >= 5 ? '#f87171' : '#e2e8f0' }}>{map.maxRun}</b>
               {' errores'}
-              <span style={{ color: '#64748b' }}>{'  '}({map.n} giros)</span>
+              <span style={{ color: INK_DIM }}>{'  '}({map.n} giros)</span>
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, fontFamily: 'monospace' }}>
-              sin datos en esta casilla
-            </div>
+            <div style={{ fontSize: 12, color: INK_DIM, marginTop: 3, fontFamily: FONT_NUM }}>sin datos en esta casilla</div>
           )}
 
-          {/* HOY EN ESTA CASILLA — siempre visible: lo que llevás hoy en esta celda */}
           <div style={{ marginTop: 7 }}>
-            <span style={{ fontSize: 8.5, color: '#64748b', letterSpacing: '0.16em' }}>HOY EN ESTA CASILLA</span>
-            <div style={{ fontSize: 12.5, color: '#cbd5e1', marginTop: 3, fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 8.5, color: INK_DIM, letterSpacing: '0.16em' }}>HOY EN ESTA CASILLA</span>
+            <div style={{ fontSize: 12.5, color: '#cbd5e1', marginTop: 3, fontFamily: FONT_NUM }}>
               <span style={{ color: '#4ade80' }}>{live?.hits ?? 0} ✓</span>
               {'  '}
               <span style={{ color: '#f87171' }}>{live?.misses ?? 0} ✗</span>
-              <span style={{ color: '#64748b' }}>{'  ·  racha ahora '}</span>
+              <span style={{ color: INK_DIM }}>{'  ·  racha ahora '}</span>
               <b style={{ color: (live?.streak ?? 0) >= 3 ? '#f87171' : (live?.streak ?? 0) >= 1 ? '#fbbf24' : '#4ade80' }}>
                 {live?.streak ?? 0}
               </b>
             </div>
           </div>
 
-          {/* EN VIVO — racha de errores actual en esta celda vs el techo histórico */}
+          {/* EN VIVO — pieza estrella: racha vs techo + medidor */}
           {(() => {
             const cur = live?.streak ?? 0;
             const techo = map?.maxRun ?? 0;
@@ -268,17 +324,20 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
             const color = anomalo ? '#f87171' : cerca ? '#fbbf24' : cur > 0 ? '#fbbf24' : '#4ade80';
             return (
               <div style={{
-                marginTop: 7, padding: '6px 9px', borderRadius: 7,
-                background: anomalo ? 'rgba(127,29,29,0.35)' : 'rgba(2,6,23,0.5)',
+                marginTop: 7, padding: '8px 10px', borderRadius: 8,
+                background: anomalo ? 'rgba(127,29,29,0.35)' : 'rgba(2,6,23,0.55)',
                 border: `1px solid ${anomalo ? 'rgba(248,113,113,0.6)' : `${st.color}25`}`,
               }}>
-                <span style={{ fontSize: 8.5, color: '#64748b', letterSpacing: '0.16em' }}>EN VIVO</span>
-                <div style={{ fontSize: 13, marginTop: 2, fontFamily: 'monospace' }}>
-                  racha de errores ahora: <b style={{ color }}>{cur}</b>
-                  {techo > 0 && <span style={{ color: '#64748b', fontSize: 11 }}>{'  '}/ techo {techo}</span>}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 8.5, color: INK_DIM, letterSpacing: '0.16em' }}>EN VIVO · RACHA DE ERRORES</span>
+                  <span style={{ fontFamily: FONT_NUM, fontSize: 13 }}>
+                    <b style={{ color, fontSize: 17 }}>{cur}</b>
+                    {techo > 0 && <span style={{ color: INK_DIM, fontSize: 11 }}>{'  '}/ techo {techo}</span>}
+                  </span>
                 </div>
+                {techo > 0 && <StreakGauge cur={cur} techo={techo} color={color} />}
                 {anomalo && (
-                  <div style={{ fontSize: 10.5, color: '#f87171', fontWeight: 700, marginTop: 2 }}>
+                  <div style={{ fontSize: 10.5, color: '#f87171', fontWeight: 700, marginTop: 5 }}>
                     ⚠ igualaste/superaste el techo histórico — anómalo, considerá salir
                   </div>
                 )}
@@ -290,18 +349,19 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
       {/* 3 · INSTRUCCIÓN */}
       <div style={{
-        padding: '9px 12px',
+        padding: '10px 13px',
         clipPath: 'polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px)',
-        background: `${st.dim}`, borderLeft: `3px solid ${st.color}`,
+        background: st.dim, borderLeft: `3px solid ${st.color}`,
+        display: 'flex', alignItems: 'center', gap: 11,
       }}>
-        <span style={{ fontSize: 8, color: '#8092b5', letterSpacing: '0.18em' }}>QUÉ HACER</span>
-        <div style={{ fontSize: 13, fontWeight: 700, color: st.color, marginTop: 2, textShadow: `0 0 8px ${st.glow}` }}>{INSTRUCCION[estado]}</div>
+        <span style={{ fontFamily: FONT_NUM, fontSize: 8.5, color: INK_MUT, letterSpacing: '0.18em', padding: '3px 7px', borderRadius: 5, background: 'rgba(2,6,23,0.5)', border: `1px solid ${st.color}44`, flexShrink: 0 }}>QUÉ HACER</span>
+        <div style={{ fontSize: 14, fontWeight: 700, color: st.color, textShadow: `0 0 8px ${st.glow}` }}>{INSTRUCCION[estado]}</div>
       </div>
 
-      {/* 4 · CELDAS VISITADAS — en palabras */}
+      {/* 4 · CELDAS VISITADAS */}
       {visited.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <span style={{ fontSize: 8.5, color: '#64748b', letterSpacing: '0.16em', paddingLeft: 2 }}>
+          <span style={{ fontSize: 8.5, color: INK_DIM, letterSpacing: '0.16em', paddingLeft: 2 }}>
             CASILLAS QUE PASASTE HOY · {Object.keys(reg).length}
           </span>
           {visited.map(([k, rec]) => <VisitedRow key={k} mkt={mkt} cKey={k} rec={rec} />)}
@@ -315,7 +375,6 @@ const MarketColumn = memo(MarketColumnImpl);
 // ────────────────────────────────────────────────────────────────────────
 // COPILOTO — lee ambos mercados y da UNA decisión de entrada segura
 // ────────────────────────────────────────────────────────────────────────
-
 function useMarketRead(mkt: Market): MarketRead {
   const hud = useLastHud();
   const ent = useLastEnt();
@@ -338,21 +397,14 @@ function Copilot() {
   const col = useMarketRead('col');
   const d = decidir(doc, col);
 
-  // MARCADOR de D.A.N.N.A. calculado desde el history (determinístico, sin timing).
-  // Recorre cada giro resuelto, reconstruye qué habría sugerido D.A.N.N.A. en ESE
-  // giro, y cuenta SOLO si sugirió entrar (no cuenta esperar/parar).
+  // MARCADOR reconstruido del history (verbatim del original)
   const history = useHistory();
   const { copHits, copMisses, copStreak, copLive } = useMemo(() => {
-    // reconstruir estado en vivo giro a giro
     const termo: Record<Market, number[]> = { doc: [], col: [] };
     const cellReg: Record<Market, Record<string, { h: number; m: number; streak: number; mx: number }>> = { doc: {}, col: {} };
     let hits = 0, misses = 0, streak = 0, maxStreak = 0;
 
     for (const row of history) {
-      // El store ya guardó el resultado del pick de ESTE giro en docHit/colHit de
-      // esta misma fila. Así que: reconstruyo qué sugirió D.A.N.N.A. en este giro
-      // (con el estado ANTES de contar este giro) y lo resuelvo con el resultado
-      // de esta misma fila. Alineación correcta, sin diferir.
       const key = cellKeyOf(row.hud, row.ent);
       const readMkt = (mkt: Market): MarketRead => {
         const liveRaw = key ? cellReg[mkt][key] : undefined;
@@ -370,7 +422,6 @@ function Copilot() {
       };
       const sug = decidir(readMkt('doc'), readMkt('col')).mercado;
 
-      // resolver la sugerencia con el resultado de ESTA fila (mismo giro)
       if (sug) {
         const res = sug === 'doc' ? row.docHit : row.colHit;
         if (res !== null && res !== undefined) {
@@ -379,7 +430,6 @@ function Copilot() {
         }
       }
 
-      // avanzar el estado en vivo con el resultado de este giro
       (['doc', 'col'] as Market[]).forEach((mkt) => {
         const r = mkt === 'doc' ? row.docHit : row.colHit;
         if (r === null || r === undefined) return;
@@ -398,24 +448,26 @@ function Copilot() {
 
   const color = d.nivel === 'ok' ? '#2af5b0' : d.nivel === 'precaucion' ? '#ffc247' : '#ff5c6c';
   const glow = d.nivel === 'ok' ? 'rgba(42,245,176,0.5)' : d.nivel === 'precaucion' ? 'rgba(255,194,71,0.45)' : 'rgba(255,92,108,0.5)';
-  const clip = 'polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px)';
 
   return (
     <div style={{
-      padding: '15px 17px', marginBottom: 4, position: 'relative', overflow: 'hidden',
-      clipPath: clip,
-      background: `linear-gradient(135deg, ${color}22 0%, rgba(6,10,20,0.85) 58%)`,
+      padding: '15px 18px', marginBottom: 4, position: 'relative', overflow: 'hidden',
+      clipPath: clip(16),
+      background: `linear-gradient(135deg, ${color}22 0%, ${BG_DEEP} 60%)`,
       border: `1.5px solid ${color}`, boxShadow: `0 0 30px ${glow}, inset 0 0 34px ${color}10`,
     }}>
-      {/* halo de fondo */}
       <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(420px 140px at 0% 0%, ${color}20, transparent 68%)`, pointerEvents: 'none' }} />
 
-      {/* encabezado: escudo + nombre */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, position: 'relative' }}>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" />
-        </svg>
-        <span style={{ fontSize: 9, color, letterSpacing: '0.24em', fontWeight: 700 }}>D.A.N.N.A. · ENTRADA SEGURA</span>
+      {/* encabezado: bolt + QUANTUM PILOT + escudo entrada segura */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 4, position: 'relative' }}>
+        <span style={{ fontSize: 15, color: '#ffd44d', filter: 'drop-shadow(0 0 6px rgba(255,200,70,0.7))' }}>⚡</span>
+        <span style={{ fontFamily: FONT_DISP, fontSize: 13, fontWeight: 700, letterSpacing: '0.36em', color: INK }}>QUANTUM&nbsp;PILOT</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" />
+          </svg>
+          <span style={{ fontSize: 8.5, color, letterSpacing: '0.2em', fontWeight: 700 }}>ENTRADA SEGURA</span>
+        </span>
       </div>
 
       {/* orden principal */}
@@ -423,18 +475,17 @@ function Copilot() {
         <motion.div key={d.titulo}
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.22 }} style={{ position: 'relative' }}>
-          <div style={{ fontSize: 23, fontWeight: 800, color, letterSpacing: '0.01em', textShadow: `0 0 14px ${glow}`, lineHeight: 1.1 }}>
+          <div style={{ fontFamily: FONT_DISP, fontSize: 24, fontWeight: 800, color, letterSpacing: '0.01em', textShadow: `0 0 14px ${glow}`, lineHeight: 1.1 }}>
             {d.titulo}
           </div>
-          <div style={{ fontSize: 12.5, color: '#8092b5', marginTop: 3 }}>{d.motivo}</div>
+          <div style={{ fontSize: 12.5, color: INK_MUT, marginTop: 3 }}>{d.motivo}</div>
         </motion.div>
       </AnimatePresence>
 
-      {/* MARCADOR PROPIO DE D.A.N.N.A. — aciertos/errores/efectividad/racha */}
+      {/* MARCADOR PROPIO DE D.A.N.N.A. */}
       <div style={{
         display: 'flex', marginTop: 13, position: 'relative', flexWrap: 'wrap',
-        clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
-        background: 'rgba(6,10,20,0.55)', border: `1px solid ${color}44`,
+        clipPath: clip(8), background: 'rgba(6,10,20,0.6)', border: `1px solid ${color}44`,
       }}>
         {[
           { k: 'ACIERTOS', v: copHits, c: '#2af5b0' },
@@ -444,15 +495,14 @@ function Copilot() {
           { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff5c6c' : '#ffc247' },
         ].map((s, i, arr) => (
           <div key={s.k} style={{ flex: '1 1 20%', minWidth: 64, padding: '9px 11px', borderRight: i < arr.length - 1 ? '1px solid rgba(90,150,220,0.14)' : 'none' }}>
-            <div style={{ fontSize: 8.5, color: '#8092b5', letterSpacing: '0.1em' }}>{s.k}</div>
-            <div style={{ fontFamily: 'monospace', fontSize: 19, fontWeight: 800, color: s.c, marginTop: 2 }}>{s.v}</div>
+            <div style={{ fontSize: 8.5, color: INK_MUT, letterSpacing: '0.1em' }}>{s.k}</div>
+            <div style={{ fontFamily: FONT_NUM, fontSize: 19, fontWeight: 800, color: s.c, marginTop: 2 }}>{s.v}</div>
           </div>
         ))}
       </div>
     </div>
   );
 }
-
 
 export function MatrixPanel() {
   const resetTelemetry = useResetTelemetry();
@@ -464,9 +514,9 @@ export function MatrixPanel() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 2 }}>
-        <span style={{ fontSize: 10, color: '#22d3ee', opacity: 0.7, letterSpacing: '0.3em' }}>
+        <span style={{ fontFamily: FONT_NUM, fontSize: 10, color: ICE, opacity: 0.72, letterSpacing: '0.3em' }}>
           CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
         </span>
         <button
@@ -477,20 +527,13 @@ export function MatrixPanel() {
             background: 'rgba(2,6,23,0.6)', border: '1px solid rgba(148,163,184,0.28)',
             borderRadius: 6, padding: '4px 10px',
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#f87171';
-            e.currentTarget.style.borderColor = 'rgba(248,113,113,0.55)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = '#94a3b8';
-            e.currentTarget.style.borderColor = 'rgba(148,163,184,0.28)';
-          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.borderColor = 'rgba(248,113,113,0.55)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.borderColor = 'rgba(148,163,184,0.28)'; }}
         >
           ⟲ RESET MAPA
         </button>
       </div>
 
-      {/* COPILOTO — la decisión de entrada segura, arriba de todo */}
       <Copilot />
 
       <div style={{ display: 'flex', gap: 11 }}>
