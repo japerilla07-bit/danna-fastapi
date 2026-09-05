@@ -856,3 +856,104 @@
 
 /* Ampliar columna stake-base input para que el L1 no se vea apretado */
 .qp-stake-cur { min-width: 24px; text-align: center; }
+/* ════════════════════════════════════════════════════════════════
+ * QUANTUM PILOT — CAPA COCKPIT (refinado premium)
+ * ────────────────────────────────────────────────────────────────
+ * CÓMO USAR (elegí UNA):
+ *   A) import './quantum-pilot-cockpit.css'  ← JUSTO DESPUÉS del
+ *      import de quantum-pilot.css. (Recomendado.)
+ *   B) O pegá TODO este archivo al FINAL de quantum-pilot.css.
+ *
+ * IRROMPIBLE: solo re-tinta variables --qp-* y ajusta pintura
+ * (radios, sombras, contraste). No toca ninguna clase estructural,
+ * ni grids, ni dimensiones, ni el .tsx, ni la lógica. Para revertir:
+ * quitá el import. Nada más.
+ * Requiere cargar DESPUÉS de quantum-pilot.css (gana la cascada).
+ * ════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Paleta refinada (mismo selector → gana por orden de carga) ── */
+.qp-overlay, .qp-min {
+  /* Superficies: navy espacio profundo + grafito de instrumento */
+  --qp-bg:      #05070d;
+  --qp-bg2:     #090d16;
+  --qp-card:    #0c1119;
+  --qp-cardhi:  #111826;
+  --qp-border:  #1e2839;
+
+  /* STANDBY — rojo más noble, menos “gamer”, sigue avisando fuerte */
+  --qp-crimson: #b31f2b;
+  --qp-fire:    #e23b46;
+  --qp-ember:   #ff5b63;
+
+  /* Oro/ámbar — más fino, tono lingote */
+  --qp-gold:    #c8961e;
+  --qp-amber:   #ffb648;
+  --qp-shine:   #ffd98a;
+
+  /* Cromo — cian de hielo, menos eléctrico */
+  --qp-cyan:    #5fd0ff;
+
+  /* ACTIVE — esmeralda calibrado (mismo verde de la maqueta cabina) */
+  --qp-jade:    #1fd98a;
+  --qp-emerald: #2df2a3;
+  --qp-lime:    #a8f57a;
+
+  /* Texto — tiza más suave, menos fatiga en operación en vivo */
+  --qp-chalk:   #dbe6f5;
+  --qp-muted:   #5f7086;
+}
+
+/* ── 2. Marco: esquinas un poco más finas (solo border-radius) ── */
+.qp-overlay      { border-radius: 10px; }
+.qp-border-ring  { border-radius: 11px; }
+.qp-border-ring::after { border-radius: 10px; }
+.qp-min          { border-radius: 10px; }
+
+/* ── 3. Superficies de tarjeta: vidrio más limpio y hairline superior ── */
+.qp-active-bets,
+.qp-cat-eff,
+.qp-tac-cell,
+.qp-levels {
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(160,200,255,0.04);
+}
+.qp-cat-cell,
+.qp-bucket-cell,
+.qp-lvl-cell { border-radius: 6px; }
+
+/* ── 4. Header: título con más aire de instrumento ── */
+.qp-title { letter-spacing: 7px; }
+
+/* ── 5. Target card: base un punto más redonda (pintura, no layout) ── */
+.qp-target-card { border-radius: 8px; }
+
+/* ── 6. Chips de condición: hairline más definido en STANDBY ── */
+.qp-standby-mode .qp-cond-chip.no {
+  background: rgba(95,112,134,0.06);
+  border-color: rgba(95,112,134,0.22);
+}
+
+/* ── 7. Eficiencia por categoría: celda activa STANDBY, rojo refinado ── */
+.qp-cat-cell.active {
+  background: rgba(226,59,70,0.07);
+  border-color: rgba(226,59,70,0.42);
+  box-shadow: inset 0 0 12px rgba(226,59,70,0.08);
+}
+
+/* ── 8. Respeta usuarios con “reduce motion”: sin respiración/spin ── */
+@media (prefers-reduced-motion: reduce) {
+  .qp-overlay.qp-active-mode,
+  .qp-target-card.armed,
+  .qp-status-badge.go,
+  .qp-min,
+  .qp-min.qp-min-active,
+  .qp-pulse-dot.active,
+  .qp-corner,
+  .qp-scan-line,
+  .qp-target-pick.holographic,
+  .qp-target-ccs.pulse,
+  .qp-border-ring,
+  .qp-active-mode .qp-border-ring {
+    animation: none !important;
+  }
+}
