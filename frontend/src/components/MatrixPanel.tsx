@@ -130,62 +130,77 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
       <span style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 13, fontWeight: 800, letterSpacing: '0.2em', color: st.color, textShadow: `0 0 12px ${st.glow}` }}>{title}</span>
 
       {/* Fila superior: termómetro + cómo venís hoy, lado a lado (menos altura) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, alignItems: 'stretch' }}>
+      
       {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
       {(() => {
         const hits = termoHits, total = termoTotal, liveStreak = termoStreak;
         // semáforo: verde 7+/10, amarillo 5-6, rojo <=4 (sobre giros resueltos)
         const ratio = total > 0 ? hits / total : 0;
         const luz = total < 3 ? '#64748b' : ratio >= 0.7 ? '#34d399' : ratio >= 0.5 ? '#fbbf24' : '#f87171';
-        const txt = total < 3 ? 'datos…'
-          : ratio >= 0.7 ? 'BIEN'
+        const txt = total < 3 ? 'juntando datos…'
+          : ratio >= 0.7 ? 'VENÍS BIEN — aprovechá'
           : ratio >= 0.5 ? 'PAREJO'
-          : 'DURA';
+          : 'MESA DURA — aflojá o rotá';
         return (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '4px 8px',
+            display: 'flex', flexDirection: 'column',
+            padding: '6px 8px',
             clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)',
             background: 'rgba(2,4,8,0.6)', 
             border: `1px solid ${luz}40`,
             boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.8)',
           }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: luz, boxShadow: `0 0 10px ${luz}`, flexShrink: 0 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>ÚLTIMOS {total}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: luz, fontFamily: "'JetBrains Mono', monospace", textShadow: `0 0 8px ${luz}80` }}>
-                {total > 0 ? `${hits}/${total}` : '—'}
-                <span style={{ fontSize: 9.5, fontWeight: 600, color: '#cbd5e1', marginLeft: 6, textShadow: 'none' }}>{txt}</span>
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: luz, boxShadow: `0 0 10px ${luz}`, flexShrink: 0 }} />
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>ÚLTIMOS {total} GIROS</span>
             </div>
-            {liveStreak >= 2 && (
-              <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: '#f87171', fontFamily: "'JetBrains Mono', monospace", flexShrink: 0, textShadow: '0 0 8px rgba(248,113,113,0.6)' }}>
-                {liveStreak} ✗
+            
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: luz, fontFamily: "'JetBrains Mono', monospace", textShadow: `0 0 8px ${luz}80` }}>
+                {total > 0 ? `${hits}/${total}` : '—'}
               </span>
-            )}
+              <span style={{ fontSize: 9.5, fontWeight: 600, color: '#cbd5e1', textShadow: 'none', lineHeight: 1.1 }}>{txt}</span>
+              {liveStreak >= 2 && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#f87171', fontFamily: "'JetBrains Mono', monospace", textShadow: '0 0 8px rgba(248,113,113,0.6)', marginLeft: 'auto' }}>
+                  {liveStreak} ✗
+                </span>
+              )}
+            </div>
           </div>
         );
       })()}
 
       {/* 1 · SESIÓN — marcador de la partida */}
       <div style={{
-        display: 'flex', flexDirection: 'column', gap: 2,
-        padding: '4px 8px',
+        display: 'flex', flexDirection: 'column',
+        padding: '6px 8px',
         clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)',
         background: 'rgba(2,4,8,0.6)', 
         border: '1px solid rgba(34,211,238,0.2)',
         boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.8)',
       }}>
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#22d3ee', letterSpacing: '0.1em', opacity: 0.85 }}>
-          SESIÓN HOY
+          CÓMO VENÍS HOY
         </span>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, fontFamily: "'Rajdhani', sans-serif" }}>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#2af5b0', lineHeight: 1, textShadow: '0 0 10px rgba(42,245,176,0.6)' }}>✓{gHits}</span>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#ff5c6c', lineHeight: 1, textShadow: '0 0 10px rgba(255,92,108,0.6)' }}>✗{gMiss}</span>
-          <span style={{ fontSize: 13, color: '#8092b5', marginLeft: 'auto', fontFamily: "'JetBrains Mono', monospace" }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', fontFamily: "'Rajdhani', sans-serif", marginTop: 2 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#2af5b0', lineHeight: 1, textShadow: '0 0 10px rgba(42,245,176,0.6)' }}>✓{gHits}</span>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#ff5c6c', lineHeight: 1, textShadow: '0 0 10px rgba(255,92,108,0.6)' }}>✗{gMiss}</span>
+          </div>
+          <span style={{ fontSize: 13, color: '#8092b5', fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
             {gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}
           </span>
         </div>
+        {/* LÍNEA RESTAURADA: Racha de errores con flexWrap para que no se corte */}
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 8.5,
+          color: gMax >= 6 ? '#ff5c6c' : gMax >= 4 ? '#ffc247' : '#8092b5',
+          marginTop: 4, lineHeight: 1.2, display: 'block'
+        }}>
+          peor racha de errores hoy: <b style={{ color: gMax >= 4 ? undefined : '#cbd5e1' }}>{gMax}</b>
+          {gCur > 0 && <span style={{ color: '#ffc247', display: 'block', marginTop: 2 }}>⚠ venís perdiendo {gCur} seguidas</span>}
+        </span>
       </div>
       </div>{/* cierre grilla superior */}
 
@@ -198,14 +213,14 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         boxShadow: `0 4px 12px rgba(0,0,0,0.3), inset 0 0 18px ${st.dim}`,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8.5, color: st.color, letterSpacing: '0.1em', opacity: 0.9 }}>▸ AQUÍ</span>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8.5, color: st.color, letterSpacing: '0.1em', opacity: 0.9 }}>▸ ESTÁS AQUÍ</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {deviation && (
               <span style={{
                 fontFamily: "'JetBrains Mono', monospace", fontSize: 8, fontWeight: 700, letterSpacing: '0.05em',
                 color: deviation === 'peor' ? '#f87171' : '#4ade80',
               }}>
-                {deviation === 'peor' ? '▼ peor' : '▲ mejor'}
+                {deviation === 'peor' ? '▼ hoy peor' : '▲ hoy mejor'}
               </span>
             )}
             <AnimatePresence mode="wait">
@@ -226,22 +241,22 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontFamily: "'Rajdhani', sans-serif" }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', lineHeight: 1, textShadow: '0 0 8px rgba(255,255,255,0.4)' }}>H:{hud ?? '—'}</span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', lineHeight: 1, textShadow: '0 0 8px rgba(255,255,255,0.4)' }}>E:{ent ?? '—'}</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', lineHeight: 1, textShadow: '0 0 8px rgba(255,255,255,0.4)' }}>HUD {hud ?? '—'}</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#f1f5f9', lineHeight: 1, textShadow: '0 0 8px rgba(255,255,255,0.4)' }}>ENT {ent ?? '—'}</span>
         </div>
 
         {/* MAPA — reputación histórica de la celda, en palabras */}
         <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${st.color}30` }}>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>
-            HISTÓRICO DE CASILLA
+            HISTÓRICO DE ESTA CASILLA
           </span>
           {map ? (
             <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
               acierto <b style={{ color: '#e2e8f0', textShadow: '0 0 4px rgba(255,255,255,0.3)' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
-              {' · soporta '}
+              {'  ·  aguanta hasta '}
               <b style={{ color: map.maxRun >= 5 ? '#f87171' : '#e2e8f0' }}>{map.maxRun}</b>
-              {' err'}
-              <span style={{ color: '#64748b' }}>{' '}({map.n})</span>
+              {' errores'}
+              <span style={{ color: '#64748b' }}>{'  '}({map.n} giros)</span>
             </div>
           ) : (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
@@ -251,12 +266,12 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
           {/* HOY EN ESTA CASILLA — siempre visible: lo que llevás hoy en esta celda */}
           <div style={{ marginTop: 4 }}>
-            <div style={{ fontSize: 11, color: '#cbd5e1', fontFamily: "'JetBrains Mono', monospace" }}>
-              <span style={{ color: '#64748b', fontSize: 7.5, letterSpacing: '0.1em' }}>HOY: </span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>HOY EN ESTA CASILLA</span>
+            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
               <span style={{ color: '#4ade80' }}>{live?.hits ?? 0} ✓</span>
-              {' '}
+              {'  '}
               <span style={{ color: '#f87171' }}>{live?.misses ?? 0} ✗</span>
-              <span style={{ color: '#64748b' }}>{' · racha '}</span>
+              <span style={{ color: '#64748b' }}>{'  ·  racha ahora '}</span>
               <b style={{ color: (live?.streak ?? 0) >= 3 ? '#f87171' : (live?.streak ?? 0) >= 1 ? '#fbbf24' : '#4ade80' }}>
                 {live?.streak ?? 0}
               </b>
@@ -280,13 +295,13 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em' }}>EN VIVO</span>
                   <div style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}>
-                    racha: <b style={{ color, textShadow: `0 0 6px ${color}80` }}>{cur}</b>
-                    {techo > 0 && <span style={{ color: '#64748b', fontSize: 10 }}>/{techo}</span>}
+                    racha de errores ahora: <b style={{ color, textShadow: `0 0 6px ${color}80` }}>{cur}</b>
+                    {techo > 0 && <span style={{ color: '#64748b', fontSize: 10 }}>{'  '}/ techo {techo}</span>}
                   </div>
                 </div>
                 {anomalo && (
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#f87171', fontWeight: 700, marginTop: 2, textShadow: '0 0 5px rgba(248,113,113,0.5)' }}>
-                    ⚠ techo superado — considerá salir
+                    ⚠ igualaste/superaste el techo histórico — anómalo, considerá salir
                   </div>
                 )}
               </div>
@@ -304,14 +319,15 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         borderTop: '1px solid rgba(255,255,255,0.03)',
         borderBottom: '1px solid rgba(255,255,255,0.03)',
       }}>
-        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 13, fontWeight: 700, color: st.color, textShadow: `0 0 8px ${st.glow}` }}>{INSTRUCCION[estado]}</div>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#8092b5', letterSpacing: '0.1em' }}>QUÉ HACER</span>
+        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 13, fontWeight: 700, color: st.color, textShadow: `0 0 8px ${st.glow}`, marginTop: 2 }}>{INSTRUCCION[estado]}</div>
       </div>
 
       {/* 4 · CELDAS VISITADAS — en palabras */}
       {visited.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: '#64748b', letterSpacing: '0.1em', paddingLeft: 2 }}>
-            PASASTE HOY · {Object.keys(reg).length}
+            CASILLAS QUE PASASTE HOY · {Object.keys(reg).length}
           </span>
           {visited.map(([k, rec]) => <VisitedRow key={k} mkt={mkt} cKey={k} rec={rec} />)}
         </div>
@@ -453,8 +469,8 @@ function Copilot() {
           { k: 'ACIERTOS', v: copHits, c: '#2af5b0' },
           { k: 'ERRORES', v: copMisses, c: '#ff5c6c' },
           { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#eaf2ff' },
-          { k: 'RACHA', v: copLive, c: copLive >= 3 ? '#ff5c6c' : copLive >= 1 ? '#ffc247' : '#2af5b0' },
-          { k: 'PEOR', v: copStreak, c: copStreak >= 4 ? '#ff5c6c' : '#ffc247' },
+          { k: 'RACHA AHORA', v: copLive, c: copLive >= 3 ? '#ff5c6c' : copLive >= 1 ? '#ffc247' : '#2af5b0' },
+          { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff5c6c' : '#ffc247' },
         ].map((s, i, arr) => (
           <div key={s.k} style={{ 
             flex: '1', padding: '6px 8px', 
@@ -484,7 +500,7 @@ export function MatrixPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 4 }}>
         <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#22d3ee', opacity: 0.8, letterSpacing: '0.2em', textShadow: '0 0 8px rgba(34,211,238,0.4)' }}>
-          MANDO · MATRIZ HUD × ENTROPÍA
+          CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
         </span>
         <button
           onClick={handleReset}
@@ -509,7 +525,7 @@ export function MatrixPanel() {
             e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)';
           }}
         >
-          ⟲ RESET
+          ⟲ RESET MAPA
         </button>
       </div>
 
