@@ -138,6 +138,19 @@ const LABELS = {
   abort:   { label: 'ABORT',   sub: 'No entrar — esperar estabilización de la mesa' },
 } as const;
 
+// ── TEMAS GEASS / SHIKON PARA INYECCIÓN VISUAL DIRECTA ──
+const STRIP_THEME = {
+  optimal: { base: '#00ff9d', glow: 'rgba(0,255,157,0.7)', dim: 'rgba(0,255,157,0.12)' },
+  caution: { base: '#ffdf60', glow: 'rgba(255,223,96,0.6)', dim: 'rgba(255,223,96,0.12)' },
+  abort:   { base: '#ff1e38', glow: 'rgba(255,30,56,0.7)', dim: 'rgba(255,30,56,0.15)' },
+};
+
+const PILLAR_THEME = {
+  good: { color: '#00ff9d', bg: 'rgba(0,255,157,0.12)' },
+  mid:  { color: '#ffdf60', bg: 'rgba(255,223,96,0.15)' },
+  bad:  { color: '#ff1e38', bg: 'rgba(255,30,56,0.18)' },
+};
+
 // Color de pillar — port de _pill en app.py L7964-7967
 function pillarCls(val: number, goodThr: number = 0.60): 'good' | 'mid' | 'bad' {
   if (val >= goodThr) return 'good';
@@ -164,20 +177,21 @@ export function OptimalStrip({
   const { state, cond, chaos_active, consec, mesa_norm, entropy_score, consec_score, wheel_score } = data;
 
   const meta = LABELS[state];
+  const theme = STRIP_THEME[state];
   let subContent: React.ReactNode = meta.sub;
 
-  // Override de texto (app.py L7977-7980)
+  // Override de texto (app.py L7977-7980) con estilos inyectados
   if (chaos_active) {
     subContent = (
       <>
-        <span className="strip-danger">⚠ CAOS DETECTADO</span>
+        <span className="strip-danger" style={{ color: '#ff1e38', fontWeight: 800, textShadow: '0 0 10px rgba(255,30,56,0.7)', letterSpacing: '0.05em' }}>⚠ CAOS DETECTADO</span>
         {' '}— suspender ejecución ({consec} consecutivos)
       </>
     );
   } else if (consec >= 4) {
     subContent = (
       <>
-        <span className="strip-warn">⚠ {consec} errores consecutivos</span>
+        <span className="strip-warn" style={{ color: '#ffdf60', fontWeight: 800, textShadow: '0 0 10px rgba(255,223,96,0.6)', letterSpacing: '0.05em' }}>⚠ {consec} errores consecutivos</span>
         {' '}— reducir exposición urgente
       </>
     );
@@ -185,7 +199,7 @@ export function OptimalStrip({
     // Texto split para resaltar "reducir stake a la mitad" en amber
     subContent = (
       <>
-        Ruido moderado — <span className="strip-warn">reducir stake a la mitad</span>
+        Ruido moderado — <span className="strip-warn" style={{ color: '#ffdf60', fontWeight: 700, textShadow: '0 0 8px rgba(255,223,96,0.5)' }}>reducir stake a la mitad</span>
       </>
     );
   }
@@ -194,24 +208,64 @@ export function OptimalStrip({
   const condLabel = chaos_active ? 'CAOS' : 'COND';
 
   return (
-    <div className={`strip strip-${state}`}>
-      <div className="strip-state">
-        <div className="strip-dot" />
-        <div className="strip-label">{meta.label}</div>
+    <div className={`strip strip-${state}`} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
+      padding: '10px 14px', marginBottom: '8px',
+      background: `linear-gradient(90deg, ${theme.dim} 0%, rgba(3,4,8,0.95) 40%, rgba(3,4,8,0.98) 100%)`,
+      border: `1px solid ${theme.base}60`,
+      boxShadow: `0 8px 24px rgba(0,0,0,0.6), inset 0 0 25px ${theme.dim}, inset 3px 0 0 ${theme.base}`,
+      clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)',
+      backdropFilter: 'blur(12px)'
+    }}>
+      <div className="strip-state" style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '130px' }}>
+        {/* NÚCLEO ROMBOIDAL PULSANTE */}
+        <div className="strip-dot" style={{
+          width: '12px', height: '12px',
+          background: theme.base,
+          clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+          boxShadow: `0 0 15px ${theme.base}, 0 0 5px ${theme.base}`,
+          animation: state === 'abort' ? 'pulse-fast 1s infinite' : 'none'
+        }} />
+        <div className="strip-label" style={{ 
+          fontFamily: "'Rajdhani', sans-serif", fontSize: '20px', fontWeight: 900, 
+          color: theme.base, letterSpacing: '0.15em', textShadow: `0 0 12px ${theme.glow}` 
+        }}>
+          {meta.label}
+        </div>
       </div>
 
-      <div className="strip-sub">{subContent}</div>
+      <div className="strip-sub" style={{ 
+        flex: 1, fontFamily: "'JetBrains Mono', monospace", fontSize: '10.5px', 
+        color: '#cbd5e1', lineHeight: 1.3 
+      }}>
+        {subContent}
+      </div>
 
-      <div className="strip-pillars">
+      <div className="strip-pillars" style={{ display: 'flex', gap: '6px' }}>
         <Pillar name="MESA"  val={mesa_norm}     thr={0.60} />
         <Pillar name="ORDEN" val={entropy_score} thr={0.55} />
         <Pillar name="RACHA" val={consec_score}  thr={0.57} />
         <Pillar name="WHEEL" val={wheel_score}   thr={0.50} />
       </div>
 
-      <div className="strip-score">
-        <div className="strip-score-num">{condDisplay}</div>
-        <div className="strip-score-k">{condLabel}</div>
+      <div className="strip-score" style={{ 
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: '6px 12px', minWidth: '70px',
+        background: 'rgba(0,0,0,0.6)', borderLeft: `1px solid ${theme.base}40`,
+        boxShadow: `inset 0 0 15px ${theme.dim}`
+      }}>
+        <div className="strip-score-num" style={{ 
+          fontFamily: "'Rajdhani', sans-serif", fontSize: '28px', fontWeight: 900, lineHeight: 1,
+          color: theme.base, textShadow: `0 0 16px ${theme.glow}, 0 0 4px ${theme.base}` 
+        }}>
+          {condDisplay}
+        </div>
+        <div className="strip-score-k" style={{ 
+          fontFamily: "'JetBrains Mono', monospace", fontSize: '9px', fontWeight: 700, 
+          color: theme.base, letterSpacing: '0.2em', opacity: 0.8, marginTop: '2px' 
+        }}>
+          {condLabel}
+        </div>
       </div>
     </div>
   );
@@ -220,10 +274,19 @@ export function OptimalStrip({
 function Pillar({ name, val, thr }: { name: string; val: number; thr: number }) {
   const cls = pillarCls(val, thr);
   const pct = Math.round(val * 100);
+  const pTheme = PILLAR_THEME[cls];
+  
   return (
-    <div className={`pillar pillar-${cls}`}>
-      <span className="pillar-k">{name}</span>
-      <span className="pillar-v">{pct}%</span>
+    <div className={`pillar pillar-${cls}`} style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '4px 6px', minWidth: '48px',
+      background: 'rgba(2,4,8,0.7)',
+      borderBottom: `2px solid ${pTheme.color}`,
+      boxShadow: `inset 0 0 15px ${pTheme.bg}`,
+      clipPath: 'polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px)'
+    }}>
+      <span className="pillar-k" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', color: '#64748b', letterSpacing: '0.15em', fontWeight: 700 }}>{name}</span>
+      <span className="pillar-v" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '13px', fontWeight: 800, color: pTheme.color, textShadow: `0 0 10px ${pTheme.color}80`, marginTop: '1px' }}>{pct}%</span>
     </div>
   );
 }
