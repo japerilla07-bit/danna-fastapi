@@ -60,6 +60,15 @@ function rango(v: number[]): number | null {
   return Math.max(...x) - Math.min(...x);
 }
 
+// Orbe Táctico Reutilizable (Visual injection)
+const Orb = () => (
+  <span style={{ 
+    width: '8px', height: '8px', background: '#00e5ff', 
+    clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', 
+    boxShadow: '0 0 10px #00e5ff', flexShrink: 0
+  }} />
+);
+
 export function PilotDelta({
   spinsCount,
   hud,
@@ -213,11 +222,11 @@ export function PilotDelta({
       {/* ══ A ══ (columnas y docenas por separado) */}
       <div className="pd-block">
         <div className="pd-btitle">
-          ESTADO DEL MOTOR · COL {estCol.nEval}/{VENTANA} · DOC {estDoc.nEval}/{VENTANA}
+          <Orb /> ESTADO DEL MOTOR · COL {estCol.nEval}/{VENTANA} · DOC {estDoc.nEval}/{VENTANA}
         </div>
         {([['COL', estCol], ['DOC', estDoc]] as [string, EstadoMercado][]).map(
           ([mk, e], idx) => (
-            <div key={mk} style={idx > 0 ? { marginTop: 10 } : undefined}>
+            <div key={mk} style={idx > 0 ? { marginTop: 12 } : undefined}>
               <div className="pd-row">
                 <span className={`pd-chip pd-${e.wrCls}`}>
                   <span className="pd-k">W/R {mk}</span>
@@ -229,13 +238,13 @@ export function PilotDelta({
                 </span>
               </div>
               <div className="pd-seq">
-                {e.seq.length === 0 && <span className="pd-seq-x">·</span>}
+                {e.seq.length === 0 && <span className="pd-seq-x"><span>·</span></span>}
                 {e.seq.map((s: string, i: number) => (
                   <span
                     key={i}
                     className={`pd-seq-x pd-seq-${s === 'A' ? 'a' : s === 'E' ? 'e' : 'n'}`}
                   >
-                    {s}
+                    <span>{s}</span>
                   </span>
                 ))}
               </div>
@@ -246,7 +255,7 @@ export function PilotDelta({
 
       {/* ══ B ══ */}
       <div className="pd-block">
-        <div className="pd-btitle">ANCLAJE · ÚLTIMOS {VENTANA_ANCLAJE}</div>
+        <div className="pd-btitle"><Orb /> ANCLAJE · ÚLTIMOS {VENTANA_ANCLAJE}</div>
         <div className="pd-anc">
           <span className="pd-anc-k">HUD</span>
           <span className="pd-anc-v">{act?.hud ?? '—'}</span>
@@ -267,7 +276,9 @@ export function PilotDelta({
 
       {/* ══ C ══ */}
       <div className={`pd-block pd-alert${alertaEnt || alertaHud ? ' on' : ''}`}>
-        <div className="pd-btitle">ALERTA DE CHOQUE · Δ vs GIRO ANTERIOR</div>
+        <div className="pd-btitle" style={alertaEnt || alertaHud ? { color: '#ff1e38', textShadow: '0 0 10px rgba(255,30,56,0.8)' } : undefined}>
+          <Orb /> ALERTA DE CHOQUE · Δ vs GIRO ANTERIOR
+        </div>
         <div className="pd-row">
           <span className={`pd-chip ${alertaHud ? 'pd-bad pd-blink' : 'pd-dim'}`}>
             <span className="pd-k">Δ HUD</span>
