@@ -63,7 +63,7 @@ function axisCls(pct: number) {
   return 'mid';
 }
 
-/** Fila densa: etiqueta corta + celdas con el conteo. */
+/** Fila densa: etiqueta corta + celdas con el conteo visible. */
 function Row({ k, labels, counts }: { k: string; labels: string[]; counts?: number[] }) {
   const c = Array.isArray(counts) ? counts : [];
   const max = Math.max(...c, 1);
@@ -73,14 +73,27 @@ function Row({ k, labels, counts }: { k: string; labels: string[]; counts?: numb
       <div className="cx-row-v">
         {labels.map((lb, i) => {
           const v = c[i] ?? 0;
+          const isTop = v === max && v > 0;
+          
+          // Asignación de colores especiales a las etiquetas
+          let colorCls = '';
+          if (lb === 'R') colorCls = 'cx-red';
+          else if (lb === 'N') colorCls = 'cx-black';
+          else if (lb === 'P') colorCls = 'cx-par';
+          else if (lb === 'I') colorCls = 'cx-impar';
+          else if (lb === 'B') colorCls = 'cx-bajo';
+          else if (lb === 'A') colorCls = 'cx-alto';
+
           return (
-            <span
+            <div
               key={lb}
-              className={`cx-cell${v === max && v > 0 ? ' top' : ''}`}
+              className={`cx-cell${isTop ? ' top' : ''} ${colorCls}`}
               title={`${lb}: ${v}`}
             >
-              {v}
-            </span>
+              {/* Ahora las etiquetas (D1, C1, R, N...) son explícitamente visibles */}
+              <span className="cx-lb">{lb}</span>
+              <span className="cx-v">{v}</span>
+            </div>
           );
         })}
       </div>
