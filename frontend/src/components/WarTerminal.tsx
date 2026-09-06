@@ -104,42 +104,107 @@ interface Props {
   spins: readonly number[];
 }
 
+// ── TEMA VISUAL GEASS / SHIKON PARA LA TERMINAL ──
+const TAG_THEME: Record<string, { color: string; glow: string }> = {
+  SYSTEM:   { color: '#00e5ff', glow: 'rgba(0,229,255,0.6)' },   // Cyan
+  DANNA:    { color: '#ffdf60', glow: 'rgba(255,223,96,0.6)' },  // Dorado
+  GUARDIAN: { color: '#ff1e38', glow: 'rgba(255,30,56,0.8)' },   // Carmesí
+  PILOT:    { color: '#00ff9d', glow: 'rgba(0,255,157,0.6)' },   // Jade
+  WARN:     { color: '#ff1e38', glow: 'rgba(255,30,56,0.8)' },   // Carmesí
+  INFO:     { color: '#94a3b8', glow: 'transparent' },           // Gris
+};
+
+const containerStyle: React.CSSProperties = {
+  padding: '12px 14px',
+  clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)',
+  background: 'linear-gradient(135deg, rgba(10,14,28,0.95) 0%, rgba(3,4,8,0.98) 100%)',
+  border: '1px solid rgba(0,229,255,0.25)',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.6), inset 0 0 20px rgba(0,229,255,0.05)',
+  fontFamily: "'JetBrains Mono', monospace",
+  fontSize: '10px',
+  position: 'relative',
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  marginBottom: '8px'
+};
+
+const bgOverlay: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  background: 'repeating-linear-gradient(0deg, rgba(0,229,255,0.02) 0px, rgba(0,229,255,0.02) 1px, transparent 1px, transparent 4px)',
+  pointerEvents: 'none',
+  zIndex: 0,
+};
+
 export function WarTerminal({ payload, spins }: Props) {
   const logs = useMemo(() => buildLogsFromPayload(payload, spins), [payload, spins]);
 
+  // Inyección de animación para el cursor de la terminal
+  const styleBlock = (
+    <style>{`
+      @keyframes wt-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+      .wt-cursor-blink { animation: wt-blink 1s step-end infinite; }
+    `}</style>
+  );
+
   if (logs.length === 0) {
     return (
-      <div className="war-terminal">
-        <div className="wt-line">
-          <span className="wt-ts">{nowTs()}</span>
-          <span className="wt-sys">[SYSTEM]</span>
-          <span className="wt-txt"> aguardando datos...</span>
-          <span className="wt-cursor" />
+      <div className="war-terminal" style={containerStyle}>
+        {styleBlock}
+        <div style={bgOverlay} />
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span style={{ color: '#5c687a' }}>{nowTs()}</span>
+          <span style={{ color: TAG_THEME.SYSTEM.color, textShadow: `0 0 8px ${TAG_THEME.SYSTEM.glow}`, fontWeight: 800 }}>[SYSTEM]</span>
+          <span style={{ color: '#cbd5e1' }}>aguardando datos...</span>
+          <span className="wt-cursor-blink" style={{ display: 'inline-block', width: '6px', height: '12px', background: TAG_THEME.SYSTEM.color, boxShadow: `0 0 8px ${TAG_THEME.SYSTEM.glow}`, marginTop: '1px' }} />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="war-terminal">
-      {logs.map((l, i) => {
-        const tagCls =
-          l.tag === 'SYSTEM' ? 'wt-sys' :
-          l.tag === 'DANNA' ? 'wt-eng' :
-          l.tag === 'GUARDIAN' ? 'wt-wrn' :
-          l.tag === 'PILOT' ? 'wt-dan' :
-          l.tag === 'WARN' ? 'wt-wrn' :
-          'wt-txt';
-        const isLast = i === logs.length - 1;
-        return (
-          <div key={i} className="wt-line">
-            <span className="wt-ts">{l.ts}</span>
-            <span className={tagCls}>[{l.tag}]</span>
-            <span className="wt-txt"> {l.text}</span>
-            {isLast && <span className="wt-cursor" />}
-          </div>
-        );
-      })}
+    <div className="war-terminal" style={containerStyle}>
+      {styleBlock}
+      <div style={bgOverlay} />
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column' }}>
+        {logs.map((l, i) => {
+          const t = TAG_THEME[l.tag] || TAG_THEME.INFO;
+          const isLast = i === logs.length - 1;
+          const isWarning = l.tag === 'GUARDIAN' || l.tag === 'WARN';
+
+          return (
+            <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '5px', lineHeight: 1.3 }}>
+              {/* Timestamp oscuro */}
+              <span style={{ color: '#5c687a', flexShrink: 0 }}>{l.ts}</span>
+              
+              {/* Tag con neón intenso */}
+              <span style={{ color: t.color, textShadow: `0 0 8px ${t.glow}`, fontWeight: 800, flexShrink: 0 }}>
+                [{l.tag}]
+              </span>
+              
+              {/* Texto (Si es alerta, se tiñe de rojo, sino gris claro) */}
+              <span style={{ 
+                color: isWarning ? '#ff1e38' : '#cbd5e1', 
+                flex: 1, wordBreak: 'break-word', 
+                textShadow: isWarning ? `0 0 8px ${t.glow}` : 'none',
+                fontWeight: isWarning ? 700 : 400
+              }}>
+                {l.text}
+              </span>
+              
+              {/* Cursor palpitante (Solo en la última línea) */}
+              {isLast && (
+                <span className="wt-cursor-blink" style={{ 
+                  display: 'inline-block', width: '6px', height: '11px', 
+                  background: t.color, boxShadow: `0 0 8px ${t.glow}`, 
+                  flexShrink: 0, marginTop: '2px' 
+                }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
