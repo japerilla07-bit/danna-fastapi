@@ -1,153 +1,197 @@
-/* PilotDelta — HUD de conciencia situacional.
-   Lectura en menos de 5 segundos: bloques separados, contraste alto,
-   la alerta roja domina visualmente sobre todo lo demás.
-   Pegar al final de la hoja global. */
+/* ════════════════════════════════════════════════════════════════
+ * PilotDelta — HUD de conciencia situacional (Geass / Shikon Mode)
+ * Lectura en menos de 5 segundos. La alerta roja domina la vista.
+ * ════════════════════════════════════════════════════════════════ */
 
 .pd {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .pd-block {
-  border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 6px;
-  padding: 8px 9px;
-  background: rgba(255, 255, 255, .02);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(10, 14, 28, 0.95) 0%, rgba(3, 4, 8, 0.98) 100%);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6), inset 0 0 20px rgba(0, 229, 255, 0.05);
+  backdrop-filter: blur(12px);
+  transition: all 0.3s ease;
+  position: relative;
 }
 
+/* Títulos de bloque */
 .pd-btitle {
-  font-size: 8px;
-  letter-spacing: .16em;
-  opacity: .4;
-  margin-bottom: 7px;
+  font-size: 9.5px;
+  letter-spacing: 0.25em;
+  font-weight: 800;
+  color: #00e5ff;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.pd-row { display: flex; gap: 6px; }
+.pd-row { display: flex; gap: 8px; }
 
+/* Chips de estado (W/R, MESA) */
 .pd-chip {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 5px 7px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, .05);
-  border-left: 3px solid transparent;
+  gap: 2px;
+  padding: 6px 10px;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  background: rgba(2, 4, 8, 0.6);
+  border: 1px solid transparent;
 }
-.pd-k { font-size: 8px; letter-spacing: .1em; opacity: .5; }
-.pd-v { font-size: 15px; font-weight: 800; line-height: 1.15; }
+.pd-k { font-size: 8px; letter-spacing: 0.15em; font-weight: 700; color: #8092b5; }
+.pd-v { font-size: 18px; font-weight: 900; line-height: 1.1; font-family: 'Rajdhani', sans-serif; }
 
-.pd-chip.pd-ok   { border-left-color: #22c55e; }
-.pd-chip.pd-ok   .pd-v { color: #22c55e; }
-.pd-chip.pd-mid  { border-left-color: #eab308; }
-.pd-chip.pd-mid  .pd-v { color: #eab308; }
-.pd-chip.pd-bad  { border-left-color: #ef4444; }
-.pd-chip.pd-bad  .pd-v { color: #ef4444; }
-.pd-chip.pd-na   { border-left-color: #475569; }
-.pd-chip.pd-na   .pd-v { color: #94a3b8; }
-.pd-chip.pd-dim  { opacity: .38; }
-.pd-chip.pd-dim  .pd-v { font-size: 13px; }
+/* Temas de los Chips */
+.pd-chip.pd-ok   { border-color: rgba(0, 255, 157, 0.4); box-shadow: inset 0 0 12px rgba(0, 255, 157, 0.1); }
+.pd-chip.pd-ok   .pd-v { color: #00ff9d; text-shadow: 0 0 10px rgba(0, 255, 157, 0.6); }
 
-/* ── Secuencia A/E ── */
-.pd-seq { display: flex; gap: 4px; margin-top: 8px; }
+.pd-chip.pd-mid  { border-color: rgba(255, 223, 96, 0.4); box-shadow: inset 0 0 12px rgba(255, 223, 96, 0.15); }
+.pd-chip.pd-mid  .pd-v { color: #ffdf60; text-shadow: 0 0 10px rgba(255, 223, 96, 0.6); }
+
+.pd-chip.pd-bad  { border-color: rgba(255, 30, 56, 0.5); box-shadow: inset 0 0 12px rgba(255, 30, 56, 0.15); }
+.pd-chip.pd-bad  .pd-v { color: #ff1e38; text-shadow: 0 0 10px rgba(255, 30, 56, 0.6); }
+
+.pd-chip.pd-na   { border-color: rgba(92, 104, 122, 0.4); }
+.pd-chip.pd-na   .pd-v { color: #cbd5e1; }
+.pd-chip.pd-dim  { opacity: 0.4; filter: grayscale(1); }
+.pd-chip.pd-dim  .pd-v { font-size: 16px; }
+
+/* ── Secuencia A/E (Estilo Rastreador Táctico) ── */
+.pd-seq { display: flex; gap: 4px; margin-top: 10px; }
 .pd-seq-x {
   flex: 1;
   text-align: center;
-  padding: 3px 0;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 800;
-  background: rgba(255, 255, 255, .05);
+  padding: 4px 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  transform: skewX(-12deg);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.05);
   color: #94a3b8;
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: all 0.3s;
 }
-.pd-seq-a { background: rgba(34, 197, 94, .18);  color: #22c55e; }
-.pd-seq-e { background: rgba(239, 68, 68, .18);  color: #ef4444; }
+.pd-seq-x span { display: block; transform: skewX(12deg); } /* Des-inclinar texto */
+
+.pd-seq-a { 
+  background: rgba(0, 255, 157, 0.15);  
+  border-color: rgba(0, 255, 157, 0.6);
+  color: #00ff9d; 
+  text-shadow: 0 0 8px rgba(0, 255, 157, 0.8);
+  box-shadow: inset 0 0 10px rgba(0, 255, 157, 0.2);
+}
+.pd-seq-e { 
+  background: rgba(255, 30, 56, 0.15);  
+  border-color: rgba(255, 30, 56, 0.6);
+  color: #ff1e38; 
+  text-shadow: 0 0 8px rgba(255, 30, 56, 0.8);
+  box-shadow: inset 0 0 10px rgba(255, 30, 56, 0.2);
+}
 
 /* ── Anclaje ── */
 .pd-anc {
   display: grid;
-  grid-template-columns: 32px 34px 1fr auto;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 0;
-  font-size: 10px;
+  grid-template-columns: 36px 42px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 10.5px;
 }
-.pd-anc + .pd-anc { border-top: 1px solid rgba(255, 255, 255, .05); }
-.pd-anc-k { opacity: .45; letter-spacing: .08em; }
-.pd-anc-v { font-size: 14px; font-weight: 700; }
-.pd-anc-s { font-size: 9px; letter-spacing: .05em; font-weight: 700; }
-.pd-anc-s.ok  { color: #38bdf8; }
-.pd-anc-s.bad { color: #eab308; }
-.pd-anc-r { font-size: 9px; opacity: .35; }
+.pd-anc + .pd-anc { border-top: 1px dashed rgba(0, 229, 255, 0.15); }
+.pd-anc-k { opacity: 0.6; letter-spacing: 0.15em; font-weight: 700; color: #00e5ff; }
+.pd-anc-v { font-family: 'Rajdhani', sans-serif; font-size: 17px; font-weight: 800; color: #ffffff; text-shadow: 0 0 6px rgba(255,255,255,0.4); }
+.pd-anc-s { font-size: 9.5px; letter-spacing: 0.08em; font-weight: 800; }
+.pd-anc-s.ok  { color: #00ff9d; text-shadow: 0 0 8px rgba(0,255,157,0.5); }
+.pd-anc-s.bad { color: #ffdf60; text-shadow: 0 0 8px rgba(255,223,96,0.5); }
+.pd-anc-r { font-size: 10px; opacity: 0.5; color: #cbd5e1; }
 
-/* ── Alerta de choque ── */
+/* ── Alerta de choque (EMERGENCIA) ── */
 .pd-alert.on {
-  border-color: rgba(239, 68, 68, .55);
-  background: rgba(239, 68, 68, .07);
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, .18), 0 0 16px rgba(239, 68, 68, .16);
+  border-color: rgba(255, 30, 56, 0.9);
+  background: radial-gradient(circle at center, rgba(255, 30, 56, 0.15) 0%, rgba(10, 14, 28, 0.95) 80%);
+  animation: pd-emergency-glow 1.5s ease-in-out infinite;
+}
+.pd-alert.on::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(45deg, rgba(255,30,56,0.02) 0px, rgba(255,30,56,0.02) 2px, transparent 2px, transparent 10px);
+  pointer-events: none;
+}
+@keyframes pd-emergency-glow { 
+  0%, 100% { box-shadow: inset 0 0 20px rgba(255, 30, 56, 0.2), 0 0 10px rgba(255, 30, 56, 0.3); } 
+  50% { box-shadow: inset 0 0 50px rgba(255, 30, 56, 0.5), 0 0 30px rgba(255, 30, 56, 0.6); } 
 }
 
 .pd-accion {
-  margin-top: 8px;
-  padding: 7px 6px;
-  border-radius: 5px;
+  margin-top: 10px;
+  padding: 8px 6px;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
   text-align: center;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: .06em;
+  letter-spacing: 0.1em;
+  position: relative;
+  z-index: 2;
 }
-.pd-accion.ok  { background: rgba(34, 197, 94, .10); color: #22c55e; }
-.pd-accion.bad { background: rgba(239, 68, 68, .18); color: #fca5a5; font-size: 13px; }
+.pd-accion.ok  { 
+  background: rgba(0, 255, 157, 0.1); 
+  border: 1px solid rgba(0, 255, 157, 0.4);
+  color: #00ff9d; 
+}
+.pd-accion.bad { 
+  background: rgba(255, 30, 56, 0.2); 
+  border: 1px solid rgba(255, 30, 56, 0.8);
+  color: #ffffff; 
+  font-size: 13.5px; 
+  text-shadow: 0 0 10px rgba(255, 30, 56, 0.9), 0 0 4px #fff;
+  box-shadow: inset 0 0 15px rgba(255,30,56,0.4);
+}
 
-@keyframes pd-pulse { 0%,100% { opacity: 1 } 50% { opacity: .42 } }
-.pd-blink { animation: pd-pulse 1s ease-in-out infinite; }
+@keyframes pd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.98); } }
+.pd-blink { animation: pd-pulse 1.2s ease-in-out infinite; border-color: rgba(255,30,56,0.9) !important; }
+.pd-blink .pd-v { color: #ff1e38 !important; text-shadow: 0 0 12px rgba(255,30,56,0.8) !important; }
+.pd-blink .pd-k { color: #ff1e38 !important; opacity: 0.9; }
 
 /* ── Validación ── */
 .pd-val {
-  border-top: 1px solid rgba(255, 255, 255, .07);
-  padding-top: 7px;
+  border-top: 1px solid rgba(0, 229, 255, 0.2);
+  padding-top: 10px;
+  position: relative;
 }
-.pd-val-t { font-size: 8px; letter-spacing: .14em; opacity: .38; }
+.pd-val-t { font-size: 8.5px; letter-spacing: 0.18em; opacity: 0.6; color: #00e5ff; font-weight: 700; }
 .pd-val-row {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 5px;
+  margin-top: 6px;
   font-size: 10px;
-  opacity: .75;
+  opacity: 0.85;
+  color: #cbd5e1;
 }
-.pd-val-row b { font-size: 12px; }
-.pd-val-row i { opacity: .45; font-style: normal; font-size: 9px; }
+.pd-val-row b { font-size: 13px; font-family: 'Rajdhani', sans-serif; font-weight: 800; color: #ffffff; }
+.pd-val-row i { opacity: 0.5; font-style: normal; font-size: 9px; }
 .pd-val-note {
-  margin-top: 5px;
-  font-size: 8px;
-  opacity: .3;
-  line-height: 1.35;
+  margin-top: 6px;
+  font-size: 8.5px;
+  opacity: 0.4;
+  line-height: 1.4;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .pd-blink { animation: none; outline: 2px solid #ef4444; }
-}
-
-/* ── Scroll del Quantum Pilot ─────────────────────────────────────────────
-   El panel está limitado a 92vh; el cuerpo scrollea cuando el contenido no
-   cabe (antes se salía por abajo y el Bloque C quedaba cortado). */
+/* Scroll (Mantenido intacto) */
 .pilot-scroll { scrollbar-width: thin; scrollbar-color: rgba(34,211,238,.35) transparent; }
 .pilot-scroll::-webkit-scrollbar { width: 7px; }
 .pilot-scroll::-webkit-scrollbar-track { background: transparent; }
-.pilot-scroll::-webkit-scrollbar-thumb {
-  background: rgba(34, 211, 238, .3);
-  border-radius: 4px;
-}
+.pilot-scroll::-webkit-scrollbar-thumb { background: rgba(34, 211, 238, .3); border-radius: 4px; }
 .pilot-scroll::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, .55); }
-
-/* ── FIX: los hijos del cuerpo scrollable no deben encogerse ──────────────
-   Al limitar el panel a 92vh y poner overflow-y-auto, flexbox intentaba
-   encajar TODAS las secciones dentro de esa altura y las aplastaba: el
-   TARGET LOCK quedaba como una raya con el texto sobre el borde y el bloque
-   de SUGERENCIAS colapsaba a cero (parecía que no existía).
-   flex-shrink:0 obliga a cada sección a conservar su altura natural y a que
-   sea el contenedor el que scrollee, que es lo que se buscaba. */
 .pilot-scroll > * { flex-shrink: 0; }
