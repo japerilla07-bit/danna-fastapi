@@ -560,7 +560,7 @@ def get_state_snapshot(user: dict = Depends(require_active_user)):
     # INDICE DE CAOS: dispersion de la bola sobre la ventana operativa.
     # Siempre devuelve valor (nunca calla). No predice: describe.
     try:
-        chaos_index_block = compute_chaos_index(list(sess.get("spins", []) or []), window=14)
+        chaos_index_block = compute_chaos_index(list(sess.get("spins", []) or []), window=7)
     except Exception as _cie:
         log.warning(f"chaos_index falló: {_cie}")
         chaos_index_block = {"enabled": False, "n": 0, "estado": "CALIBRANDO",
