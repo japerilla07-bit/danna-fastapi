@@ -312,6 +312,16 @@ export function AppPage() {
                 panoPct: (data as any).chaos_index?.pano?.pct ?? null,
                 ruedaPct: (data as any).chaos_index?.rueda?.pct ?? null,
                 chaosEstado: String((data as any).chaos_index?.estado ?? ''),
+                // desglose crudo de la tabla DISPERSIÓN — mismo dato que consume
+                // ChaosPanel (chaos_index.detalle.<grupo>.counts), para que el
+                // CSV lleve las mismas cuentas D1/D2/D3, C1/C2/C3, R/N, P/I, B/A
+                // que se ven en pantalla.
+                docCounts: (data as any).chaos_index?.detalle?.docenas?.counts ?? null,
+                colCounts: (data as any).chaos_index?.detalle?.columnas?.counts ?? null,
+                colorCounts: (data as any).chaos_index?.detalle?.color?.counts ?? null,
+                paridadCounts: (data as any).chaos_index?.detalle?.paridad?.counts ?? null,
+                rangoCounts: (data as any).chaos_index?.detalle?.rango?.counts ?? null,
+                cero: (data as any).chaos_index?.detalle?.cero ?? null,
                 pCat: String((data.payload as any)?.decision?.primary_bet?.bet_key ?? ''),
                 p: (data.payload as any)?.decision?.bet_advice?.docenas?.p ?? null,
                 p1: (data.payload as any)?.decision?.bet_advice?.docenas?.p1 ?? null,
