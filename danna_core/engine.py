@@ -6479,7 +6479,7 @@ def get_decision(analysis: dict, cfl_metrics: dict, spins: List[int], params: di
             # promediando 0.50 (no desplaza los umbrales existentes) pero por
             # fin RECORRE todo el rango 0-1 en vez de estar clavado.
             try:
-                _ci_pano = compute_chaos_index(s_clean, window=int(params.get("chaos_pano_window", 14)))
+                _ci_pano = compute_chaos_index(s_clean, window=int(params.get("chaos_pano_window", 7)))
                 _pano_pct = float((_ci_pano.get("pano") or {}).get("pct", 50.0))
                 # SUELO 0.005 DELIBERADO, no cosmetico: las tres copias de la
                 # formula leen este campo con `... or 0.5`, y en Python 0.0 es
