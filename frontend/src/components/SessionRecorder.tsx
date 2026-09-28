@@ -37,6 +37,22 @@ export interface Fila {
   rueda_pct: number | null;
   chaos_estado: string;
 
+  // desglose de la tabla de DISPERSIÓN (ChaosPanel.detalle) — conteos crudos
+  // en la ventana de 14 giros que arma compute_chaos_index en el backend.
+  disp_D1: number | null;
+  disp_D2: number | null;
+  disp_D3: number | null;
+  disp_C1: number | null;
+  disp_C2: number | null;
+  disp_C3: number | null;
+  disp_R: number | null;
+  disp_N: number | null;
+  disp_P: number | null;
+  disp_I: number | null;
+  disp_B: number | null;
+  disp_A: number | null;
+  disp_CERO: number | null;
+
   p_cat: string;
   p: number | null;
   p1: number | null;
@@ -78,6 +94,13 @@ export interface Snapshot {
   panoPct: number | null;
   ruedaPct: number | null;
   chaosEstado: string;
+  // arrays tal cual los expone ChaosIndex.detalle.<grupo>.counts — ver ChaosPanel.tsx
+  docCounts?: number[] | null;
+  colCounts?: number[] | null;
+  colorCounts?: number[] | null;
+  paridadCounts?: number[] | null;
+  rangoCounts?: number[] | null;
+  cero?: number | null;
   pCat: string;
   p: number | null;
   p1: number | null;
@@ -129,6 +152,19 @@ const COLS: Array<[keyof Fila, string]> = [
   ['pano_pct', 'pano_pct'],
   ['rueda_pct', 'rueda_pct'],
   ['chaos_estado', 'dispersion'],
+  ['disp_D1', 'disp_D1'],
+  ['disp_D2', 'disp_D2'],
+  ['disp_D3', 'disp_D3'],
+  ['disp_C1', 'disp_C1'],
+  ['disp_C2', 'disp_C2'],
+  ['disp_C3', 'disp_C3'],
+  ['disp_R', 'disp_R'],
+  ['disp_N', 'disp_N'],
+  ['disp_P', 'disp_P'],
+  ['disp_I', 'disp_I'],
+  ['disp_B', 'disp_B'],
+  ['disp_A', 'disp_A'],
+  ['disp_CERO', 'disp_CERO'],
   ['p_cat', 'p_cat'],
   ['p', 'valor p'],
   ['p1', 'p_1'],
@@ -241,6 +277,19 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
         pano_pct: snap.panoPct,
         rueda_pct: snap.ruedaPct,
         chaos_estado: snap.chaosEstado,
+        disp_D1: snap.docCounts?.[0] ?? null,
+        disp_D2: snap.docCounts?.[1] ?? null,
+        disp_D3: snap.docCounts?.[2] ?? null,
+        disp_C1: snap.colCounts?.[0] ?? null,
+        disp_C2: snap.colCounts?.[1] ?? null,
+        disp_C3: snap.colCounts?.[2] ?? null,
+        disp_R: snap.colorCounts?.[0] ?? null,
+        disp_N: snap.colorCounts?.[1] ?? null,
+        disp_P: snap.paridadCounts?.[0] ?? null,
+        disp_I: snap.paridadCounts?.[1] ?? null,
+        disp_B: snap.rangoCounts?.[0] ?? null,
+        disp_A: snap.rangoCounts?.[1] ?? null,
+        disp_CERO: snap.cero ?? null,
         p_cat: snap.pCat,
         p: snap.p,
         p1: snap.p1,
