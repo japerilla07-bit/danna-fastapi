@@ -370,14 +370,14 @@ export function AppPage() {
             />
           </div>
 
-          {/* DERECHA: Table Entropy + Radar + Dispersión */}
+          {/* DERECHA: Table Entropy + Dispersión + Radar */}
           <div className="col-right">
             <TableEntropy
               chaosIndex={(data as any).chaos_index ?? null}
               tableHealth={(data as any).table_health ?? null}
             />
-            <RadarCard payload={data.payload} />
             <ChaosPanel chaosIndex={(data as any).chaos_index ?? null} />
+            <RadarCard payload={data.payload} />
           </div>
 
         </div>
