@@ -17,14 +17,18 @@ import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
-  useTermoHits, useTermoTotal, useTermoStreak, useHistory, type CellRec,
+  useTermoHits, useTermoTotal, useTermoStreak, useHistory, useSetCopSug, type CellRec,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, labelByKey,
   fusedZone, fusedZoneByKey, liveDeviation, currentCellWr, currentCellMaxRun,
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
-import { decidir, type MarketRead } from '@/domain/copilot';
+// decidir() = Capa 1 sola (la usa el marcador propio de abajo, que reconstruye
+// TODA la sesión desde history — con la Capa 1 sola, que no tiene estado que
+// se corrompa al recalcularse muchas veces). decidirPiloto() = Capa 1 + Capa 2
+// (el escudo), función pura de lectura — es la que manda en la ORDEN en vivo.
+import { decidir, decidirPiloto, type MarketRead } from '@/domain/copilot';
 
 // ── PALETA "GEASS / SHIKON" DIRECTA EN EL COMPONENTE ──
 const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: string }> = {
@@ -365,7 +369,21 @@ function useMarketRead(mkt: Market): MarketRead {
 function Copilot() {
   const doc = useMarketRead('doc');
   const col = useMarketRead('col');
-  const d = decidir(doc, col);
+  // Piloto completo (Capa 1 + escudo de Capa 2) — la orden que se muestra y
+  // la que se juega. decidirPiloto es pura (solo lee estado de copilot.ts),
+  // así que no importa cuántas veces se re-renderice este componente entre
+  // un giro real y el siguiente.
+  const d = decidirPiloto(doc, col);
+
+  // Le avisamos al store, EN CADA RENDER, qué mercado sugiere el piloto
+  // ahora mismo (o null si ESPERAR/PARAR/INESTABLE). El store lo lee en el
+  // instante exacto en que registra el giro pendiente (ver telemetryStore.ts
+  // → ingest), así el giro que se resuelve después queda evaluado contra la
+  // sugerencia que REALMENTE estaba en pantalla en ese giro, sin depender
+  // del timing de un useEffect. Esto también es lo que alimenta el escudo
+  // de Capa 2 en vivo (registrarGiroReal), no solo el marcador.
+  const setCopSug = useSetCopSug();
+  setCopSug(d.mercado);
 
   const history = useHistory();
   const { copHits, copMisses, copStreak, copLive } = useMemo(() => {
