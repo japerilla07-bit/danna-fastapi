@@ -25,6 +25,7 @@
 
 import { create } from 'zustand';
 import { classifyZone, cellKeyOf, type Zone, type Market } from '@/domain/zoneMatrix';
+import { registrarGiroReal, resetEscudo } from '@/domain/copilot';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -189,6 +190,21 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         }
       }
 
+      // ── CAPA 2 — ESCUDO: alimentar el giro real (número + si el PILOTO
+      //    jugó ese giro y si acertó) exactamente una vez por giro resuelto.
+      //    pend.copSug ya refleja al PILOTO completo (Capa1+Capa2), no solo
+      //    Capa1, porque MatrixPanel ahora escribe ahí la salida de
+      //    decidirPiloto() en vez de decidir(). Si algún giro no tiene
+      //    docHit NI colHit resueltos (spin no cubierto por ningún pick),
+      //    igual se registra el número (jugado=false) para no perder ese
+      //    giro de la ventana de 7 que usa el escudo.
+      {
+        const jugado = pend.copSug !== null
+          && (pend.copSug === 'doc' ? docHit !== null : colHit !== null);
+        const acierto = jugado && (pend.copSug === 'doc' ? docHit === true : colHit === true);
+        registrarGiroReal(spin, jugado, acierto);
+      }
+
       if (docHit !== null || colHit !== null) {
         const c = { ...counters };
         if (docHit === true)  { c.docHits += 1; c.docStreak = 0; }
@@ -233,6 +249,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
     });
     copSugRef = null;
+    resetEscudo(); // apaga y limpia la Capa 2 (racha viva, ventana de 7 giros)
   },
 }));
 
