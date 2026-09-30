@@ -121,11 +121,17 @@ interface GodBetData {
   };
 }
 
+// ★ FIX build (sep 2026): streak/max_streak eran opcionales acá pero
+// CategoryTable.tsx/GodBetPanel.tsx los declaran obligatorios (su propio
+// `interface Counter`). Como CounterEntry solo existe para tipar lo que
+// se reenvía tal cual a esos dos componentes (nunca se lee .streak adentro
+// de este archivo), se alinea 1:1 con su Counter — sin esto tsc rompía el
+// build en los props `counters`/`countersGod` de las líneas de abajo.
 interface CounterEntry {
   wins: number;
   losses: number;
-  streak?: number;
-  max_streak?: number;
+  streak: number;
+  max_streak: number;
   consec_errors: number;
   max_consec_errors: number;
 }
