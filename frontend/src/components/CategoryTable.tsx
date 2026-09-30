@@ -1,11 +1,16 @@
-// CategoryTable — Tabla de categorías con E1-E7 del error_hist real.
+// CategoryTable — Tabla de categorías.
 //
-// Columnas (port de imagen de referencia app.py):
-//   badge | nombre | pick | W: L: Seq: Max: | AVG | E1 E2 E3 E4 E5 E6 E7
+// Columnas: badge | nombre | pick | W: L: Seq: Max: | AVG
+//
+// v4 (sep 2026) — se sacó el histograma E1-E7 (los cuadritos chicos que
+// marcaban cuántas veces se acertó tras 1/2/3.../7 errores seguidos).
+// Pedido explícito de Gunner: "podemos eliminar los cuadros pequeños que
+// marcan cuantas veces cada error". AVG (el promedio de errores antes de
+// acertar) se queda — es el resumen de esa misma info; el desglose
+// giro-a-giro no se usaba para operar en vivo. `errorHist` se sigue
+// recibiendo (alimenta AVG), solo dejó de leerse fila E1-E7.
 //
 // error_hist[key] = { E1, E2, E3, E4, E5, E6, E7, hits_counted, avg_errors }
-// E1-E7 = cuántas veces se acertó después de N errores consecutivos
-//   E7 = 7+ errores antes de acertar
 
 import type { EnginePayload } from '@/types/api';
 
@@ -98,8 +103,6 @@ const CATEGORIES = [
   { key: 'guardian_columna', label: 'Guardián (Columna)' },
 ] as const;
 
-const E_KEYS = ['E1','E2','E3','E4','E5','E6','E7'] as const;
-
 // ── Componente fila ───────────────────────────────────────────────
 //
 // v3 (sep 2026) — REORGANIZACIÓN COMPLETA. El Quantum Pilot pasó a un
@@ -108,8 +111,9 @@ const E_KEYS = ['E1','E2','E3','E4','E5','E6','E7'] as const;
 // en vez de apilarse en 3 (eso era el parche para el panel de 480px que
 // ya no existe). Autocontenida igual que v2, sin depender de CSS externo.
 // Orden de columnas, de izquierda a derecha: badge · nombre · pick ·
-// W:L:Seq:Max · AVG · histograma E1-E7. Todo visible siempre, nada se
-// oculta — nombre/pick truncan primero (son texto), los números nunca.
+// W:L:Seq:Max · AVG (el histograma E1-E7 que iba después se sacó en v4).
+// Todo visible siempre, nada se oculta — nombre/pick truncan primero (son
+// texto), los números nunca.
 
 const BADGE_STYLE: Record<BadgeState, React.CSSProperties> = {
   bet: { background: 'rgba(34,197,94,0.18)', color: '#86efac', border: '1px solid rgba(34,197,94,0.4)' },
@@ -178,29 +182,6 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false }: Ro
 
       <span style={{ fontSize: 9.5, color: '#64748b', flexShrink: 0, whiteSpace: 'nowrap', width: 52 }}>
         AVG:<b style={{ color: '#cbd5e1' }}>{avgStr}</b>
-      </span>
-
-      {/* histograma E1-E7 */}
-      <span style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-        {E_KEYS.map((ek) => {
-          const val = safeInt(errorHist?.[ek]);
-          const hasVal = val > 0;
-          return (
-            <span
-              key={ek}
-              title={`${ek}: ${val} vez${val !== 1 ? 'es' : ''}`}
-              style={{
-                width: 16, height: 16, borderRadius: 3,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 8.5,
-                background: hasVal ? (god ? 'rgba(248,113,113,0.22)' : 'rgba(34,211,238,0.18)') : 'rgba(255,255,255,0.04)',
-                color: hasVal ? (god ? '#fca5a5' : '#67e8f9') : '#475569',
-              }}
-            >
-              {hasVal ? val : ''}
-            </span>
-          );
-        })}
       </span>
     </div>
   );
@@ -282,7 +263,6 @@ export function CategoryTable({
         <span style={{ flex: '1 1 auto', minWidth: 40, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em' }}>PICK</span>
         <span style={{ flexShrink: 0, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em', width: 116 }}>W / L / SEQ / MAX</span>
         <span style={{ width: 52, flexShrink: 0, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em' }}>AVG</span>
-        <span style={{ flexShrink: 0, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em', width: 130 }}>E1→E7</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {rows.map((row) => (
