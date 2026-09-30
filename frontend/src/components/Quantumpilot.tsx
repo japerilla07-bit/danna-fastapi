@@ -1006,14 +1006,11 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 5. BANKROLL (cierra la columna izquierda) ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <SeccionLabel>BANKROLL</SeccionLabel>
-          <BankrollLedger bankroll={bankroll} />
         </div>
-
-        </div>
-        {/* ── fin columna A (decisión) / columna B (categorías) ── */}
+        {/* ── fin columna A (decisión) / columna B (categorías) — BANKROLL
+             ya no cierra acá: Gunner — "el bankroll ahi que da cortado y
+             mal ubicado, quedaria mejor debajo de la celda de columns en
+             la columna 3". Se movió al final de la columna C (ZONA). ── */}
         <div className="flex flex-col gap-3">
 
         {/* ═══ 4. SUGERENCIAS POR CATEGORÍA — las 9, siempre visibles,
@@ -1052,6 +1049,12 @@ export function QuantumPilot({
               acierto + techo de errores, qué hacer — nada más, para que
               las dos entren sin scroll. */}
           <ZoneDetailGrid direction="column" compact />
+
+          {/* ═══ BANKROLL — reubicado acá (debajo de COLUMNAS), pedido de
+               Gunner: antes cerraba la columna A y quedaba cortado/mal
+               ubicado. Misma columna angosta que las celdas de zona. ═══ */}
+          <SeccionLabel>BANKROLL</SeccionLabel>
+          <BankrollLedger bankroll={bankroll} />
         </div>
 
         </div>
