@@ -335,7 +335,9 @@ export function QuantumPilot({
 }: Props) {
   const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
-  const [zonaAbierta, setZonaAbierta] = useState(false);
+  // Abierto por defecto: Gunner pidió que las dos celdas actuales
+  // (doc + col) se vean directo, sin tener que tocar nada.
+  const [zonaAbierta, setZonaAbierta] = useState(true);
 
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -494,7 +496,7 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[480px] max-w-[95vw] max-h-[92vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[640px] max-w-[95vw] max-h-[95vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
         left: pos.x,
         top: pos.y,
