@@ -37,11 +37,15 @@ interface BetAdviceEntry {
   label?: string;
 }
 
-type BadgeState = 'bet' | 'prb' | 'wt';
+export type BadgeState = 'bet' | 'prb' | 'wt';
+export type { BetAdviceEntry };
 
 // ── Helpers ───────────────────────────────────────────────────────
+// Exportados: Quantumpilot.tsx los reusa para el bloque rápido
+// "DOCENAS/COLUMNAS" de la sección DECISIÓN — misma lectura exacta que
+// esta tabla, sin duplicar la lógica ni arriesgarse a que diverjan.
 
-function toState(entry: BetAdviceEntry | undefined): BadgeState {
+export function toState(entry: BetAdviceEntry | undefined): BadgeState {
   if (!entry) return 'wt';
   const raw = String(
     entry.status ?? entry.final_action ?? entry.action ?? 'WAIT'
@@ -51,7 +55,7 @@ function toState(entry: BetAdviceEntry | undefined): BadgeState {
   return 'wt';
 }
 
-function pickLabel(entry: BetAdviceEntry | undefined): string {
+export function pickLabel(entry: BetAdviceEntry | undefined): string {
   if (!entry) return '—';
   return String(entry.pick ?? entry.selection ?? entry.value ?? entry.label ?? '—');
 }
