@@ -35,8 +35,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
-import { CopilotOrder, CopilotScoreboard, ZoneDetailGrid } from '@/components/MatrixPanel';
-import { CategoryTable } from '@/components/CategoryTable';
+import { CopilotOrder, CopilotScoreboard, ZoneDetailGrid, ZoneQuickBadges } from '@/components/MatrixPanel';
+import { CategoryTable, toState, pickLabel, type BadgeState } from '@/components/CategoryTable';
 import { GodBetPanel } from '@/components/GodBetPanel';
 import { BankrollLedger } from '@/components/BankrollLedger';
 
@@ -324,6 +324,31 @@ function SeccionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Chip DOCENAS/COLUMNAS con pick concreto (1-12, Col 2, etc.) — responde el
+// reclamo de Gunner: el veredicto del escudo ("DOCENAS · ENTRÁ") dice QUÉ
+// MERCADO, no CUÁL docena/columna específica. Lee bet_advice con la MISMA
+// función (toState/pickLabel) que usa CategoryTable, así nunca puede mostrar
+// algo distinto de lo que dice la fila "Docenas"/"Columnas" de la tabla.
+// Va pegado a CopilotOrder, arriba de todo — cero scroll para verlo.
+const BADGE_BG: Record<BadgeState, string> = {
+  bet: 'bg-green-600/20 border-green-500/50 text-green-300',
+  prb: 'bg-amber-600/20 border-amber-500/50 text-amber-300',
+  wt:  'bg-gray-700/25 border-gray-600/40 text-gray-400',
+};
+const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
+
+function DocColQuickPick({ label, state, pick }: { label: string; state: BadgeState; pick: string }) {
+  return (
+    <div className={`flex-1 flex items-center justify-between px-3 py-2 rounded-md border ${BADGE_BG[state]}`}>
+      <span className="text-[10px] font-bold text-gray-400" style={{ letterSpacing: '0.15em' }}>{label}</span>
+      <span className="flex items-center gap-2">
+        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${BADGE_BG[state]}`}>{BADGE_TXT[state]}</span>
+        <span className="text-[15px] font-black text-white">{pick}</span>
+      </span>
+    </div>
+  );
+}
+
 // ── Componente principal ─────────────────────────────────────────
 
 export function QuantumPilot({
@@ -335,9 +360,12 @@ export function QuantumPilot({
 }: Props) {
   const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
-  // Abierto por defecto: Gunner pidió que las dos celdas actuales
-  // (doc + col) se vean directo, sin tener que tocar nada.
-  const [zonaAbierta, setZonaAbierta] = useState(true);
+  // v3 (sep 2026): vuelven a arrancar colapsados — demasiado scroll para
+  // operar en vivo. La zona actual (doc+col) ahora se ve en el propio
+  // header del acordeón vía <ZoneQuickBadges/>, así que colapsar acá no
+  // vuelve a esconder "las dos celdas actuales" que Gunner pidió ver.
+  const [zonaAbierta, setZonaAbierta] = useState(false);
+  const [categoriasAbierto, setCategoriasAbierto] = useState(false);
 
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -737,6 +765,22 @@ export function QuantumPilot({
           <SeccionLabel>DECISIÓN</SeccionLabel>
           <CopilotOrder />
 
+          {/* Pick concreto de cada mercado — el escudo dice QUÉ mercado
+              (docenas o columnas), esto dice CUÁL docena/columna. Mismo
+              bet_advice que lee la fila "Docenas"/"Columnas" de la tabla
+              de abajo, sin tener que scrollear hasta ahí para verlo. */}
+          {(() => {
+            const advice: Record<string, any> = (payload as any)?.decision?.bet_advice ?? {};
+            const docState = toState(advice['docenas']);
+            const colState = toState(advice['columnas']);
+            return (
+              <div className="flex gap-2">
+                <DocColQuickPick label="DOCENAS" state={docState} pick={pickLabel(advice['docenas'])} />
+                <DocColQuickPick label="COLUMNAS" state={colState} pick={pickLabel(advice['columnas'])} />
+              </div>
+            );
+          })()}
+
           <div className="mt-1">
             <span className="text-[10px] text-gray-500 px-1" style={{ letterSpacing: '0.2em' }}>
               GOD · ALTA PRECISIÓN (motor alterno — activa solo con OPTIMAL + Radar ≥7)
@@ -953,29 +997,43 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 4. SUGERENCIAS POR CATEGORÍA (completo) ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <SeccionLabel>SUGERENCIAS POR CATEGORÍA</SeccionLabel>
-          <CategoryTable payload={payload} counters={counters} errorHist={errorHist} />
-          <GodBetPanel
-            payload={payload}
-            counters={counters}
-            countersGod={godBet.counters_god ?? {}}
-            errorHist={errorHist}
-            errorHistGod={errorHist}
-            godActive={godBet.active}
-            radarScore={godBet.radar_score}
-          />
-        </div>
-
-        {/* ═══ 5. LECTURA DE ZONA POR MERCADO (colapsable) ═══ */}
+        {/* ═══ 4. SUGERENCIAS POR CATEGORÍA (colapsable — auditoría de las
+             9 categorías completas; los picks de DOCENAS/COLUMNAS que
+             importan para operar YA están arriba, en DECISIÓN) ═══ */}
         <div className="flex flex-col gap-1.5">
           <button
-            onClick={() => setZonaAbierta((v) => !v)}
+            onClick={() => setCategoriasAbierto((v) => !v)}
             className="flex items-center justify-between px-1 py-1 w-full text-left"
             style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
           >
-            <SeccionLabel>{zonaAbierta ? '▾' : '▸'} LECTURA DE ZONA POR MERCADO (detalle / auditoría)</SeccionLabel>
+            <SeccionLabel>{categoriasAbierto ? '▾' : '▸'} SUGERENCIAS POR CATEGORÍA (las 9 · auditoría)</SeccionLabel>
+          </button>
+          {categoriasAbierto && (
+            <>
+              <CategoryTable payload={payload} counters={counters} errorHist={errorHist} />
+              <GodBetPanel
+                payload={payload}
+                counters={counters}
+                countersGod={godBet.counters_god ?? {}}
+                errorHist={errorHist}
+                errorHistGod={errorHist}
+                godActive={godBet.active}
+                radarScore={godBet.radar_score}
+              />
+            </>
+          )}
+        </div>
+
+        {/* ═══ 5. LECTURA DE ZONA POR MERCADO (colapsable — la zona ACTUAL
+             de doc+col se ve en el header, aunque esté cerrado) ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={() => setZonaAbierta((v) => !v)}
+            className="flex items-center justify-between px-1 py-1 w-full text-left gap-2"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+          >
+            <SeccionLabel>{zonaAbierta ? '▾' : '▸'} LECTURA DE ZONA (detalle / auditoría)</SeccionLabel>
+            <ZoneQuickBadges />
           </button>
           {zonaAbierta && <ZoneDetailGrid />}
         </div>
