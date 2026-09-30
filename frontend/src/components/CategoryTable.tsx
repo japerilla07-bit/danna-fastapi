@@ -97,6 +97,21 @@ const CATEGORIES = [
 const E_KEYS = ['E1','E2','E3','E4','E5','E6','E7'] as const;
 
 // ── Componente fila ───────────────────────────────────────────────
+//
+// v2 (sep 2026) — FIX visual: antes dependía de clases CSS externas
+// (.cat-row/.cat-pick/.cat-stats/.cat-ehist/…) que en el panel angosto del
+// Quantum Pilot (480px) cortaban la fila — el pick, AVG y el histograma
+// E1-E7 quedaban fuera de vista, que era justo la queja: "no dice que
+// docena que color que numeros". Ahora la fila es autocontenida (sin
+// depender de ninguna hoja de estilos externa) y se apila en 3 líneas para
+// que nada se recorte sin importar el ancho del contenedor.
+
+const BADGE_STYLE: Record<BadgeState, React.CSSProperties> = {
+  bet: { background: 'rgba(34,197,94,0.18)', color: '#86efac', border: '1px solid rgba(34,197,94,0.4)' },
+  prb: { background: 'rgba(245,158,11,0.18)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.4)' },
+  wt:  { background: 'rgba(100,116,139,0.18)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.35)' },
+};
+const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
 
 interface RowProps {
   label: string;
@@ -104,50 +119,89 @@ interface RowProps {
   pick: string;
   counter: Counter | undefined;
   errorHist: ErrorHist | undefined;
+  god?: boolean;
 }
 
-function CategoryRow({ label, state, pick, counter, errorHist }: RowProps) {
+function CategoryRow({ label, state, pick, counter, errorHist, god = false }: RowProps) {
   const w   = safeInt(counter?.wins);
   const l   = safeInt(counter?.losses);
   const seq = safeInt(counter?.consec_errors);
   const max = safeInt(counter?.max_consec_errors);
   const avg = safeInt(errorHist?.avg_errors ? errorHist.avg_errors * 10 : 0) / 10;
   const avgStr = (w + l) === 0 ? '0.0' : avg.toFixed(1);
+  const accent = god ? '#fca5a5' : '#67e8f9';
+  const borderColor = god ? 'rgba(220,38,38,0.15)' : 'rgba(34,211,238,0.12)';
 
   return (
-    <div className="cat-row">
-      {/* 1. Badge estado */}
-      <span className={`cat-badge ${state}`}>
-        {state === 'bet' ? 'BET' : state === 'prb' ? 'PRB' : 'WT'}
-      </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '7px 4px', borderBottom: `1px solid ${borderColor}` }}>
+      {/* línea 1: badge + nombre ...... pick (SIEMPRE visible, su propia línea) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span
+            style={{
+              ...BADGE_STYLE[state],
+              fontSize: 9,
+              fontWeight: 700,
+              padding: '1px 5px',
+              borderRadius: 4,
+              letterSpacing: '0.1em',
+              flexShrink: 0,
+            }}
+          >
+            {BADGE_TXT[state]}
+          </span>
+          <span style={{ fontSize: 11.5, color: '#cbd5e1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {label}
+          </span>
+        </div>
+        <span
+          title={pick}
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: accent,
+            textShadow: `0 0 6px ${god ? 'rgba(248,113,113,0.4)' : 'rgba(34,211,238,0.4)'}`,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '55%',
+          }}
+        >
+          {pick}
+        </span>
+      </div>
 
-      {/* 2. Nombre */}
-      <span className="cat-name">{label}</span>
+      {/* línea 2: W:L:Seq:Max ...... AVG */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, fontSize: 10, color: '#64748b' }}>
+        <span style={{ display: 'flex', gap: 8 }}>
+          <span>W:<b style={{ color: '#cbd5e1' }}>{w}</b></span>
+          <span>L:<b style={{ color: '#cbd5e1' }}>{l}</b></span>
+          <span>Seq:<b style={{ color: '#cbd5e1' }}>{seq}</b></span>
+          <span>Max:<b style={{ color: '#cbd5e1' }}>{max}</b></span>
+        </span>
+        <span>AVG:<b style={{ color: '#cbd5e1' }}>{avgStr}</b></span>
+      </div>
 
-      {/* 3. Pick */}
-      <span className="cat-pick" title={pick}>{pick}</span>
-
-      {/* 4. Stats W:L:Seq:Max */}
-      <span className="cat-stats">
-        <span className="w">W: {w}</span>
-        <span className="l">L: {l}</span>
-        <span className="seq">Seq: {seq}</span>
-        <span className="max">Max: {max}</span>
-      </span>
-
-      {/* 5. AVG */}
-      <span className="cat-avg">AVG: {avgStr}</span>
-
-      {/* 6. E1-E7 histograma */}
-      <div className="cat-ehist">
+      {/* línea 3: histograma E1-E7 */}
+      <div style={{ display: 'flex', gap: 3 }}>
         {E_KEYS.map((ek) => {
           const val = safeInt(errorHist?.[ek]);
           const hasVal = val > 0;
           return (
             <div
               key={ek}
-              className={`ehist-cell${hasVal ? ' has-val' : ''}`}
               title={`${ek}: ${val} vez${val !== 1 ? 'es' : ''}`}
+              style={{
+                flex: 1,
+                height: 16,
+                borderRadius: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 9,
+                background: hasVal ? (god ? 'rgba(248,113,113,0.22)' : 'rgba(34,211,238,0.18)') : 'rgba(255,255,255,0.04)',
+                color: hasVal ? (god ? '#fca5a5' : '#67e8f9') : '#475569',
+              }}
             >
               {hasVal ? val : ''}
             </div>
@@ -226,7 +280,7 @@ export function CategoryTable({
         <span className="icon">◈</span>
         <span className="title">{title}</span>
       </div>
-      <div className="cat-table">
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         {rows.map((row) => (
           <CategoryRow
             key={row.key}
@@ -235,6 +289,7 @@ export function CategoryTable({
             pick={row.pick}
             counter={row.counter}
             errorHist={row.errorHist}
+            god={god}
           />
         ))}
       </div>
