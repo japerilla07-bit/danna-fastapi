@@ -532,6 +532,40 @@ export function CopilotScoreboard() {
   );
 }
 
+/** Par de chips compactos con la zona ACTUAL de cada mercado (doc/col) —
+ *  mismo useMarketRead()/fusedZone() que usa CopilotOrder, así nunca puede
+ *  mostrar algo distinto de lo que el escudo está viendo en este momento.
+ *  Pensado para el header de un acordeón colapsado (LECTURA DE ZONA en
+ *  Quantum): así "las dos celdas actuales" se ven sin tener que abrir nada. */
+export function ZoneQuickBadges() {
+  const doc = useMarketRead('doc');
+  const col = useMarketRead('col');
+
+  const chip = (label: string, read: MarketRead) => {
+    const st = STYLE[read.estado];
+    return (
+      <span
+        key={label}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, fontWeight: 700,
+          padding: '2px 7px', borderRadius: 4,
+          color: st.color, border: `1px solid ${st.color}55`, background: `${st.color}14`,
+        }}
+      >
+        {label}: {st.label}
+      </span>
+    );
+  };
+
+  return (
+    <span style={{ display: 'inline-flex', gap: 6 }}>
+      {chip('DOC', doc)}
+      {chip('COL', col)}
+    </span>
+  );
+}
+
 export function MatrixPanel() {
   const resetTelemetry = useResetTelemetry();
 
