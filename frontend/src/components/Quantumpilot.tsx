@@ -518,7 +518,7 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[1080px] max-w-[96vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[1360px] max-w-[97vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
         left: pos.x,
         top: pos.y,
@@ -754,12 +754,14 @@ export function QuantumPilot({
           </span>
         </div>
 
-        {/* ═══ DASHBOARD — 2 columnas. Izquierda = cabina de decisión (lo
-             que cambia cada giro, para operar). Derecha = lectura completa
-             (las 9 categorías + zona doc/col), siempre visible, sin
-             acordeones — el panel ahora es tan ancho como haga falta para
-             que entre todo sin scrollear. ═══ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '0.85fr 1.3fr', gap: 16, alignItems: 'start' }}>
+        {/* ═══ DASHBOARD — 3 columnas, todo siempre visible, sin acordeones:
+             A) cabina de decisión (lo que cambia cada giro), B) las 9
+             categorías, C) zona doc/col. Antes B y C estaban apiladas en
+             la misma columna — con GOD activo, la tabla de categorías
+             empujaba la zona fuera de pantalla y había que scrollear para
+             ver "las celdas". Ahora cada bloque grande tiene su propia
+             columna, en paralelo, no uno esperando al otro. ═══ */}
+        <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.25fr 0.8fr', gap: 16, alignItems: 'start' }}>
         <div className="flex flex-col gap-3">
 
         {/* ═══ 2. DECISIÓN — escudo (en vivo) + GOD (alta precisión) ═══ */}
@@ -1006,7 +1008,7 @@ export function QuantumPilot({
         </div>
 
         </div>
-        {/* ── fin columna izquierda / inicio columna derecha ── */}
+        {/* ── fin columna A (decisión) / columna B (categorías) ── */}
         <div className="flex flex-col gap-3">
 
         {/* ═══ 4. SUGERENCIAS POR CATEGORÍA — las 9, siempre visibles,
@@ -1027,18 +1029,22 @@ export function QuantumPilot({
           />
         </div>
 
-        {/* ═══ 6. LECTURA DE ZONA POR MERCADO — doc + col, siempre visible ═══ */}
+        </div>
+        {/* ── fin columna B / columna C (zona) — propia columna para que
+             "las celdas" nunca queden abajo de la tabla de categorías
+             esperando scroll ── */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2 px-1">
-            <SeccionLabel>LECTURA DE ZONA POR MERCADO</SeccionLabel>
+            <SeccionLabel>ZONA</SeccionLabel>
             <ZoneQuickBadges />
           </div>
-          <ZoneDetailGrid />
+          {/* apiladas (doc arriba, col abajo) — esta columna es angosta,
+              apiladas entran mejor que lado a lado */}
+          <ZoneDetailGrid direction="column" />
         </div>
 
         </div>
-        </div>
-        {/* ── fin dashboard 2 columnas ── */}
+        {/* ── fin dashboard 3 columnas ── */}
       </div>
     </div>
   );
