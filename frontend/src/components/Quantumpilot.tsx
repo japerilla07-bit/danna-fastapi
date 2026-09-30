@@ -1,35 +1,46 @@
 // src/components/Quantumpilot.tsx
-// QuantumPilot — Overlay flotante draggable.
-// Replica la UI del deploy original (Streamlit) sobre React.
+// QuantumPilot — Overlay flotante draggable. Cockpit único.
 //
-// Bloques:
-//   1. Header verdict (CON PICK / EN ESPERA) + HUD + RADAR + CCS%
-//   2. TARGET LOCK (top pick) — clickeable para marcar como apuesta del usuario
-//   3. OTRAS SUGERENCIAS ACTIVAS — lista clickeable
-//   4. SALDO + P&L  /  ERRORES (consec · max · err/hit)
-//   5. CONCIENCIA SITUACIONAL — PilotDelta (W/R 14, anclaje, Δ)
-//      (PROGRESIÓN L1→L4 eliminada)
-//   6. EFICIENCIA POR CATEGORÍA (strip horizontal)
+// v2 — REDISEÑO COMPLETO (sep 2026). Antes este panel mezclaba dos motores
+// de decisión sin avisar cuál era cuál (GOD legacy vs escudo Capa1+2, el que
+// está documentado en el manual y el que de verdad corre en cada giro), y
+// tenía TRES marcadores de aciertos/errores distintos calculados de formas
+// distintas. Se reorganizó así:
 //
-// Tracker de override:
+//   1. Estado + HUD/RADAR/Σp + barra CCS        (igual que antes)
+//   2. DECISIÓN   — orden del escudo (CopilotOrder, de MatrixPanel) arriba,
+//                   TARGET LOCK de GOD debajo, cada uno rotulado con su
+//                   fuente. Son dos motores reales y distintos — no se
+//                   fusionan los números, solo se ordenan visualmente juntos.
+//   3. MARCADOR   — CopilotScoreboard (escudo) + ERRORES (target de GOD)
+//                   lado a lado, en vez de tres cajas sueltas por la app.
+//   4. SUGERENCIAS POR CATEGORÍA — CategoryTable completo (antes vivía
+//                   aparte en la columna central) + GodBetPanel debajo
+//                   (se auto-colapsa a una tira fina cuando GOD no está
+//                   activo). Reemplaza al bloque viejo "OTRAS SUGERENCIAS",
+//                   que era una versión pobre de lo mismo.
+//   5. LECTURA DE ZONA — el detalle por doc/col (termómetro, celda actual,
+//                   casillas visitadas) pasa a un acordeón colapsable.
+//                   Mismo componente de siempre (ZoneDetailGrid), cero
+//                   cambios de lógica — solo se saca del primer plano.
+//   6. BANKROLL   — BankrollLedger completo, informativo, vive acá adentro.
+//
+// Se sacó "EFICIENCIA POR CATEGORÍA" (el grid chico del final): quedó
+// redundante contra CategoryTable, que ya trae lo mismo y más completo.
+//
+// Tracker de override (sin cambios):
 //   - Click en TARGET LOCK o en cualquier sugerencia → POST /api/pilot/override
 //   - GET /api/pilot/override al montar para sincronizar estado
 //   - El backend cuenta wins/losses sobre la apuesta elegida por el usuario.
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
-// V2 add-ons: bloque de lectura de mesa (semáforo bifurcado + drawdown)
-// PilotDelta y su CSS quedaron obsoletos — reemplazados por MatrixPanel.
-import { MatrixPanel } from '@/components/MatrixPanel';
+import { CopilotOrder, CopilotScoreboard, ZoneDetailGrid } from '@/components/MatrixPanel';
+import { CategoryTable } from '@/components/CategoryTable';
+import { GodBetPanel } from '@/components/GodBetPanel';
+import { BankrollLedger } from '@/components/BankrollLedger';
 
 // ── Tipos ─────────────────────────────────────────────────────────
-
-// PilotDelta y su CSS — desactivados, reemplazados por ZoneChip.
-// import { PilotDelta } from '@/components/PilotDelta';
-// import '@/styles/pilot-delta.css';
-
-const GOD_CATS = ['color', 'paridad', 'rango', 'docenas', 'columnas'] as const;
-type GodCat = typeof GOD_CATS[number];
 
 const CAT_LABEL: Record<string, string> = {
   color:    'COLOR',
@@ -38,15 +49,6 @@ const CAT_LABEL: Record<string, string> = {
   docenas:  'DOCENAS',
   columnas: 'COLUMNAS',
   max_conf: 'NÚMEROS',
-};
-
-const CAT_SHORT: Record<string, string> = {
-  color:    'COL',
-  paridad:  'PAR',
-  rango:    'RNG',
-  docenas:  'DOC',
-  columnas: 'CLM',
-  max_conf: 'NUM',
 };
 
 interface ActiveBet {
@@ -134,8 +136,7 @@ interface Bankroll {
   pnl: number;
   pnl_pct: number;
   /**
-   * ★ Stake base configurado (default 2500). Lo expone /api/bankroll y se
-   * usa para proyectar la ladder L1-L4 del panel PROGRESIÓN.
+   * ★ Stake base configurado (default 2500). Lo expone /api/bankroll.
    */
   stake_base?: number;
 }
@@ -150,14 +151,14 @@ interface Props {
   payload: EnginePayload | null;
   bankroll: Bankroll;
   counters: Record<string, CounterEntry>;
-  /** ── PilotDelta (sustituye al bloque SESIÓN GOD) ────────────────────── */
-  /** Nº de giros de la sesión — dispara el registro de una fila nueva. */
+  /** error_hist del state — alimenta CategoryTable y GodBetPanel. Mismo
+   *  dato que ya usaba la columna central; se pasa acá para que el cockpit
+   *  lo tenga completo sin ir a buscarlo a otro lado. */
+  errorHist?: Record<string, any>;
+  /** ── (sin usar hoy, se dejan por compat de firma con AppPage) ───────── */
   spinsCount?: number;
-  /** HUD tal como se anota en el Excel (el COND ×100). */
   pdHud?: number | null;
-  /** Entropía tal como se anota (la card TABLE ENTROPY). */
   pdEntropy?: number | null;
-  /** Resultado del último giro en docenas / columnas. */
   pdDocHit?: boolean | null;
   pdColHit?: boolean | null;
 }
@@ -304,6 +305,19 @@ const fmtPctClass = (pct: number): string => {
   return 'text-red-400';
 };
 
+// Rótulo chico de sección, reutilizado en todo el cockpit para que cada
+// bloque diga de dónde sale el número (evita el "¿cuál marcador miro?").
+function SeccionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="text-[11px] text-cyan-500/70 px-1"
+      style={{ letterSpacing: '0.3em' }}
+    >
+      {children}
+    </span>
+  );
+}
+
 // ── Componente principal ─────────────────────────────────────────
 
 export function QuantumPilot({
@@ -311,31 +325,17 @@ export function QuantumPilot({
   payload,
   counters,
   bankroll,
-  spinsCount = 0,
-  pdHud = null,
-  pdEntropy = null,
-  pdDocHit = null,
-  pdColHit = null,
+  errorHist = {},
 }: Props) {
   const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
+  const [zonaAbierta, setZonaAbierta] = useState(false);
 
-  // ── ZoneChip: el ingest al store se hace en AppPage.tsx ────────────
-  // (mismo mecanismo que lastHits, único punto donde counters llega
-  // fresco). Acá el Quantumpilot solo RENDERIZA <ZoneChip />, no ingiere:
-  // el ingest interno anterior leía counters desfasado y marcaba nulls.
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
 
   const verdict = godBet.last_verdict;
   const pickBet = verdict?.pick_bet ?? null;
-  const sessionStats = verdict?.session_stats ?? {
-    bets_hits: 0,
-    bets_misses: 0,
-    profit_session: 0,
-    pilot_consec_errors: 0,
-    pilot_max_consec_errors: 0,
-  };
   const isGo = verdict?.verdict === 'GO';
   const ccsPct = verdict?.ccs_pct ?? 0;
   const hudState = (godBet.cond_state || '').toUpperCase() || 'CALIBRANDO';
@@ -349,9 +349,7 @@ export function QuantumPilot({
   //      tiene una apuesta GO real.
   //   3. PRIMERA SUGERENCIA — si GOD está activo pero el Pilot no emite
   //      pick_bet (verdict ≠ GO, GOD-STRICT veto, etc.), usamos la
-  //      primera sugerencia activa como fallback visual. El backend
-  //      sigue contando hits/misses por categoría en counters_god, así
-  //      que ERRORES y SESIÓN GOD se mueven igual sin disonancia.
+  //      primera sugerencia activa como fallback visual.
   const topPick: ActiveBet | null = (() => {
     if (override?.bet_key) {
       const fromOverride = activeBets.find((b) => b.bet_key === override.bet_key);
@@ -369,60 +367,6 @@ export function QuantumPilot({
       return activeBets[0];
     }
     return null;
-  })();
-
-  // OTRAS SUGERENCIAS = active_bets del motor (excluyendo la del TARGET LOCK).
-  // Estas son info ambient — pueden mostrarse aunque GOD no esté apostando.
-  // FIX: antes salían de godBet.active_bets, que solo existe con GOD activo —
-  // por eso el panel se quedaba vacío la mayor parte del tiempo. Ahora salen de
-  // payload.decision.bet_advice, que SIEMPRE está: todas las categorías del
-  // paño, ordenadas por probabilidad descendente, da igual que el estado sea
-  // BET, PROBE o WAIT. El estado se muestra como etiqueta, no como filtro.
-  // SUGERENCIAS DEL PAÑO — todas, siempre, ordenadas por probabilidad.
-  //
-  // Antes salían de godBet.active_bets (solo existe con GOD activo) y el panel
-  // quedaba vacío casi siempre. Ahora se busca bet_advice recorriendo varias
-  // rutas posibles del payload, porque su ubicación no es estable entre
-  // versiones. `otherSrc` deja constancia de cuál funcionó, y se muestra en la
-  // cabecera del bloque para poder diagnosticarlo sin adivinar.
-  const { otherBets, otherSrc } = (() => {
-    const pl: any = payload ?? {};
-    const rutas: Array<[string, any]> = [
-      ['decision.bet_advice', pl?.decision?.bet_advice],
-      ['bet_advice', pl?.bet_advice],
-      ['decision.advice', pl?.decision?.advice],
-      ['payload.decision.bet_advice', pl?.payload?.decision?.bet_advice],
-    ];
-    let adv: any = null;
-    let src = 'no encontrado';
-    for (const [nombre, val] of rutas) {
-      if (val && typeof val === 'object' && Object.keys(val).length > 0) {
-        adv = val;
-        src = nombre;
-        break;
-      }
-    }
-    if (!adv) return { otherBets: [] as any[], otherSrc: src };
-
-    const filas = Object.keys(adv)
-      .map((k: string) => {
-        const a: any = adv[k] ?? {};
-        const raw = a.pick ?? a.selection ?? a.value ?? null;
-        const pk = Array.isArray(raw) ? raw.join(', ') : (raw === null ? '' : String(raw));
-        const pr = Number(a.p ?? a.prob ?? a.conf_score ?? 0);
-        return {
-          bet_key: k,
-          label: String(a.label ?? k),
-          pick: raw,
-          pick_pretty: pk,
-          p: pr,
-          conf_pct: Math.round(pr * 100),
-          status: String(a.status ?? a.final_action ?? 'WAIT').toUpperCase(),
-        };
-      })
-      .filter((b) => b.pick_pretty !== '' && b.pick_pretty !== '—')
-      .sort((a, b) => b.p - a.p);
-    return { otherBets: filas as any[], otherSrc: `${src} · ${filas.length}` };
   })();
 
   // ── Sincronizar override desde backend al montar y cuando cambie el verdict
@@ -450,7 +394,6 @@ export function QuantumPilot({
   // ── Acciones de override ──────────────────────────────────────
   const applyOverride = useCallback(async (bet_key: string, pick: any) => {
     setLoadingKey(bet_key);
-    // Update optimista
     setOverride({ bet_key, pick });
     try {
       const r = await fetch('/api/pilot/override', {
@@ -460,7 +403,6 @@ export function QuantumPilot({
         body: JSON.stringify({ bet_key, pick }),
       });
       if (!r.ok) {
-        // revertir si falló
         setOverride(null);
       }
     } catch {
@@ -489,38 +431,21 @@ export function QuantumPilot({
   const handleBetClick = useCallback(
     (b: ActiveBet) => {
       if (override?.bet_key === b.bet_key) {
-        // Click sobre la misma que ya está activa → la liberamos
         clearOverride();
       } else {
-        // Picks crudos: para color/paridad pasa string, para docenas/columnas un id
-        // El backend acepta `pick` libre — usamos pick_pretty como hint visible
         applyOverride(b.bet_key, b.pick_pretty);
       }
     },
     [override, applyOverride, clearOverride]
   );
 
-  // ── ERRORES + SESIÓN GOD: contador del PICK de TARGET LOCK ───────────
-  // ────────────────────────────────────────────────────────────────────
-  // Fuente ÚNICA: godBet.god_target — un contador dedicado del backend que
-  // cuenta SOLO el pick que TARGET LOCK muestra (la apuesta principal del
-  // pilot), y SOLO cuando GOD está ACTIVO. Cruza categorías: si docenas
-  // falla suma 1, si luego columnas falla suma 2, si color acierta baja a 0.
-  //
-  //   • CONSEC = errores consecutivos actuales del pick de TARGET LOCK
-  //   • MÁX    = peor racha de errores de la sesión GOD
-  //   • hits/misses/% = aciertos del pick de TARGET LOCK en GOD activo
-  //
-  // El backend lo calcula una sola vez por spin, sin dependencias de
-  // counters_god ni god_stats. El frontend solo lo lee.
+  // ── ERRORES (target de GOD): fuente ÚNICA godBet.god_target — cuenta
+  // SOLO el pick que TARGET LOCK muestra, SOLO cuando GOD está activo.
   const godTarget = godBet?.god_target ?? { wins: 0, losses: 0, consec_errors: 0, max_consec_errors: 0 };
   const consecErr = Number(godTarget.consec_errors ?? 0);
   const maxConsecErr = Number(godTarget.max_consec_errors ?? 0);
   const hits = Number(godTarget.wins ?? 0);
   const misses = Number(godTarget.losses ?? 0);
-  // `totalBets` y `hitRate` alimentaban el bloque SESIÓN GOD, sustituido por
-  // PilotDelta. Eliminadas para no dejar variables sin usar (rompe el build
-  // si tsconfig tiene noUnusedLocals). `errHit` sigue viva en el bloque ERRORES.
   const errHit = hits > 0 ? misses / hits : misses;
 
   // ── Minimizado
@@ -637,10 +562,6 @@ export function QuantumPilot({
         }}
       />
 
-      {/* FIX "no cabe": el panel se salia por abajo de la ventana y el
-          Bloque C quedaba cortado. Ahora el contenedor tiene max-h-[92vh]
-          y este cuerpo scrollea (min-h-0 es obligatorio para que flex-1
-          permita encoger dentro de un flex column). El header queda fijo. */}
       <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col p-4 gap-3 pilot-scroll">
         {/* ═══ 1. Estado verdict ═══ */}
         <div className="flex items-stretch gap-2">
@@ -674,8 +595,6 @@ export function QuantumPilot({
                   : '0 0 12px rgba(251, 191, 36, 0.6), 0 0 4px rgba(251, 191, 36, 0.8)',
               }}
             >
-              {/* GOD retirado del panel: el operador ya no ve ese modo.
-                  El estado ahora refleja si hay un pick activo o no. */}
               {topPick ? 'CON PICK' : 'EN ESPERA'}
             </span>
           </div>
@@ -724,9 +643,6 @@ export function QuantumPilot({
               {godBet.radar_score}/10
             </span>
           </div>
-          {/* VALIDACION: chip p crudo del ensemble — SIEMPRE visible (WAIT/BET/
-              PROBE), muestra el mejor p del spin y su categoria. Display puro,
-              no afecta ninguna decision. Para anotar en cada spin. */}
           <div
             className="flex flex-col items-center justify-center px-3 py-2 rounded-md min-w-[82px]"
             style={{
@@ -742,15 +658,12 @@ export function QuantumPilot({
                 paridad: 'PAR', rango: 'RNG',
               } as Record<string, string>)[godBet.best_p_key ?? ''] ?? (godBet.best_p_key ?? 'P').toUpperCase()}
             </span>
-            {/* grupo 1 individual: etiqueta + prob */}
             <span className="text-[12px] font-mono text-cyan-400 leading-tight">
               {(godBet.best_g1 ?? '—')} {godBet.best_p1 != null ? (godBet.best_p1 * 100).toFixed(1) : '—'}
             </span>
-            {/* grupo 2 individual: etiqueta + prob */}
             <span className="text-[12px] font-mono text-cyan-500 leading-tight">
               {(godBet.best_g2 ?? '—')} {godBet.best_p2 != null ? (godBet.best_p2 * 100).toFixed(1) : '—'}
             </span>
-            {/* suma (lo que apuesta el motor) */}
             <span
               className="font-black text-xs font-mono mt-0.5"
               style={{ color: '#67e8f9', textShadow: '0 0 6px rgba(34, 211, 238, 0.4)' }}
@@ -811,439 +724,258 @@ export function QuantumPilot({
           </span>
         </div>
 
-        {/* ═══ 1.5. LECTURA DE MESA (V2 add-on) ═══
-             Semáforo bifurcado DOC / COL con matriz 3×3 auditada + halo
-             Pixi en zonas tóxicas + drawdown segmentado por mercado.
-             Autocontenido: solo consume el store de telemetría.       ═══ */}
-        <MatrixPanel />
+        {/* ═══ 2. DECISIÓN — escudo (en vivo) + GOD (alta precisión) ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <SeccionLabel>DECISIÓN</SeccionLabel>
+          <CopilotOrder />
 
-        {/* ═══ 2. TARGET LOCK (top pick) ═══ */}
-        {topPick ? (
-          <button
-            onClick={() => handleBetClick(topPick)}
-            disabled={loadingKey === topPick.bet_key}
-            className="relative w-full flex flex-col p-3.5 rounded-md text-left transition-all group overflow-hidden"
-            style={{
-              background:
-                override?.bet_key === topPick.bet_key
-                  ? 'linear-gradient(135deg, rgba(120, 53, 15, 0.4) 0%, rgba(69, 26, 3, 0.5) 100%)'
-                  : 'linear-gradient(135deg, rgba(8, 47, 73, 0.35) 0%, rgba(15, 23, 42, 0.5) 100%)',
-              border:
-                override?.bet_key === topPick.bet_key
-                  ? '1px solid rgba(251, 191, 36, 0.7)'
-                  : '1px solid rgba(34, 211, 238, 0.3)',
-              boxShadow:
-                override?.bet_key === topPick.bet_key
-                  ? '0 0 18px rgba(251, 191, 36, 0.35), inset 0 1px 0 rgba(252, 211, 77, 0.2)'
-                  : '0 0 15px rgba(34, 211, 238, 0.18), inset 0 1px 0 rgba(34, 211, 238, 0.1)',
-            }}
-          >
-            {/* Corners de targeting militar */}
-            <span
-              className="absolute top-1 left-1 w-2.5 h-2.5 border-t border-l"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
-            />
-            <span
-              className="absolute top-1 right-1 w-2.5 h-2.5 border-t border-r"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
-            />
-            <span
-              className="absolute bottom-1 left-1 w-2.5 h-2.5 border-b border-l"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
-            />
-            <span
-              className="absolute bottom-1 right-1 w-2.5 h-2.5 border-b border-r"
-              style={{
-                borderColor:
-                  override?.bet_key === topPick.bet_key
-                    ? 'rgba(251, 191, 36, 0.8)'
-                    : 'rgba(103, 232, 249, 0.7)',
-              }}
-            />
+          <div className="mt-1">
+            <span className="text-[10px] text-gray-500 px-1" style={{ letterSpacing: '0.2em' }}>
+              GOD · ALTA PRECISIÓN (motor alterno — activa solo con OPTIMAL + Radar ≥7)
+            </span>
+          </div>
 
-            <div className="flex justify-between items-center mb-1.5 relative">
+          {topPick ? (
+            <button
+              onClick={() => handleBetClick(topPick)}
+              disabled={loadingKey === topPick.bet_key}
+              className="relative w-full flex flex-col p-3.5 rounded-md text-left transition-all group overflow-hidden"
+              style={{
+                background:
+                  override?.bet_key === topPick.bet_key
+                    ? 'linear-gradient(135deg, rgba(120, 53, 15, 0.4) 0%, rgba(69, 26, 3, 0.5) 100%)'
+                    : 'linear-gradient(135deg, rgba(8, 47, 73, 0.35) 0%, rgba(15, 23, 42, 0.5) 100%)',
+                border:
+                  override?.bet_key === topPick.bet_key
+                    ? '1px solid rgba(251, 191, 36, 0.7)'
+                    : '1px solid rgba(34, 211, 238, 0.3)',
+                boxShadow:
+                  override?.bet_key === topPick.bet_key
+                    ? '0 0 18px rgba(251, 191, 36, 0.35), inset 0 1px 0 rgba(252, 211, 77, 0.2)'
+                    : '0 0 15px rgba(34, 211, 238, 0.18), inset 0 1px 0 rgba(34, 211, 238, 0.1)',
+              }}
+            >
               <span
-                className="text-[12px] font-bold px-2 py-0.5 rounded"
+                className="absolute top-1 left-1 w-2.5 h-2.5 border-t border-l"
                 style={{
-                  letterSpacing: '0.25em',
-                  background:
+                  borderColor:
                     override?.bet_key === topPick.bet_key
-                      ? 'rgba(251, 191, 36, 0.2)'
-                      : 'rgba(34, 211, 238, 0.15)',
-                  color:
-                    override?.bet_key === topPick.bet_key ? '#fcd34d' : '#67e8f9',
-                  border:
-                    override?.bet_key === topPick.bet_key
-                      ? '1px solid rgba(251, 191, 36, 0.3)'
-                      : '1px solid rgba(34, 211, 238, 0.25)',
+                      ? 'rgba(251, 191, 36, 0.8)'
+                      : 'rgba(103, 232, 249, 0.7)',
                 }}
-              >
-                {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : 'TARGET LOCK'}
-              </span>
-              {/* ★ Badge OVERRIDE FORZADO: el operador empujó el GO sobre
-                 thr_go del Pilot vía Opción C (CCS 60-thr_go% en CAUTION).
-                 Indica visualmente que esta apuesta es decisión MANUAL del
-                 operador, no convicción autónoma del motor. */}
-              {verdict?.override_forced_go ? (
+              />
+              <span
+                className="absolute top-1 right-1 w-2.5 h-2.5 border-t border-r"
+                style={{
+                  borderColor:
+                    override?.bet_key === topPick.bet_key
+                      ? 'rgba(251, 191, 36, 0.8)'
+                      : 'rgba(103, 232, 249, 0.7)',
+                }}
+              />
+              <span
+                className="absolute bottom-1 left-1 w-2.5 h-2.5 border-b border-l"
+                style={{
+                  borderColor:
+                    override?.bet_key === topPick.bet_key
+                      ? 'rgba(251, 191, 36, 0.8)'
+                      : 'rgba(103, 232, 249, 0.7)',
+                }}
+              />
+              <span
+                className="absolute bottom-1 right-1 w-2.5 h-2.5 border-b border-r"
+                style={{
+                  borderColor:
+                    override?.bet_key === topPick.bet_key
+                      ? 'rgba(251, 191, 36, 0.8)'
+                      : 'rgba(103, 232, 249, 0.7)',
+                }}
+              />
+
+              <div className="flex justify-between items-center mb-1.5 relative">
                 <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                  className="text-[12px] font-bold px-2 py-0.5 rounded"
                   style={{
-                    letterSpacing: '0.2em',
-                    color: '#fde68a',
-                    backgroundColor: 'rgba(251, 191, 36, 0.12)',
-                    border: '1px solid rgba(251, 191, 36, 0.4)',
-                    textShadow: '0 0 6px rgba(251, 191, 36, 0.45)',
+                    letterSpacing: '0.25em',
+                    background:
+                      override?.bet_key === topPick.bet_key
+                        ? 'rgba(251, 191, 36, 0.2)'
+                        : 'rgba(34, 211, 238, 0.15)',
+                    color:
+                      override?.bet_key === topPick.bet_key ? '#fcd34d' : '#67e8f9',
+                    border:
+                      override?.bet_key === topPick.bet_key
+                        ? '1px solid rgba(251, 191, 36, 0.3)'
+                        : '1px solid rgba(34, 211, 238, 0.25)',
                   }}
-                  title="Override forzó GO sobre threshold del Pilot (CCS ≥ 60% en mesa CAUTION)"
                 >
-                  OVERRIDE FORZADO
+                  {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : 'TARGET LOCK'}
                 </span>
-              ) : null}
+                {verdict?.override_forced_go ? (
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                    style={{
+                      letterSpacing: '0.2em',
+                      color: '#fde68a',
+                      backgroundColor: 'rgba(251, 191, 36, 0.12)',
+                      border: '1px solid rgba(251, 191, 36, 0.4)',
+                      textShadow: '0 0 6px rgba(251, 191, 36, 0.45)',
+                    }}
+                    title="Override forzó GO sobre threshold del Pilot (CCS ≥ 60% en mesa CAUTION)"
+                  >
+                    OVERRIDE FORZADO
+                  </span>
+                ) : null}
+                <span
+                  className="text-base font-black"
+                  style={{
+                    color:
+                      topPick.conf_pct >= 80
+                        ? '#67e8f9'
+                        : topPick.conf_pct >= 60
+                        ? '#22d3ee'
+                        : topPick.conf_pct >= 40
+                        ? '#fbbf24'
+                        : '#94a3b8',
+                    textShadow:
+                      topPick.conf_pct >= 60
+                        ? '0 0 10px rgba(34, 211, 238, 0.6)'
+                        : '0 0 4px rgba(148, 163, 184, 0.3)',
+                  }}
+                >
+                  {topPick.conf_pct}%
+                </span>
+              </div>
+              <div className="flex justify-between items-end mt-1 relative">
+                <span
+                  className="text-[13px] text-gray-500"
+                  style={{ letterSpacing: '0.25em' }}
+                >
+                  {CAT_LABEL[topPick.bet_key] ?? topPick.bet_key.toUpperCase()}
+                </span>
+                <span
+                  className="text-2xl font-black tracking-wider"
+                  style={{
+                    color: '#ffffff',
+                    textShadow:
+                      override?.bet_key === topPick.bet_key
+                        ? '0 0 14px rgba(251, 191, 36, 0.7), 0 0 4px rgba(252, 211, 77, 0.9)'
+                        : '0 0 12px rgba(34, 211, 238, 0.5), 0 0 3px rgba(103, 232, 249, 0.8)',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  {topPick.pick_pretty}
+                </span>
+              </div>
+            </button>
+          ) : (
+            <div
+              className="flex items-center justify-center p-3.5 rounded-md"
+              style={{
+                background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 12, 22, 0.5) 100%)',
+                border: '1px solid rgba(71, 85, 105, 0.3)',
+              }}
+            >
               <span
-                className="text-base font-black"
-                style={{
-                  color:
-                    topPick.conf_pct >= 80
-                      ? '#67e8f9'
-                      : topPick.conf_pct >= 60
-                      ? '#22d3ee'
-                      : topPick.conf_pct >= 40
-                      ? '#fbbf24'
-                      : '#94a3b8',
-                  textShadow:
-                    topPick.conf_pct >= 60
-                      ? '0 0 10px rgba(34, 211, 238, 0.6)'
-                      : '0 0 4px rgba(148, 163, 184, 0.3)',
-                }}
-              >
-                {topPick.conf_pct}%
-              </span>
-            </div>
-            <div className="flex justify-between items-end mt-1 relative">
-              <span
-                className="text-[13px] text-gray-500"
+                className="text-[12px] text-gray-600 font-bold"
                 style={{ letterSpacing: '0.25em' }}
               >
-                {CAT_LABEL[topPick.bet_key] ?? topPick.bet_key.toUpperCase()}
-              </span>
-              <span
-                className="text-2xl font-black tracking-wider"
-                style={{
-                  color: '#ffffff',
-                  textShadow:
-                    override?.bet_key === topPick.bet_key
-                      ? '0 0 14px rgba(251, 191, 36, 0.7), 0 0 4px rgba(252, 211, 77, 0.9)'
-                      : '0 0 12px rgba(34, 211, 238, 0.5), 0 0 3px rgba(103, 232, 249, 0.8)',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                {topPick.pick_pretty}
+                GOD SIN TARGET — ESPERANDO
               </span>
             </div>
-          </button>
-        ) : (
+          )}
+        </div>
+
+        {/* ═══ 3. MARCADOR — escudo (en vivo) + target de GOD, lado a lado ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <SeccionLabel>MARCADOR</SeccionLabel>
+          <CopilotScoreboard />
           <div
-            className="flex items-center justify-center p-5 rounded-md"
+            className="flex items-center justify-between p-3 rounded-md"
             style={{
-              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 12, 22, 0.5) 100%)',
-              border: '1px solid rgba(71, 85, 105, 0.3)',
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(8, 12, 22, 0.6) 100%)',
+              border: '1px solid rgba(34, 211, 238, 0.12)',
+              boxShadow: 'inset 0 1px 0 rgba(34, 211, 238, 0.04)',
             }}
           >
             <span
-              className="text-[13px] text-gray-600 font-bold"
-              style={{ letterSpacing: '0.3em' }}
+              className="text-[11px] text-gray-500"
+              style={{ letterSpacing: '0.2em' }}
             >
-              SIN TARGET — ESPERANDO
+              ERRORES · GOD TARGET
             </span>
-          </div>
-        )}
-
-        {/* ═══ 3. OTRAS SUGERENCIAS ═══ */}
-        <div
-          className="flex flex-col rounded-md overflow-hidden"
-          style={{
-            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 12, 22, 0.5) 100%)',
-            border: '1px solid rgba(34, 211, 238, 0.12)',
-          }}
-        >
-          <div
-            className="px-3 py-2 flex justify-between items-center"
-            style={{
-              background: 'linear-gradient(90deg, rgba(8, 47, 73, 0.3) 0%, transparent 100%)',
-              borderBottom: '1px solid rgba(34, 211, 238, 0.1)',
-            }}
-          >
-            <span
-              className="text-[12px] text-cyan-500/80"
-              style={{ letterSpacing: '0.25em' }}
-            >
-              ▼ SUGERENCIAS DEL PAÑO
-            </span>
-            <span className="text-[11px] text-gray-600" style={{ letterSpacing: '0.05em' }}>
-              {otherSrc}
-            </span>
-            {override && (
-              <button
-                onClick={clearOverride}
-                className="text-[12px] hover:opacity-80 transition-opacity"
-                style={{
-                  color: '#fbbf24',
-                  letterSpacing: '0.2em',
-                  textShadow: '0 0 6px rgba(251, 191, 36, 0.4)',
-                }}
-              >
-                ✕ liberar
-              </button>
-            )}
-          </div>
-          <div className="flex flex-col p-1.5 gap-1">
-            {otherBets.length === 0 ? (
-              <div className="text-center py-3 text-[13px] text-gray-600 italic">
-                — sin BETs activos en este giro —
-              </div>
-            ) : (
-              otherBets.map((b) => {
-                const isActive = override?.bet_key === b.bet_key;
-                const isLoading = loadingKey === b.bet_key;
-                return (
-                  <button
-                    key={b.bet_key}
-                    onClick={() => handleBetClick(b)}
-                    disabled={isLoading}
-                    className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-md text-left transition-all"
-                    style={{
-                      background: isActive
-                        ? 'linear-gradient(90deg, rgba(120, 53, 15, 0.4) 0%, rgba(69, 26, 3, 0.3) 100%)'
-                        : 'linear-gradient(90deg, rgba(15, 23, 42, 0.6) 0%, rgba(8, 12, 22, 0.4) 100%)',
-                      border: isActive
-                        ? '1px solid rgba(251, 191, 36, 0.5)'
-                        : '1px solid rgba(34, 211, 238, 0.08)',
-                      boxShadow: isActive
-                        ? '0 0 10px rgba(251, 191, 36, 0.25), inset 0 1px 0 rgba(252, 211, 77, 0.15)'
-                        : 'none',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.border = '1px solid rgba(34, 211, 238, 0.3)';
-                        e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 211, 238, 0.15)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.border = '1px solid rgba(34, 211, 238, 0.08)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
-                    }}
-                  >
-                    <span
-                      className="text-[13px] font-bold w-10"
-                      style={{
-                        color: isActive ? '#fcd34d' : '#94a3b8',
-                        letterSpacing: '0.1em',
-                      }}
-                    >
-                      {CAT_SHORT[b.bet_key] ?? b.bet_key.slice(0, 3).toUpperCase()}
-                    </span>
-                    {/* Estado del paño: etiqueta informativa, NO filtro.
-                        Todas las sugerencias se muestran siempre. */}
-                    <span
-                      className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-                      style={{
-                        letterSpacing: '0.08em',
-                        background:
-                          b.status === 'BET'
-                            ? 'rgba(34, 197, 94, 0.18)'
-                            : b.status === 'PROBE'
-                            ? 'rgba(251, 191, 36, 0.18)'
-                            : 'rgba(100, 116, 139, 0.18)',
-                        color:
-                          b.status === 'BET'
-                            ? '#4ade80'
-                            : b.status === 'PROBE'
-                            ? '#fbbf24'
-                            : '#94a3b8',
-                      }}
-                    >
-                      {b.status}
-                    </span>
-                    <span
-                      className="flex-1 text-[14px] font-bold text-white text-center truncate"
-                      style={{
-                        textShadow: isActive
-                          ? '0 0 6px rgba(251, 191, 36, 0.5)'
-                          : '0 0 4px rgba(34, 211, 238, 0.2)',
-                      }}
-                    >
-                      {b.pick_pretty}
-                    </span>
-                    <span
-                      className="text-[13px] font-bold w-12 text-right"
-                      style={{
-                        color:
-                          b.conf_pct >= 80
-                            ? '#67e8f9'
-                            : b.conf_pct >= 60
-                            ? '#22d3ee'
-                            : b.conf_pct >= 40
-                            ? '#fbbf24'
-                            : '#94a3b8',
-                        textShadow:
-                          b.conf_pct >= 60
-                            ? '0 0 6px rgba(34, 211, 238, 0.4)'
-                            : 'none',
-                      }}
-                    >
-                      {b.conf_pct}%
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* ═══ 4. ERRORES (ancho completo) ═══ */}
-        <div
-          className="flex items-center justify-between p-3 rounded-md"
-          style={{
-            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(8, 12, 22, 0.6) 100%)',
-            border: '1px solid rgba(34, 211, 238, 0.12)',
-            boxShadow: 'inset 0 1px 0 rgba(34, 211, 238, 0.04)',
-          }}
-        >
-          <span
-            className="text-[12px] text-gray-500"
-            style={{ letterSpacing: '0.3em' }}
-          >
-            ERRORES
-          </span>
-          <div className="flex items-baseline gap-4">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[12px] text-gray-500">CONSEC</span>
-              <span
-                className="font-bold text-base"
-                style={{
-                  color: consecErr > 0 ? '#f87171' : '#94a3b8',
-                  textShadow:
-                    consecErr > 0
-                      ? '0 0 8px rgba(248, 113, 113, 0.5)'
-                      : 'none',
-                }}
-              >
-                {consecErr}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[12px] text-gray-500">MÁX</span>
-              <span
-                className="font-bold text-white text-base"
-                style={{ textShadow: '0 0 4px rgba(255, 255, 255, 0.3)' }}
-              >
-                {maxConsecErr}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[12px] text-gray-500">ERR/HIT</span>
-              <span
-                className="font-bold text-base"
-                style={{
-                  color: '#fb923c',
-                  textShadow: '0 0 6px rgba(251, 146, 60, 0.4)',
-                }}
-              >
-                {errHit.toFixed(1)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* ═══ 5. (eliminado) PilotDelta — reemplazado por ZoneChip arriba ═══ */}
-
-        {/* ═══ 6. EFICIENCIA POR CATEGORÍA ═══ */}
-        <div className="flex flex-col">
-          <span
-            className="text-[12px] text-cyan-500/70 mb-1.5 px-1"
-            style={{ letterSpacing: '0.3em' }}
-          >
-            EFICIENCIA POR CATEGORÍA
-          </span>
-          <div className="grid grid-cols-5 gap-1.5">
-            {GOD_CATS.map((cat) => {
-              const c = counters?.[cat];
-              const w = c?.wins ?? 0;
-              const l = c?.losses ?? 0;
-              const n = w + l;
-              const hr = n > 0 ? (w / n) * 100 : 0;
-              const isOver = override?.bet_key === cat;
-              const hrColor =
-                n === 0
-                  ? '#475569'
-                  : hr >= 70
-                  ? '#4ade80'
-                  : hr >= 50
-                  ? '#fbbf24'
-                  : hr >= 30
-                  ? '#fb923c'
-                  : '#f87171';
-              return (
-                <div
-                  key={cat}
-                  className="flex flex-col items-center justify-center py-2 rounded-md"
+            <div className="flex items-baseline gap-4">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[12px] text-gray-500">CONSEC</span>
+                <span
+                  className="font-bold text-base"
                   style={{
-                    background: isOver
-                      ? 'linear-gradient(135deg, rgba(120, 53, 15, 0.35) 0%, rgba(69, 26, 3, 0.5) 100%)'
-                      : 'linear-gradient(135deg, rgba(15, 23, 42, 0.5) 0%, rgba(8, 12, 22, 0.5) 100%)',
-                    border: isOver
-                      ? '1px solid rgba(251, 191, 36, 0.5)'
-                      : '1px solid rgba(34, 211, 238, 0.1)',
-                    boxShadow: isOver
-                      ? '0 0 10px rgba(251, 191, 36, 0.25), inset 0 1px 0 rgba(252, 211, 77, 0.15)'
-                      : 'inset 0 1px 0 rgba(34, 211, 238, 0.04)',
+                    color: consecErr > 0 ? '#f87171' : '#94a3b8',
+                    textShadow:
+                      consecErr > 0
+                        ? '0 0 8px rgba(248, 113, 113, 0.5)'
+                        : 'none',
                   }}
                 >
-                  <span
-                    className="text-[12px] font-bold"
-                    style={{
-                      color: isOver ? '#fcd34d' : '#94a3b8',
-                      letterSpacing: '0.1em',
-                    }}
-                  >
-                    {CAT_SHORT[cat]}
-                  </span>
-                  <span className="text-[12px] text-gray-500">
-                    {w}/{n}
-                  </span>
-                  <span
-                    className="text-[14px] font-black"
-                    style={{
-                      color: hrColor,
-                      textShadow:
-                        n > 0 && hr >= 50
-                          ? `0 0 6px ${hrColor}55`
-                          : 'none',
-                    }}
-                  >
-                    {n === 0 ? '—' : `${hr.toFixed(0)}%`}
-                  </span>
-                </div>
-              );
-            })}
+                  {consecErr}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[12px] text-gray-500">MÁX</span>
+                <span
+                  className="font-bold text-white text-base"
+                  style={{ textShadow: '0 0 4px rgba(255, 255, 255, 0.3)' }}
+                >
+                  {maxConsecErr}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[12px] text-gray-500">ERR/HIT</span>
+                <span
+                  className="font-bold text-base"
+                  style={{
+                    color: '#fb923c',
+                    textShadow: '0 0 6px rgba(251, 146, 60, 0.4)',
+                  }}
+                >
+                  {errHit.toFixed(1)}
+                </span>
+              </div>
+            </div>
           </div>
+        </div>
+
+        {/* ═══ 4. SUGERENCIAS POR CATEGORÍA (completo) ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <SeccionLabel>SUGERENCIAS POR CATEGORÍA</SeccionLabel>
+          <CategoryTable payload={payload} counters={counters} errorHist={errorHist} />
+          <GodBetPanel
+            payload={payload}
+            counters={counters}
+            countersGod={godBet.counters_god ?? {}}
+            errorHist={errorHist}
+            errorHistGod={errorHist}
+            godActive={godBet.active}
+            radarScore={godBet.radar_score}
+          />
+        </div>
+
+        {/* ═══ 5. LECTURA DE ZONA POR MERCADO (colapsable) ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <button
+            onClick={() => setZonaAbierta((v) => !v)}
+            className="flex items-center justify-between px-1 py-1 w-full text-left"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+          >
+            <SeccionLabel>{zonaAbierta ? '▾' : '▸'} LECTURA DE ZONA POR MERCADO (detalle / auditoría)</SeccionLabel>
+          </button>
+          {zonaAbierta && <ZoneDetailGrid />}
+        </div>
+
+        {/* ═══ 6. BANKROLL ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <SeccionLabel>BANKROLL</SeccionLabel>
+          <BankrollLedger bankroll={bankroll} />
         </div>
       </div>
     </div>
