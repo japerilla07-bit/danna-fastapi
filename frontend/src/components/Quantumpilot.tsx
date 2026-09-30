@@ -1043,9 +1043,15 @@ export function QuantumPilot({
             <SeccionLabel>ZONA</SeccionLabel>
             <ZoneQuickBadges />
           </div>
-          {/* apiladas (doc arriba, col abajo) — esta columna es angosta,
-              apiladas entran mejor que lado a lado */}
-          <ZoneDetailGrid direction="column" />
+          {/* apiladas (doc arriba, col abajo), versión COMPACTA: Gunner —
+              "la celda de columnas debe estar por debajo de la de docenas
+              mostrando su eficiencia si no no sirve". Con la tarjeta
+              completa (MarketColumn) DOCENAS por sí sola ya ocupa casi
+              toda la columna y COLUMNAS queda fuera de vista. compact
+              usa MarketEfficiencyCell — zona, HUD/ENT, últimos 10, %
+              acierto + techo de errores, qué hacer — nada más, para que
+              las dos entren sin scroll. */}
+          <ZoneDetailGrid direction="column" compact />
         </div>
 
         </div>
