@@ -27,10 +27,14 @@ const CLAVE = 'danna_session_log_v1';
 // acá solo se lee, nunca se escribe. Todo 100% local, sin tocar el backend.
 const META_CLAVE = 'danna_session_meta_v1';
 const MESA_CLAVE = 'danna_mesa_nombre';
+// Saldo inicial/final: 100% manuales — los escribe el usuario en el panel
+// BANKROLL (mismas claves que usa BankrollLedger.tsx). Acá SOLO se leen al
+// momento de exportar, nunca se calculan ni se traen del backend.
+const SALDO_INICIAL_CLAVE = 'danna_saldo_inicial';
+const SALDO_FINAL_CLAVE = 'danna_saldo_final';
 
 interface SesionMeta {
   horaInicio: string;
-  saldoInicial: number | null;
 }
 
 function leerMeta(): SesionMeta | null {
@@ -54,6 +58,16 @@ function leerMesa(): string {
     return window.localStorage.getItem(MESA_CLAVE) ?? '';
   } catch {
     return '';
+  }
+}
+function leerSaldoManual(clave: string): number | null {
+  try {
+    const raw = window.localStorage.getItem(clave);
+    if (!raw) return null;
+    const n = parseFloat(raw);
+    return isFinite(n) ? n : null;
+  } catch {
+    return null;
   }
 }
 
@@ -378,15 +392,13 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
           dh !== null && dh > thrHud && (snap.hud ?? 0) > thrHudNivel ? 1 : 0,
       };
 
-      // Primera fila de una sesión nueva (log vacío hasta ahora): fija
-      // hora de inicio + saldo inicial UNA sola vez. Se borra en `limpiar()`,
-      // así que la próxima sesión arranca su propio reloj/saldo sin que
-      // nadie tenga que tocar nada en el backend.
+      // Primera fila de una sesión nueva (log vacío hasta ahora): fija la
+      // hora de inicio UNA sola vez. Se borra en `limpiar()`, así que la
+      // próxima sesión arranca su propio reloj sin tocar el backend.
+      // El saldo (inicial/final) NO se captura acá — se lee en vivo desde
+      // BANKROLL al exportar (ver `descargar()`), porque lo llena el usuario.
       if (prev.length === 0) {
-        const nuevaMeta: SesionMeta = {
-          horaInicio: new Date().toISOString(),
-          saldoInicial: snap.bankrollInicial ?? snap.bankrollActual ?? null,
-        };
+        const nuevaMeta: SesionMeta = { horaInicio: new Date().toISOString() };
         metaRef.current = nuevaMeta;
         guardarMeta(nuevaMeta);
       }
@@ -402,8 +414,10 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
       mesa: leerMesa(),
       horaInicio: metaRef.current?.horaInicio ?? '',
       horaFinal: new Date().toISOString(),
-      saldoInicial: metaRef.current?.saldoInicial ?? null,
-      saldoFinal: snap.bankrollActual ?? null,
+      // Manuales, tal cual están en BANKROLL en este momento — el usuario
+      // los llena, el CSV solo los lee.
+      saldoInicial: leerSaldoManual(SALDO_INICIAL_CLAVE),
+      saldoFinal: leerSaldoManual(SALDO_FINAL_CLAVE),
     };
     const csv = '\uFEFF' + aCSV(derivar(filas), meta); // BOM para que Excel lea los acentos
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
