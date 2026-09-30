@@ -360,12 +360,6 @@ export function QuantumPilot({
 }: Props) {
   const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
   const [minimized, setMinimized] = useState(false);
-  // v3 (sep 2026): vuelven a arrancar colapsados — demasiado scroll para
-  // operar en vivo. La zona actual (doc+col) ahora se ve en el propio
-  // header del acordeón vía <ZoneQuickBadges/>, así que colapsar acá no
-  // vuelve a esconder "las dos celdas actuales" que Gunner pidió ver.
-  const [zonaAbierta, setZonaAbierta] = useState(false);
-  const [categoriasAbierto, setCategoriasAbierto] = useState(false);
 
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -524,7 +518,7 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[640px] max-w-[95vw] max-h-[95vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[1080px] max-w-[96vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
         left: pos.x,
         top: pos.y,
@@ -759,6 +753,14 @@ export function QuantumPilot({
             {ccsPct}/100
           </span>
         </div>
+
+        {/* ═══ DASHBOARD — 2 columnas. Izquierda = cabina de decisión (lo
+             que cambia cada giro, para operar). Derecha = lectura completa
+             (las 9 categorías + zona doc/col), siempre visible, sin
+             acordeones — el panel ahora es tan ancho como haga falta para
+             que entre todo sin scrollear. ═══ */}
+        <div style={{ display: 'grid', gridTemplateColumns: '0.85fr 1.3fr', gap: 16, alignItems: 'start' }}>
+        <div className="flex flex-col gap-3">
 
         {/* ═══ 2. DECISIÓN — escudo (en vivo) + GOD (alta precisión) ═══ */}
         <div className="flex flex-col gap-1.5">
@@ -997,52 +999,46 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ 4. SUGERENCIAS POR CATEGORÍA (colapsable — auditoría de las
-             9 categorías completas; los picks de DOCENAS/COLUMNAS que
-             importan para operar YA están arriba, en DECISIÓN) ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <button
-            onClick={() => setCategoriasAbierto((v) => !v)}
-            className="flex items-center justify-between px-1 py-1 w-full text-left"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
-          >
-            <SeccionLabel>{categoriasAbierto ? '▾' : '▸'} SUGERENCIAS POR CATEGORÍA (las 9 · auditoría)</SeccionLabel>
-          </button>
-          {categoriasAbierto && (
-            <>
-              <CategoryTable payload={payload} counters={counters} errorHist={errorHist} />
-              <GodBetPanel
-                payload={payload}
-                counters={counters}
-                countersGod={godBet.counters_god ?? {}}
-                errorHist={errorHist}
-                errorHistGod={errorHist}
-                godActive={godBet.active}
-                radarScore={godBet.radar_score}
-              />
-            </>
-          )}
-        </div>
-
-        {/* ═══ 5. LECTURA DE ZONA POR MERCADO (colapsable — la zona ACTUAL
-             de doc+col se ve en el header, aunque esté cerrado) ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <button
-            onClick={() => setZonaAbierta((v) => !v)}
-            className="flex items-center justify-between px-1 py-1 w-full text-left gap-2"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
-          >
-            <SeccionLabel>{zonaAbierta ? '▾' : '▸'} LECTURA DE ZONA (detalle / auditoría)</SeccionLabel>
-            <ZoneQuickBadges />
-          </button>
-          {zonaAbierta && <ZoneDetailGrid />}
-        </div>
-
-        {/* ═══ 6. BANKROLL ═══ */}
+        {/* ═══ 5. BANKROLL (cierra la columna izquierda) ═══ */}
         <div className="flex flex-col gap-1.5">
           <SeccionLabel>BANKROLL</SeccionLabel>
           <BankrollLedger bankroll={bankroll} />
         </div>
+
+        </div>
+        {/* ── fin columna izquierda / inicio columna derecha ── */}
+        <div className="flex flex-col gap-3">
+
+        {/* ═══ 4. SUGERENCIAS POR CATEGORÍA — las 9, siempre visibles,
+             sin acordeón. Los picks de DOCENAS/COLUMNAS que importan para
+             operar YA están a la izquierda, en DECISIÓN; esto es la lectura
+             completa (color, paridad, rango, números, guardianes…). ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <SeccionLabel>SUGERENCIAS POR CATEGORÍA (las 9)</SeccionLabel>
+          <CategoryTable payload={payload} counters={counters} errorHist={errorHist} />
+          <GodBetPanel
+            payload={payload}
+            counters={counters}
+            countersGod={godBet.counters_god ?? {}}
+            errorHist={errorHist}
+            errorHistGod={errorHist}
+            godActive={godBet.active}
+            radarScore={godBet.radar_score}
+          />
+        </div>
+
+        {/* ═══ 6. LECTURA DE ZONA POR MERCADO — doc + col, siempre visible ═══ */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 px-1">
+            <SeccionLabel>LECTURA DE ZONA POR MERCADO</SeccionLabel>
+            <ZoneQuickBadges />
+          </div>
+          <ZoneDetailGrid />
+        </div>
+
+        </div>
+        </div>
+        {/* ── fin dashboard 2 columnas ── */}
       </div>
     </div>
   );
