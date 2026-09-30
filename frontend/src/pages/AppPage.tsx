@@ -6,7 +6,8 @@
 //   ✅ PIEZA 2 — OPTIMAL state strip
 //   ✅ PIEZA 3 — Control de Misión + Live Bet + Paño + Wheel + Entropy + Radar + Dispersión + WarTerminal
 //   ✅ REGISTRO — SessionRecorder: log por giro + export CSV (col-izquierda)
-//   ⏳ PIEZA 4 — GOD modal flotante + Capital Allocation + Bankroll + Ledger
+//   ✅ PIEZA 4 — Quantum Pilot: cockpit único (decisión escudo+GOD, marcador,
+//               categorías, zona, bankroll — ver Quantumpilot.tsx v2)
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -22,13 +23,10 @@ import { MissionControl } from '@/components/MissionControl';
 import { SequenceLog } from '@/components/SequenceLog';
 import { WarTerminal } from '@/components/WarTerminal';
 import { SessionPanel } from '@/components/SessionPanel';
-import { BankrollLedger } from '@/components/BankrollLedger';
 import { LiveBetStrip } from '@/components/LiveBetStrip';
 import { RouletteBoard } from '@/components/RouletteBoard';
 import { TableEntropy } from '@/components/TableEntropy';
 import { RadarCard } from '@/components/RadarCard';
-import { CategoryTable } from '@/components/CategoryTable';
-import { GodBetPanel } from '@/components/GodBetPanel';
 import { NeuralBackground } from '@/components/NeuralBackground';
 import { ChaosPanel } from '@/components/ChaosPanel';
 import { SessionRecorder } from '@/components/SessionRecorder';
@@ -232,12 +230,16 @@ export function AppPage() {
         onReset={() => {}}
       />
 
-      {/* QUANTUM PILOT overlay (flotante draggable) */}
+      {/* QUANTUM PILOT overlay (flotante draggable) — cockpit único: acá
+          adentro vive TODO lo que antes estaba repartido entre este panel,
+          CategoryTable/GodBetPanel (columna central) y BankrollLedger
+          (columna izquierda). Se sacaron de abajo para no duplicar. */}
       <QuantumPilot
         godBet={(data as any).god_bet ?? { active: false, cond_state: 'caution', radar_score: 0, counters_god: {} }}
         payload={data.payload}
         bankroll={data.bankroll}
         counters={(data.counters ?? {}) as any}
+        errorHist={(data as any).error_hist ?? {}}
         spinsCount={data.sequence.count}
         pdHud={condCalc}
         pdEntropy={entropyCalc}
@@ -291,7 +293,7 @@ export function AppPage() {
         <div className="app-spacer-md" />
         <div className="mission-section">
 
-          {/* IZQUIERDA: Control de Misión + Seq Log + War Terminal + Sesión + Bankroll */}
+          {/* IZQUIERDA: Control de Misión + Seq Log + War Terminal + Sesión */}
           <div className="col-left">
             <MissionControl />
             <SequenceLog spins={data.sequence.spins} limit={12} />
@@ -336,12 +338,19 @@ export function AppPage() {
                 colL: Number((data.counters as any)?.columnas?.losses ?? 0),
                 cond: condCalc,
                 condState: String((data as any).god_bet?.cond_state ?? ''),
+                // ── info de sesión para el CSV (hora inicio/final, saldo
+                // inicial/final, nombre de mesa) — puramente informativa,
+                // SessionRecorder la lee de acá y de localStorage, no toca
+                // ningún endpoint nuevo.
+                bankrollInicial: data.bankroll.initial ?? null,
+                bankrollActual: data.bankroll.current ?? null,
               }}
             />
-            <BankrollLedger bankroll={data.bankroll} />
           </div>
 
-          {/* CENTRO: Live Bet + Paño + Wheel + Tabla Categorías + GOD BET */}
+          {/* CENTRO: Live Bet + Paño + Wheel — Tabla Categorías y GOD BET se
+              movieron adentro del Quantum Pilot (cockpit único), ya no van
+              acá para no duplicarlas. */}
           <div className="col-center">
             <LiveBetStrip
               pendingBet={pendingBet}
@@ -353,20 +362,6 @@ export function AppPage() {
               payload={data.payload}
               wheelInfo={(data as any).wheel_info ?? null}
               onPick={handlePick}
-            />
-            <CategoryTable
-              payload={data.payload}
-              counters={(data.counters ?? {}) as any}
-              errorHist={(data as any).error_hist ?? {}}
-            />
-            <GodBetPanel
-              payload={data.payload}
-              counters={(data.counters ?? {}) as any}
-              countersGod={((data as any).counters_god ?? {}) as any}
-              errorHist={(data as any).error_hist ?? {}}
-              errorHistGod={(data as any).error_hist ?? {}}
-              godActive={!!((data as any).god_bet?.active)}
-              radarScore={(data as any).god_bet?.radar_score ?? 0}
             />
           </div>
 
