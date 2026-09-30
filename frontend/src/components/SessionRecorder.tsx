@@ -21,6 +21,41 @@
 import { useEffect, useRef, useState } from 'react';
 
 const CLAVE = 'danna_session_log_v1';
+// Metadata de sesión (hora de inicio + saldo inicial) — se fija UNA vez, al
+// registrar la primera fila del log, y se borra junto con el log en
+// `limpiar()`. Nombre de mesa lo escribe BankrollLedger en su propia clave;
+// acá solo se lee, nunca se escribe. Todo 100% local, sin tocar el backend.
+const META_CLAVE = 'danna_session_meta_v1';
+const MESA_CLAVE = 'danna_mesa_nombre';
+
+interface SesionMeta {
+  horaInicio: string;
+  saldoInicial: number | null;
+}
+
+function leerMeta(): SesionMeta | null {
+  try {
+    const raw = window.localStorage.getItem(META_CLAVE);
+    return raw ? (JSON.parse(raw) as SesionMeta) : null;
+  } catch {
+    return null;
+  }
+}
+function guardarMeta(m: SesionMeta | null) {
+  try {
+    if (m) window.localStorage.setItem(META_CLAVE, JSON.stringify(m));
+    else window.localStorage.removeItem(META_CLAVE);
+  } catch {
+    /* cuota llena — no bloquea el registro de giros */
+  }
+}
+function leerMesa(): string {
+  try {
+    return window.localStorage.getItem(MESA_CLAVE) ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export interface Fila {
   spin_index: number;
@@ -94,6 +129,10 @@ export interface Snapshot {
   panoPct: number | null;
   ruedaPct: number | null;
   chaosEstado: string;
+  // info de sesión — solo para el CSV (hora inicio/final, saldo inicial/final
+  // se arman con esto + el reloj local; no dispara ninguna llamada nueva).
+  bankrollInicial?: number | null;
+  bankrollActual?: number | null;
   // arrays tal cual los expone ChaosIndex.detalle.<grupo>.counts — ver ChaosPanel.tsx
   docCounts?: number[] | null;
   colCounts?: number[] | null;
@@ -234,19 +273,38 @@ function derivar(filas: Fila[]): Fila[] {
   });
 }
 
-function aCSV(filas: Fila[]): string {
+// Columnas de SESIÓN — no cambian giro a giro, se repiten iguales en cada
+// fila (formato tabular plano, fácil de pivotear en Excel/Power BI).
+interface MetaSesion {
+  mesa: string;
+  horaInicio: string;
+  horaFinal: string;
+  saldoInicial: number | null;
+  saldoFinal: number | null;
+}
+
+// Encabezados de las columnas de sesión, en el mismo orden en que se arman
+// los valores en `aCSV` a partir de `meta` — simple lista de texto, sin
+// depender de keyof (los nombres del CSV no calzan 1:1 con los del objeto).
+const META_HEADERS = ['mesa', 'hora_inicio', 'hora_final', 'saldo_inicial', 'saldo_final'];
+
+function aCSV(filas: Fila[], meta: MetaSesion): string {
   const esc = (v: unknown) => {
     const s = v === null || v === undefined ? '' : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = COLS.map(([, t]) => t).join(';');
-  const body = filas.map((f) => COLS.map(([k]) => esc(f[k])).join(';'));
+  const metaVals = [meta.mesa, meta.horaInicio, meta.horaFinal, meta.saldoInicial, meta.saldoFinal];
+  const head = [...META_HEADERS, ...COLS.map(([, t]) => t)].join(';');
+  const body = filas.map((f) =>
+    [...metaVals.map(esc), ...COLS.map(([k]) => esc(f[k]))].join(';')
+  );
   return [head, ...body].join('\n');
 }
 
 export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60 }: Props) {
   const [filas, setFilas] = useState<Fila[]>(() => leer());
   const ultimo = useRef<number>(-1);
+  const metaRef = useRef<SesionMeta | null>(leerMeta());
 
   useEffect(() => {
     if (snap.spinsCount === ultimo.current) return;
@@ -319,6 +377,20 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
         gatillo_hud:
           dh !== null && dh > thrHud && (snap.hud ?? 0) > thrHudNivel ? 1 : 0,
       };
+
+      // Primera fila de una sesión nueva (log vacío hasta ahora): fija
+      // hora de inicio + saldo inicial UNA sola vez. Se borra en `limpiar()`,
+      // así que la próxima sesión arranca su propio reloj/saldo sin que
+      // nadie tenga que tocar nada en el backend.
+      if (prev.length === 0) {
+        const nuevaMeta: SesionMeta = {
+          horaInicio: new Date().toISOString(),
+          saldoInicial: snap.bankrollInicial ?? snap.bankrollActual ?? null,
+        };
+        metaRef.current = nuevaMeta;
+        guardarMeta(nuevaMeta);
+      }
+
       const next = [...prev, fila];
       guardar(next);
       return next;
@@ -326,7 +398,14 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
   }, [snap, thrEnt, thrHud, thrHudNivel]);
 
   function descargar() {
-    const csv = '\uFEFF' + aCSV(derivar(filas)); // BOM para que Excel lea los acentos
+    const meta = {
+      mesa: leerMesa(),
+      horaInicio: metaRef.current?.horaInicio ?? '',
+      horaFinal: new Date().toISOString(),
+      saldoInicial: metaRef.current?.saldoInicial ?? null,
+      saldoFinal: snap.bankrollActual ?? null,
+    };
+    const csv = '\uFEFF' + aCSV(derivar(filas), meta); // BOM para que Excel lea los acentos
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -341,6 +420,8 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
     setFilas([]);
     guardar([]);
     ultimo.current = -1;
+    metaRef.current = null;
+    guardarMeta(null);
   }
 
   // ── resumen rápido en pantalla ──
