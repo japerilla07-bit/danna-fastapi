@@ -364,9 +364,9 @@ const MarketColumn = memo(MarketColumnImpl);
 // lógica — solo se lo saca del contenedor fijo que tenía antes.
 // ────────────────────────────────────────────────────────────────────────
 
-export function ZoneDetailGrid() {
+export function ZoneDetailGrid({ direction = 'row' }: { direction?: 'row' | 'column' }) {
   return (
-    <div style={{ display: 'flex', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: direction, gap: 10 }}>
       <MarketColumn mkt="doc" />
       <MarketColumn mkt="col" />
     </div>
