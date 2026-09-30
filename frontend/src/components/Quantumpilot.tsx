@@ -339,11 +339,17 @@ const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT'
 
 function DocColQuickPick({ label, state, pick }: { label: string; state: BadgeState; pick: string }) {
   return (
-    <div className={`flex-1 flex items-center justify-between px-3 py-2 rounded-md border ${BADGE_BG[state]}`}>
-      <span className="text-[10px] font-bold text-gray-400" style={{ letterSpacing: '0.15em' }}>{label}</span>
-      <span className="flex items-center gap-2">
-        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${BADGE_BG[state]}`}>{BADGE_TXT[state]}</span>
-        <span className="text-[15px] font-black text-white">{pick}</span>
+    <div className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-md border ${BADGE_BG[state]}`}>
+      <span className="text-[10px] font-bold text-gray-400 shrink-0" style={{ letterSpacing: '0.15em' }}>{label}</span>
+      <span className="flex items-center gap-2 min-w-0">
+        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${BADGE_BG[state]}`}>{BADGE_TXT[state]}</span>
+        <span
+          title={pick}
+          className="text-[13px] font-black text-white"
+          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}
+        >
+          {pick}
+        </span>
       </span>
     </div>
   );
@@ -518,7 +524,7 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[1360px] max-w-[97vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[1200px] max-w-[95vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
         left: pos.x,
         top: pos.y,
@@ -755,13 +761,12 @@ export function QuantumPilot({
         </div>
 
         {/* ═══ DASHBOARD — 3 columnas, todo siempre visible, sin acordeones:
-             A) cabina de decisión (lo que cambia cada giro), B) las 9
-             categorías, C) zona doc/col. Antes B y C estaban apiladas en
-             la misma columna — con GOD activo, la tabla de categorías
-             empujaba la zona fuera de pantalla y había que scrollear para
-             ver "las celdas". Ahora cada bloque grande tiene su propia
-             columna, en paralelo, no uno esperando al otro. ═══ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.25fr 0.8fr', gap: 16, alignItems: 'start' }}>
+             A) cabina de decisión, B) las 9 categorías, C) zona doc/col.
+             Anchos fijos en A y C (su contenido es acotado — números
+             chicos, no hace falta más aire) y B flexible entre un mínimo
+             y un máximo, para que no se infle con espacio vacío cuando el
+             panel es más ancho de lo que su contenido necesita. ═══ */}
+        <div style={{ display: 'grid', gridTemplateColumns: '260px minmax(545px, 600px) 320px', gap: 14, alignItems: 'start' }}>
         <div className="flex flex-col gap-3">
 
         {/* ═══ 2. DECISIÓN — escudo (en vivo) + GOD (alta precisión) ═══ */}
@@ -778,7 +783,7 @@ export function QuantumPilot({
             const docState = toState(advice['docenas']);
             const colState = toState(advice['columnas']);
             return (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-1.5">
                 <DocColQuickPick label="DOCENAS" state={docState} pick={pickLabel(advice['docenas'])} />
                 <DocColQuickPick label="COLUMNAS" state={colState} pick={pickLabel(advice['columnas'])} />
               </div>
