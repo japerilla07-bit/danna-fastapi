@@ -359,16 +359,113 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 const MarketColumn = memo(MarketColumnImpl);
 
 // ────────────────────────────────────────────────────────────────────────
-// ZoneDetailGrid — el par DOCENAS/COLUMNAS suelto, para meter en un
-// acordeón colapsable desde Quantum. Mismo componente, cero cambios de
-// lógica — solo se lo saca del contenedor fijo que tenía antes.
+// MarketEfficiencyCell — versión COMPACTA de MarketColumn, para la columna
+// ZONA del Quantum Pilot (320px de ancho, apiladas doc/col). MarketColumn
+// (arriba) trae termómetro + "cómo venís hoy" + celda actual con histórico
+// + caja "EN VIVO" duplicada + lista de casillas visitadas — de punta a
+// punta es alta, y apiladas las dos (doc y col) la segunda queda fuera de
+// vista, justo la queja de Gunner: "la celda de columnas debe estar por
+// debajo de la de docenas mostrando su eficiencia si no no sirve". Esta
+// versión deja SOLO lo que hace falta para operar en vivo: zona actual,
+// HUD/ENT, cómo venís en los últimos 10 giros, eficiencia histórica de la
+// celda (acierto % + techo de errores) y qué hacer. Se sacan del todo la
+// lista "casillas que pasaste hoy" y la caja "EN VIVO" repetida — ese
+// detalle completo sigue disponible en MatrixPanel() (uso no-compacto).
 // ────────────────────────────────────────────────────────────────────────
 
-export function ZoneDetailGrid({ direction = 'row' }: { direction?: 'row' | 'column' }) {
+function MarketEfficiencyCellImpl({ mkt }: { mkt: Market }) {
+  const hud = useLastHud();
+  const ent = useLastEnt();
+  const key = cellKeyOf(hud, ent);
+  const map = cellStats(hud, ent, mkt);
+  const live = useCellRec(mkt, key);
+  const estado: Zone = fusedZone(hud, ent, mkt, live);
+  const deviation = liveDeviation(hud, ent, mkt, live);
+  const st = STYLE[estado];
+  const title = mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS';
+  const termoHits = useTermoHits(mkt, 10);
+  const termoTotal = useTermoTotal(mkt, 10);
+  const ratio = termoTotal > 0 ? termoHits / termoTotal : 0;
+  const luz = termoTotal < 3 ? '#5c687a' : ratio >= 0.7 ? '#00ff9d' : ratio >= 0.5 ? '#ffdf60' : '#ff1e38';
+
   return (
-    <div style={{ display: 'flex', flexDirection: direction, gap: 10 }}>
-      <MarketColumn mkt="doc" />
-      <MarketColumn mkt="col" />
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 5,
+      padding: '9px 11px',
+      clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)',
+      background: 'linear-gradient(180deg, rgba(10,14,28,0.95) 0%, rgba(3,4,8,0.98) 100%)',
+      border: `1px solid ${st.color}55`,
+      boxShadow: `0 8px 24px rgba(0,0,0,0.7), inset 0 0 24px ${st.dim}, inset 0 2px 0 ${st.color}40`,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 13, fontWeight: 800, letterSpacing: '0.2em', color: st.color, textShadow: `0 0 10px ${st.glow}` }}>
+          {title}
+        </span>
+        <span style={{
+          fontFamily: "'Rajdhani', sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', color: st.color,
+          padding: '2px 8px',
+          border: `1px solid ${st.color}90`,
+          background: 'rgba(0,0,0,0.5)',
+          whiteSpace: 'nowrap',
+        }}>
+          {st.label}{deviation === 'peor' ? ' ▼' : deviation === 'mejor' ? ' ▲' : ''}
+        </span>
+      </div>
+
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#cbd5e1' }}>
+        HUD <b style={{ color: '#ffffff' }}>{hud ?? '—'}</b>
+        {'  ·  '}
+        ENT <b style={{ color: '#ffffff' }}>{ent ?? '—'}</b>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: luz, boxShadow: `0 0 6px ${luz}`, flexShrink: 0 }} />
+        <span style={{ color: '#8092b5' }}>ÚLT. 10:</span>
+        <b style={{ color: luz }}>{termoTotal > 0 ? `${termoHits}/${termoTotal}` : '—'}</b>
+      </div>
+
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, color: '#cbd5e1' }}>
+        {'eficiencia: '}
+        {map ? (
+          <>
+            <b style={{ color: '#ffffff' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
+            {' · techo '}
+            <b style={{ color: map.maxRun >= 5 ? '#ff1e38' : '#ffffff' }}>{map.maxRun}</b>
+            <span style={{ color: '#5c687a' }}>{' '}({map.n}g)</span>
+          </>
+        ) : (
+          <span style={{ color: '#5c687a' }}>sin datos en esta casilla</span>
+        )}
+      </div>
+
+      <div style={{
+        marginTop: 1, padding: '5px 8px',
+        borderLeft: `3px solid ${st.color}`,
+        background: `${st.color}14`,
+        fontFamily: "'Rajdhani', sans-serif", fontSize: 12, fontWeight: 700, color: st.color,
+        lineHeight: 1.25,
+      }}>
+        {INSTRUCCION[estado]}
+      </div>
+    </div>
+  );
+}
+const MarketEfficiencyCell = memo(MarketEfficiencyCellImpl);
+
+// ────────────────────────────────────────────────────────────────────────
+// ZoneDetailGrid — el par DOCENAS/COLUMNAS suelto. `compact` cambia entre
+// la tarjeta completa (MarketColumn, uso original de MatrixPanel()) y la
+// tarjeta chica (MarketEfficiencyCell, uso del Quantum Pilot) — mismo dato,
+// cero cambios de lógica, solo dos presentaciones según el espacio real
+// disponible.
+// ────────────────────────────────────────────────────────────────────────
+
+export function ZoneDetailGrid({ direction = 'row', compact = false }: { direction?: 'row' | 'column'; compact?: boolean }) {
+  const Cell = compact ? MarketEfficiencyCell : MarketColumn;
+  return (
+    <div style={{ display: 'flex', flexDirection: direction, gap: compact ? 8 : 10 }}>
+      <Cell mkt="doc" />
+      <Cell mkt="col" />
     </div>
   );
 }
