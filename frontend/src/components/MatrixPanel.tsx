@@ -387,6 +387,14 @@ function MarketEfficiencyCellImpl({ mkt }: { mkt: Market }) {
   const termoTotal = useTermoTotal(mkt, 10);
   const ratio = termoTotal > 0 ? termoHits / termoTotal : 0;
   const luz = termoTotal < 3 ? '#5c687a' : ratio >= 0.7 ? '#00ff9d' : ratio >= 0.5 ? '#ffdf60' : '#ff1e38';
+  // Contador general de la mesa (sesión completa) — el que traía la card
+  // grande ("CÓMO VENÍS HOY") y que se había caído en la versión compacta.
+  // Gunner: "me eliminaste el contador general de docenas y columnas que
+  // tenian esas card y es necesario visualizar rendimiento".
+  const gHits = useMarketHits(mkt);
+  const gMiss = useMarketMisses(mkt);
+  const gMax = useMarketMaxStreak(mkt);
+  const gTotal = gHits + gMiss;
 
   return (
     <div style={{
@@ -417,6 +425,20 @@ function MarketEfficiencyCellImpl({ mkt }: { mkt: Market }) {
         {'  ·  '}
         ENT <b style={{ color: '#ffffff' }}>{ent ?? '—'}</b>
       </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+        <span>
+          <span style={{ color: '#00ff9d', textShadow: '0 0 6px rgba(0,255,157,0.5)' }}>✓{gHits}</span>
+          {' '}
+          <span style={{ color: '#ff1e38', textShadow: '0 0 6px rgba(255,30,56,0.5)' }}>✗{gMiss}</span>
+        </span>
+        <span style={{ color: '#8092b5', fontWeight: 800 }}>{gTotal ? `${Math.round((gHits / gTotal) * 100)}%` : '—'}</span>
+      </div>
+      {gMax >= 4 && (
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color: '#ffdf60', marginTop: -2 }}>
+          peor racha hoy: <b>{gMax}</b>
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: luz, boxShadow: `0 0 6px ${luz}`, flexShrink: 0 }} />
