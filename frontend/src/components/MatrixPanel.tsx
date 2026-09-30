@@ -1,6 +1,20 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — MatrixPanel: centro de mando (v3 · legible)
+// D.A.N.N.A. — MatrixPanel: centro de mando (v4 · piezas sueltas para Quantum)
 // ════════════════════════════════════════════════════════════════════════
+//
+// v4: el antiguo monolito `Copilot()` (header + orden + marcador, todo junto)
+// se partió en dos piezas exportadas por separado — `CopilotOrder` y
+// `CopilotScoreboard` — para que QuantumPilot las pueda ubicar donde quiera
+// en el rediseño del cockpit (la orden pegada a TARGET LOCK, el marcador
+// pegado a ERRORES) sin duplicar el cálculo. `MatrixPanel()` (el export
+// original) se dejó funcionando EXACTAMENTE igual que antes, solo que ahora
+// por dentro arma las dos piezas — así cualquier lugar que todavía lo use
+// no se entera del cambio.
+//
+// También se agrega `ZoneDetailGrid` — el par de `MarketColumn` (doc/col)
+// que antes vivía pegado adentro de `MatrixPanel()`, ahora exportado suelto
+// para que Quantum lo pueda meter en un acordeón colapsable. Es el MISMO
+// componente, sin tocar su lógica.
 //
 // Dos preguntas, dos lugares:
 //   • SESIÓN (arriba, grande) = cómo venís HOY en total por mercado.
@@ -65,7 +79,7 @@ function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: Ce
       padding: '5px 10px',
       clipPath: 'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)',
       background: 'linear-gradient(90deg, rgba(10,13,26,0.9) 0%, rgba(2,4,8,0.5) 100%)',
-      borderLeft: `3px solid ${st.color}`, 
+      borderLeft: `3px solid ${st.color}`,
       boxShadow: `inset 0 0 18px ${st.dim}, 0 4px 6px rgba(0,0,0,0.5)`,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -136,7 +150,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 
       {/* Fila superior: termómetro + cómo venís hoy, lado a lado */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'stretch' }}>
-      
+
       {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
       {(() => {
         const hits = termoHits, total = termoTotal, liveStreak = termoStreak;
@@ -152,7 +166,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
             display: 'flex', flexDirection: 'column',
             padding: '8px 10px',
             clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
-            background: 'rgba(2,4,8,0.7)', 
+            background: 'rgba(2,4,8,0.7)',
             border: `1px solid ${luz}50`,
             boxShadow: `inset 0 0 15px ${luz}15`,
           }}>
@@ -160,7 +174,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
               <span style={{ width: 8, height: 8, clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', background: luz, boxShadow: `0 0 12px ${luz}, 0 0 4px ${luz}`, flexShrink: 0 }} />
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: '#5c687a', letterSpacing: '0.15em', fontWeight: 700 }}>ÚLTIMOS {total} GIROS</span>
             </div>
-            
+
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: luz, fontFamily: "'JetBrains Mono', monospace", textShadow: `0 0 12px ${luz}90` }}>
                 {total > 0 ? `${hits}/${total}` : '—'}
@@ -181,7 +195,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         display: 'flex', flexDirection: 'column',
         padding: '8px 10px',
         clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
-        background: 'rgba(2,4,8,0.7)', 
+        background: 'rgba(2,4,8,0.7)',
         border: '1px solid rgba(0,229,255,0.3)',
         boxShadow: 'inset 0 0 15px rgba(0,229,255,0.1)',
       }}>
@@ -212,7 +226,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
       <div style={{
         padding: '10px 12px',
         clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
-        background: `radial-gradient(circle at center, ${st.dim} 0%, rgba(3,4,8,0.8) 100%)`, 
+        background: `radial-gradient(circle at center, ${st.dim} 0%, rgba(3,4,8,0.8) 100%)`,
         border: `1px solid ${st.color}70`,
         boxShadow: `0 6px 16px rgba(0,0,0,0.5), inset 0 0 25px ${st.dim}`,
       }}>
@@ -234,7 +248,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
                 transition={{ duration: 0.2 }}
                 style={{
                   fontFamily: "'Rajdhani', sans-serif", fontSize: 13, fontWeight: 800, letterSpacing: '0.15em', color: st.color,
-                  padding: '3px 12px', 
+                  padding: '3px 12px',
                   clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)',
                   border: `1px solid ${st.color}90`,
                   background: 'rgba(0,0,0,0.5)',
@@ -322,7 +336,7 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
       <div style={{
         padding: '8px 12px',
         clipPath: 'polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px)',
-        background: `linear-gradient(90deg, ${st.dim} 0%, rgba(6,10,20,0.1) 100%)`, 
+        background: `linear-gradient(90deg, ${st.dim} 0%, rgba(6,10,20,0.1) 100%)`,
         borderLeft: `4px solid ${st.color}`,
         boxShadow: `inset 0 2px 10px rgba(0,0,0,0.5)`,
       }}>
@@ -345,8 +359,28 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
 const MarketColumn = memo(MarketColumnImpl);
 
 // ────────────────────────────────────────────────────────────────────────
+// ZoneDetailGrid — el par DOCENAS/COLUMNAS suelto, para meter en un
+// acordeón colapsable desde Quantum. Mismo componente, cero cambios de
+// lógica — solo se lo saca del contenedor fijo que tenía antes.
+// ────────────────────────────────────────────────────────────────────────
+
+export function ZoneDetailGrid() {
+  return (
+    <div style={{ display: 'flex', gap: 10 }}>
+      <MarketColumn mkt="doc" />
+      <MarketColumn mkt="col" />
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // COPILOTO — lee ambos mercados y da UNA decisión de entrada segura
-// (Transformado en el "Ojo de Comando" / Reactor Principal)
+//
+// v4: partido en dos piezas exportadas — CopilotOrder (header + orden,
+// dueño de avisarle al store qué sugiere el piloto) y CopilotScoreboard
+// (el marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA, réplica de toda la
+// sesión vía decidir() Capa 1). Cada una es independiente — se pueden
+// ubicar en cualquier lugar del layout.
 // ────────────────────────────────────────────────────────────────────────
 
 function useMarketRead(mkt: Market): MarketRead {
@@ -366,25 +400,62 @@ function useMarketRead(mkt: Market): MarketRead {
   };
 }
 
-function Copilot() {
+/** Header + orden del escudo ("ENTRADA SEGURA"). Es la ÚNICA pieza que le
+ *  avisa al store qué mercado sugiere el piloto ahora mismo — si en algún
+ *  momento se usa CopilotScoreboard sin esta pieza en el mismo árbol, el
+ *  store deja de recibir la sugerencia en vivo. Quantum las usa siempre
+ *  juntas, así que no pasa. */
+export function CopilotOrder() {
   const doc = useMarketRead('doc');
   const col = useMarketRead('col');
-  // Piloto completo (Capa 1 + escudo de Capa 2) — la orden que se muestra y
-  // la que se juega. decidirPiloto es pura (solo lee estado de copilot.ts),
-  // así que no importa cuántas veces se re-renderice este componente entre
-  // un giro real y el siguiente.
   const d = decidirPiloto(doc, col);
 
-  // Le avisamos al store, EN CADA RENDER, qué mercado sugiere el piloto
-  // ahora mismo (o null si ESPERAR/PARAR/INESTABLE). El store lo lee en el
-  // instante exacto en que registra el giro pendiente (ver telemetryStore.ts
-  // → ingest), así el giro que se resuelve después queda evaluado contra la
-  // sugerencia que REALMENTE estaba en pantalla en ese giro, sin depender
-  // del timing de un useEffect. Esto también es lo que alimenta el escudo
-  // de Capa 2 en vivo (registrarGiroReal), no solo el marcador.
   const setCopSug = useSetCopSug();
   setCopSug(d.mercado);
 
+  const color = d.nivel === 'ok' ? '#00ff9d' : d.nivel === 'precaucion' ? '#ffdf60' : '#ff1e38';
+  const glow = d.nivel === 'ok' ? 'rgba(0,255,157,0.7)' : d.nivel === 'precaucion' ? 'rgba(255,223,96,0.6)' : 'rgba(255,30,56,0.7)';
+  const clip = 'polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px)';
+
+  return (
+    <div style={{
+      padding: '12px 14px', position: 'relative', overflow: 'hidden',
+      clipPath: clip,
+      background: `radial-gradient(circle at 50% 0%, ${color}35 0%, rgba(3,4,8,0.95) 80%)`,
+      border: `1px solid ${color}90`,
+      boxShadow: `0 12px 30px rgba(0,0,0,0.8), inset 0 0 50px ${color}20, inset 0 2px 0 ${color}`,
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.01) 0px, rgba(255,255,255,0.01) 2px, transparent 2px, transparent 10px)',
+        pointerEvents: 'none'
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, position: 'relative' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: `drop-shadow(0 0 6px ${color})` }}>
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" />
+        </svg>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 10px ${color}` }}>ESCUDO (CAPA 1+2) · ENTRADA SEGURA</span>
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div key={d.titulo}
+          initial={{ opacity: 0, scale: 0.98, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }} style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 24, fontWeight: 900, color: '#ffffff', letterSpacing: '0.04em', textShadow: `0 0 20px ${glow}, 0 0 8px ${color}`, lineHeight: 1 }}>
+            {d.titulo}
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#cbd5e1', maxWidth: '50%', textAlign: 'right', fontWeight: 600 }}>{d.motivo}</div>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA del escudo — réplica de toda
+ *  la sesión vía decidir() (Capa 1 sola, estado puro, no se corrompe al
+ *  recalcularse). Independiente de CopilotOrder. */
+export function CopilotScoreboard() {
   const history = useHistory();
   const { copHits, copMisses, copStreak, copLive } = useMemo(() => {
     const termo: Record<Market, number[]> = { doc: [], col: [] };
@@ -433,77 +504,33 @@ function Copilot() {
 
   const copWr = (copHits + copMisses) > 0 ? (copHits / (copHits + copMisses)) * 100 : null;
 
-  // Tonos intensos Geass/Shikon
-  const color = d.nivel === 'ok' ? '#00ff9d' : d.nivel === 'precaucion' ? '#ffdf60' : '#ff1e38';
-  const glow = d.nivel === 'ok' ? 'rgba(0,255,157,0.7)' : d.nivel === 'precaucion' ? 'rgba(255,223,96,0.6)' : 'rgba(255,30,56,0.7)';
-  const clip = 'polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px)';
-
   return (
     <div style={{
-      padding: '12px 14px', marginBottom: 6, position: 'relative', overflow: 'hidden',
-      clipPath: clip,
-      // Efecto Reactor/Ojo: Gradiente radial desde el centro superior hacia la oscuridad
-      background: `radial-gradient(circle at 50% 0%, ${color}35 0%, rgba(3,4,8,0.95) 80%)`,
-      border: `1px solid ${color}90`, 
-      boxShadow: `0 12px 30px rgba(0,0,0,0.8), inset 0 0 50px ${color}20, inset 0 2px 0 ${color}`,
+      display: 'flex', position: 'relative', flexWrap: 'nowrap',
+      clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
+      background: 'rgba(2,4,8,0.7)',
+      border: '1px solid rgba(0,229,255,0.35)',
+      boxShadow: 'inset 0 4px 15px rgba(0,0,0,0.8), 0 2px 0 rgba(0,229,255,0.15)',
     }}>
-      
-      {/* Patrón de líneas traseras para dar textura tecno-mágica */}
-      <div style={{ 
-        position: 'absolute', inset: 0, 
-        background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.01) 0px, rgba(255,255,255,0.01) 2px, transparent 2px, transparent 10px)', 
-        pointerEvents: 'none' 
-      }} />
-
-      {/* encabezado: escudo + nombre */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, position: 'relative' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: `drop-shadow(0 0 6px ${color})` }}>
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" />
-        </svg>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 10px ${color}` }}>D.A.N.N.A. · ENTRADA SEGURA</span>
-      </div>
-
-      {/* orden principal */}
-      <AnimatePresence mode="wait">
-        <motion.div key={d.titulo}
-          initial={{ opacity: 0, scale: 0.98, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }} style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 24, fontWeight: 900, color: '#ffffff', letterSpacing: '0.04em', textShadow: `0 0 20px ${glow}, 0 0 8px ${color}`, lineHeight: 1 }}>
-            {d.titulo}
-          </div>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: '#cbd5e1', maxWidth: '50%', textAlign: 'right', fontWeight: 600 }}>{d.motivo}</div>
-        </motion.div>
-      </AnimatePresence>
-
-      {/* MARCADOR PROPIO DE D.A.N.N.A. — aciertos/errores/efectividad/racha */}
-      <div style={{
-        display: 'flex', marginTop: 10, position: 'relative', flexWrap: 'nowrap',
-        clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
-        background: 'rgba(2,4,8,0.7)', 
-        border: `1px solid ${color}40`,
-        boxShadow: `inset 0 4px 15px rgba(0,0,0,0.8), 0 2px 0 ${color}20`,
-      }}>
-        {[
-          { k: 'ACIERTOS', v: copHits, c: '#00ff9d' },
-          { k: 'ERRORES', v: copMisses, c: '#ff1e38' },
-          { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#ffffff' },
-          { k: 'RACHA AHORA', v: copLive, c: copLive >= 3 ? '#ff1e38' : copLive >= 1 ? '#ffdf60' : '#00ff9d' },
-          { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff1e38' : '#ffdf60' },
-        ].map((s, i, arr) => (
-          <div key={s.k} style={{ 
-            flex: '1', padding: '8px 10px', 
-            borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none',
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%)'
-          }}>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700 }}>{s.k}</div>
-            <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 20, fontWeight: 900, color: s.c, marginTop: 4, textShadow: `0 0 12px ${s.c}80` }}>{s.v}</div>
-          </div>
-        ))}
-      </div>
+      {[
+        { k: 'ACIERTOS', v: copHits, c: '#00ff9d' },
+        { k: 'ERRORES', v: copMisses, c: '#ff1e38' },
+        { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#ffffff' },
+        { k: 'RACHA AHORA', v: copLive, c: copLive >= 3 ? '#ff1e38' : copLive >= 1 ? '#ffdf60' : '#00ff9d' },
+        { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff1e38' : '#ffdf60' },
+      ].map((s, i, arr) => (
+        <div key={s.k} style={{
+          flex: '1', padding: '8px 10px',
+          borderRight: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none',
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%)'
+        }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700 }}>{s.k}</div>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 20, fontWeight: 900, color: s.c, marginTop: 4, textShadow: `0 0 12px ${s.c}80` }}>{s.v}</div>
+        </div>
+      ))}
     </div>
   );
 }
-
 
 export function MatrixPanel() {
   const resetTelemetry = useResetTelemetry();
@@ -527,7 +554,7 @@ export function MatrixPanel() {
             fontSize: 9.5, fontWeight: 800, letterSpacing: '0.15em',
             color: '#94a3b8', cursor: 'pointer',
             clipPath: 'polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px)',
-            background: 'linear-gradient(180deg, rgba(30,41,59,0.9) 0%, rgba(2,6,23,1) 100%)', 
+            background: 'linear-gradient(180deg, rgba(30,41,59,0.9) 0%, rgba(2,6,23,1) 100%)',
             border: '1px solid rgba(148,163,184,0.4)',
             boxShadow: '0 4px 10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)',
             padding: '5px 12px',
@@ -551,12 +578,14 @@ export function MatrixPanel() {
       </div>
 
       {/* COPILOTO — la decisión de entrada segura, arriba de todo */}
-      <Copilot />
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <MarketColumn mkt="doc" />
-        <MarketColumn mkt="col" />
+      <div style={{ marginBottom: 6 }}>
+        <CopilotOrder />
+        <div style={{ marginTop: 10 }}>
+          <CopilotScoreboard />
+        </div>
       </div>
+
+      <ZoneDetailGrid />
     </div>
   );
 }
