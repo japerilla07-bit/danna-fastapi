@@ -25,7 +25,7 @@
 
 import { create } from 'zustand';
 import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, type Zone, type Market } from '@/domain/zoneMatrix';
-import { registrarGiroReal, resetEscudo, decidirPiloto, type MarketRead, type DecisionPiloto } from '@/domain/copilot';
+import { decidirPiloto, type MarketRead, type DecisionPiloto } from '@/domain/copilot';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -83,21 +83,6 @@ interface Pending {
   docPick: string;
   colPick: string;
   copSug: 'doc' | 'col' | null;  // qué mercado sugirió el copiloto en este giro (null = esperar/parar)
-  // FIX (oct 2026) — bug real reportado por Gunner con reproducción exacta:
-  // escudo activo mostrando "DOCENAS (d2+d1)", cayó el 33 (fuera de esa
-  // cobertura) y el contador de ERRORES no se movió. docPick/colPick de
-  // arriba son SIEMPRE el pick del BACKEND (bet_advice), que es una
-  // sugerencia independiente de qué zonas eligió el escudo (Capa 2) cuando
-  // está activo. copPickDocOverride/copPickColOverride llevan el texto que
-  // copilot.ts (DecisionPiloto.pickDoc/pickCol) calcula a partir de
-  // zonasEscudo — SOLO existen cuando la Capa 2 manda — y se usan en vez del
-  // pick del backend, pero ÚNICAMENTE para resolver el marcador del
-  // copiloto (copScore) y alimentar el escudo (registrarGiroReal). Los
-  // contadores generales de mercado (counters.doc*/col*, cellReg — lo que ve
-  // ZONA) siguen resolviéndose contra docPick/colPick del backend sin
-  // cambios: ese dato mide el mercado en sí, no lo que el escudo decidió.
-  copPickDocOverride: string | null;
-  copPickColOverride: string | null;
 }
 
 export interface CellRec {
@@ -251,60 +236,24 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       const colHit = resolvePick(pend.colPick, spin);
       const key = cellKeyOf(pend.hud, pend.ent);
 
-      // ── Resolución del COPILOTO (lo que D.A.N.N.A. REALMENTE jugó este
-      //    giro) — separada de docHit/colHit de arriba, que siguen siendo el
-      //    pick del BACKEND y alimentan los contadores GENERALES de mercado
-      //    (más abajo, counters/cellReg) sin ningún cambio.
+      // ── Marcador del COPILOTO (lo que D.A.N.N.A. REALMENTE sugirió este
+      //    giro) — se resuelve contra copSug (el mercado que eligió la
+      //    Capa 1), usando docHit/colHit (el mismo pick de BACKEND de
+      //    arriba, que también alimenta counters/cellReg más abajo).
       //
-      //    FIX (oct 2026) — bug real reportado por Gunner con reproducción
-      //    exacta: escudo activo mostrando "DOCENAS (d2+d1)", cayó el 33
-      //    (fuera de esa cobertura) y ERRORES no se movió. Causa: tanto el
-      //    marcador del copiloto como la propia alimentación del escudo
-      //    (registrarGiroReal, justo abajo) resolvían SIEMPRE contra el pick
-      //    de texto del backend (docHit/colHit), que es independiente de qué
-      //    zonas eligió el escudo. Cuando manda la Capa 1 eso es correcto
-      //    (no hay override, la Capa 1 no elige zona). Cuando manda la Capa 2
-      //    (pend.copPickDocOverride/colOverride presentes — ver copilot.ts,
-      //    DecisionPiloto.pickDoc/pickCol, calculados desde zonasEscudo), se
-      //    usa ESE pick en su lugar. En modo híbrido hay override en los DOS
-      //    mercados a la vez (2 fichas reales, una por lado) y las dos cuentan.
-      const copHitDoc: boolean | null = pend.copPickDocOverride
-        ? resolvePick(pend.copPickDocOverride, spin)
-        : (pend.copSug === 'doc' ? docHit : null);
-      const copHitCol: boolean | null = pend.copPickColOverride
-        ? resolvePick(pend.copPickColOverride, spin)
-        : (pend.copSug === 'col' ? colHit : null);
-      const copResultados = [copHitDoc, copHitCol].filter((x): x is boolean => x !== null);
+      //    Hasta oct 2026 esto también podía resolverse contra un "override"
+      //    de zonas propio de un escudo de Capa 2, que Gunner dio de baja
+      //    ("el escudo numero 2... no sirve") — se sacó, ver copilot.ts. El
+      //    marcador del copiloto siempre fue y vuelve a ser 1:1 con lo que
+      //    sugiere la Capa 1.
+      const copHit: boolean | null =
+        pend.copSug === 'doc' ? docHit : pend.copSug === 'col' ? colHit : null;
 
-      // ── Marcador del COPILOTO: un incremento por cada ficha realmente
-      //    jugada (1 en modo normal/Capa1, hasta 2 en modo híbrido). ──
-      if (copResultados.length > 0) {
+      if (copHit !== null) {
         const cs = { ...st.copScore };
-        for (const cop of copResultados) {
-          if (cop === true) { cs.hits += 1; cs.streak = 0; }
-          else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
-        }
+        if (copHit === true) { cs.hits += 1; cs.streak = 0; }
+        else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         copScore = cs;
-      }
-
-      // ── CAPA 2 — ESCUDO: alimentar el giro real (número + si el PILOTO
-      //    jugó ese giro y si acertó) exactamente una vez por giro resuelto.
-      //    jugado/acierto ahora salen de copHitDoc/copHitCol (lo que el
-      //    PILOTO REALMENTE jugó, escudo incluido) en vez del pick del
-      //    backend — mismo bug que el marcador de arriba: con el escudo
-      //    activo, antes se le decía "acertaste"/"fallaste" según el pick
-      //    del backend, no según sus propias zonas, lo que podía mantenerlo
-      //    prendido de más o apagarlo antes de tiempo de lo real. "jugado" es
-      //    true en cuanto al menos una ficha tuvo resultado; "acierto" es
-      //    true si al menos una de las fichas jugadas ganó (en híbrido
-      //    alcanza con cortar por cualquiera de los dos lados — son 2 fichas
-      //    de la misma racha). Si ningún pick resolvió (spin fuera de
-      //    cobertura y sin override), igual se registra el número
-      //    (jugado=false) para no perder ese giro de la ventana de 7.
-      {
-        const jugado = copResultados.length > 0;
-        const acierto = jugado && copResultados.some((x) => x === true);
-        registrarGiroReal(spin, jugado, acierto);
       }
 
       if (docHit !== null || colHit !== null) {
@@ -352,16 +301,12 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     const pending: Pending = {
       n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick,
       copSug: liveDecision.mercado,
-      copPickDocOverride: liveDecision.pickDoc ?? null,
-      copPickColOverride: liveDecision.pickCol ?? null,
     };
 
     set({ history, lastN: p.n, pending, counters, cellReg, copScore, liveDecision });
   },
 
   reset: () => {
-    resetEscudo(); // apaga y limpia la Capa 2 (racha viva, ventana de 7 giros) —
-                    // ANTES de recalcular decisionInicial(), que lee ese estado.
     set({
       history: [], lastN: -1, pending: null,
       counters: { ...EMPTY_COUNTERS },
