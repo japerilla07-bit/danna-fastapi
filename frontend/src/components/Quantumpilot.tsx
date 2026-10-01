@@ -2,18 +2,18 @@
 // QuantumPilot — Overlay flotante draggable. Cockpit único.
 //
 // v2 — REDISEÑO COMPLETO (sep 2026). Antes este panel mezclaba dos motores
-// de decisión sin avisar cuál era cuál (GOD legacy vs escudo Capa1+2, el que
-// está documentado en el manual y el que de verdad corre en cada giro), y
-// tenía TRES marcadores de aciertos/errores distintos calculados de formas
+// de decisión sin avisar cuál era cuál (GOD legacy vs copiloto, el que está
+// documentado en el manual y el que de verdad corre en cada giro), y tenía
+// TRES marcadores de aciertos/errores distintos calculados de formas
 // distintas. Se reorganizó así:
 //
 //   1. Estado + HUD/RADAR/Σp + barra CCS        (igual que antes)
-//   2. DECISIÓN   — orden del escudo (CopilotOrder, de MatrixPanel) arriba,
+//   2. DECISIÓN   — orden del copiloto (CopilotOrder, de MatrixPanel) arriba,
 //                   TARGET LOCK de GOD debajo, cada uno rotulado con su
 //                   fuente. Son dos motores reales y distintos — no se
 //                   fusionan los números, solo se ordenan visualmente juntos.
-//   3. MARCADOR   — CopilotScoreboard (escudo) + ERRORES (target de GOD)
-//                   lado a lado, en vez de tres cajas sueltas por la app.
+//   3. MARCADOR   — CopilotScoreboard + ERRORES (target de GOD) lado a
+//                   lado, en vez de tres cajas sueltas por la app.
 //   4. SUGERENCIAS POR CATEGORÍA — CategoryTable completo (antes vivía
 //                   aparte en la columna central) + GodBetPanel debajo
 //                   (se auto-colapsa a una tira fina cuando GOD no está
@@ -405,7 +405,7 @@ function microPanel(accent: string, glowStrength = 0.14): React.CSSProperties {
 }
 
 // Pick concreto de DOCENAS/COLUMNAS (1-12, Col 2, etc.) — responde el
-// reclamo de Gunner: el veredicto del escudo ("DOCENAS · ENTRÁ") dice QUÉ
+// reclamo de Gunner: el veredicto del copiloto ("DOCENAS · ENTRÁ") dice QUÉ
 // MERCADO, no CUÁL docena/columna específica. Lee bet_advice con la MISMA
 // función (toState/pickLabel) que usa CategoryTable, así nunca puede mostrar
 // algo distinto de lo que dice la fila "Docenas"/"Columnas" de la tabla.
@@ -833,7 +833,7 @@ export function QuantumPilot({
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '10px 0 2px' }} />
 
-          {/* Pick concreto de cada mercado — el escudo dice QUÉ mercado
+          {/* Pick concreto de cada mercado — el copiloto dice QUÉ mercado
               (docenas o columnas), esto dice CUÁL docena/columna. Mismo
               bet_advice que lee la fila "Docenas"/"Columnas" de la tabla
               de abajo, sin tener que scrollear hasta ahí para verlo.
