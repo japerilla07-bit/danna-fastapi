@@ -175,8 +175,8 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebr
   return (
     <div
       style={{
-        display: 'flex', alignItems: 'center', gap: 11,
-        padding: '8px 8px 8px 10px',
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '7px 7px 7px 9px',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
         borderLeft: `4px solid ${activo ? stateColor : 'transparent'}`,
         // la fila activa (BET) manda sobre la cebra — es el único realce
@@ -185,7 +185,7 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebr
       }}
     >
       {/* estado — badge tipo píldora con fondo semitransparente */}
-      <span style={{ flexShrink: 0, width: 32 }}>
+      <span style={{ flexShrink: 0, width: 28 }}>
         <span
           style={{
             display: 'inline-block', fontSize: 9.5, fontWeight: 800, letterSpacing: '0.04em',
@@ -197,7 +197,7 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebr
       </span>
 
       {/* nombre */}
-      <span style={{ fontSize: 12.5, color: '#a8b7cc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 112, flexShrink: 0 }}>
+      <span style={{ fontSize: 12.5, color: '#a8b7cc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 98, flexShrink: 0 }}>
         {label}
       </span>
 
@@ -216,14 +216,14 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebr
       </span>
 
       {/* stats — nunca se recortan */}
-      <span style={{ display: 'flex', gap: 9, fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap' }}>
+      <span style={{ display: 'flex', gap: 8, fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap' }}>
         <span>W:<b style={{ color: '#e2e8f0' }}>{w}</b></span>
         <span>L:<b style={{ color: '#e2e8f0' }}>{l}</b></span>
         <span>Sq:<b style={{ color: '#e2e8f0' }}>{seq}</b></span>
         <span>Mx:<b style={{ color: '#e2e8f0' }}>{max}</b></span>
       </span>
 
-      <span style={{ fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap', width: 58 }}>
+      <span style={{ fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap', width: 50 }}>
         AVG:<b style={{ color: '#e2e8f0' }}>{avgStr}</b>
       </span>
     </div>
@@ -302,12 +302,12 @@ export function CategoryTable({
       )}
       {/* encabezado de columnas — mismos anchos que CategoryRow, así queda
           claro qué es cada número sin tener que adivinar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '0 8px 7px 10px', borderBottom: '1px solid rgba(34,211,238,0.18)' }}>
-        <span style={{ width: 26, flexShrink: 0 }} />
-        <span style={{ width: 112, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>CATEGORÍA</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 7px 6px 9px', borderBottom: '1px solid rgba(34,211,238,0.18)' }}>
+        <span style={{ width: 23, flexShrink: 0 }} />
+        <span style={{ width: 98, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>CATEGORÍA</span>
         <span style={{ flex: '1 1 auto', minWidth: 40, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>PICK</span>
-        <span style={{ flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700, width: 128 }}>W / L / SEQ / MAX</span>
-        <span style={{ width: 58, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>AVG</span>
+        <span style={{ flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700, width: 112 }}>W / L / SEQ / MAX</span>
+        <span style={{ width: 50, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>AVG</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {rows.map((row, i) => (
