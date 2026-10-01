@@ -438,13 +438,13 @@ function DocColQuickPick({ label, state, pick, last = false }: { label: string; 
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 2px', borderBottom: last ? 'none' : '1px solid rgba(255,255,255,0.055)' }}>
       <span className="flex items-center gap-2 shrink-0">
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}` }} />
-        <span className="text-[12.5px] text-gray-400" style={{ letterSpacing: '0.1em' }}>{label}</span>
+        <span className="text-[13.5px] text-gray-400" style={{ letterSpacing: '0.1em' }}>{label}</span>
       </span>
       <span className="flex items-center gap-2 min-w-0" style={{ justifyContent: 'flex-end' }}>
         <span
           style={{
-            fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', color,
-            background: BADGE_BG[state], borderRadius: 4, padding: '2px 6px', flexShrink: 0,
+            fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', color,
+            background: BADGE_BG[state], borderRadius: 4, padding: '3px 7px', flexShrink: 0,
           }}
         >
           {BADGE_TXT[state]}
@@ -452,7 +452,7 @@ function DocColQuickPick({ label, state, pick, last = false }: { label: string; 
         <span
           title={pick}
           className="font-black text-white"
-          style={{ fontSize: 17, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'right', lineHeight: 1.25 }}
+          style={{ fontSize: 19, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'right', lineHeight: 1.25 }}
         >
           {pick}
         </span>
@@ -630,7 +630,7 @@ export function QuantumPilot({
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[1200px] max-w-[95vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[1060px] max-w-[95vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
         left: pos.x,
         top: pos.y,
@@ -814,7 +814,7 @@ export function QuantumPilot({
              anidadas en el código. ═══════════════════════════════════════ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '264px 1fr 280px', gap: 14, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '264px 1fr 236px', gap: 14, alignItems: 'start' }}>
 
         {/* ── COLUMNA IZQUIERDA: ZONA — ahora rail, UNA tarjeta (antes
              columna C, dos micropaneles sueltos). ── */}
@@ -825,7 +825,7 @@ export function QuantumPilot({
 
         {/* ── COLUMNA CENTRAL: DECISIÓN — tratamiento héroe. UNA tarjeta
              (microPanel acá, bare+hero en CopilotOrder adentro). ── */}
-        <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 4, ...microPanel('#67e8f9', 0.06) }}>
+        <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 4, ...microPanel('#67e8f9', 0.06) }}>
           <Band>DECISIÓN</Band>
           <div style={{ marginTop: 10 }}>
             <CopilotOrder hero bare />
@@ -870,7 +870,7 @@ export function QuantumPilot({
               disabled={loadingKey === topPick.bet_key}
               className="w-full text-left transition-all"
               style={{
-                padding: '14px 16px',
+                padding: '15px 16px',
                 marginTop: 8,
                 borderRadius: 8,
                 border: `1px solid ${override?.bet_key === topPick.bet_key ? 'rgba(244,248,255,0.35)' : 'rgba(34,211,238,0.35)'}`,
@@ -880,7 +880,7 @@ export function QuantumPilot({
             >
               <div className="flex justify-between items-center mb-1.5">
                 <span
-                  className="text-[13px] font-bold"
+                  className="text-[14px] font-bold"
                   style={{ letterSpacing: '0.2em', color: override?.bet_key === topPick.bet_key ? '#f4f8ff' : '#67e8f9' }}
                 >
                   {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : 'TARGET LOCK'}
@@ -895,7 +895,7 @@ export function QuantumPilot({
                   </span>
                 ) : null}
                 <span
-                  className="text-lg font-black"
+                  className="text-xl font-black"
                   style={{
                     color:
                       topPick.conf_pct >= 80 ? '#67e8f9'
@@ -908,11 +908,11 @@ export function QuantumPilot({
                 </span>
               </div>
               <div className="flex justify-between items-end">
-                <span className="text-[14px] text-gray-400" style={{ letterSpacing: '0.2em' }}>
+                <span className="text-[15px] text-gray-400" style={{ letterSpacing: '0.2em' }}>
                   {CAT_LABEL[topPick.bet_key] ?? topPick.bet_key.toUpperCase()}
                 </span>
                 <span
-                  className="text-2xl font-black tracking-wider"
+                  className="text-3xl font-black tracking-wider"
                   style={{
                     color: '#ffffff',
                     textShadow:
@@ -956,27 +956,27 @@ export function QuantumPilot({
                 auto-fit que CopilotScoreboard — nunca corta, envuelve a 2
                 filas si no entra. */}
             <div style={{ padding: '12px 10px 14px', marginTop: 8, background: 'rgba(255,255,255,0.025)' }}>
-              <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.2em' }}>GOD TARGET</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(66px, 1fr))', gap: '10px 4px', marginTop: 8 }}>
+              <span className="text-[10.5px] text-gray-500" style={{ letterSpacing: '0.2em' }}>GOD TARGET</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(58px, 1fr))', gap: '10px 4px', marginTop: 8 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ACIERTOS</div>
-                  <div className="font-bold text-base" style={{ color: '#00ff9d' }}>{hits}</div>
+                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ACIERTOS</div>
+                  <div className="font-bold text-lg" style={{ color: '#00ff9d' }}>{hits}</div>
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERRORES</div>
-                  <div className="font-bold text-base" style={{ color: '#ff3b56' }}>{misses}</div>
+                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERRORES</div>
+                  <div className="font-bold text-lg" style={{ color: '#ff3b56' }}>{misses}</div>
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>CONSEC</div>
-                  <div className="font-bold text-base" style={{ color: consecErr > 0 ? '#ff6b7f' : '#94a3b8' }}>{consecErr}</div>
+                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>CONSEC</div>
+                  <div className="font-bold text-lg" style={{ color: consecErr > 0 ? '#ff6b7f' : '#94a3b8' }}>{consecErr}</div>
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>MÁX</div>
-                  <div className="font-bold text-base text-white">{maxConsecErr}</div>
+                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>MÁX</div>
+                  <div className="font-bold text-lg text-white">{maxConsecErr}</div>
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERR/HIT</div>
-                  <div className="font-bold text-base" style={{ color: '#ff6b7f' }}>{errHit.toFixed(1)}</div>
+                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERR/HIT</div>
+                  <div className="font-bold text-lg" style={{ color: '#ff6b7f' }}>{errHit.toFixed(1)}</div>
                 </div>
               </div>
             </div>
