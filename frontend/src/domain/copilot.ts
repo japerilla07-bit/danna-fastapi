@@ -246,9 +246,193 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
 // telemetryStore.ts (ingest(), vía computeMarketRead()), para no tener que
 // tocar ese cableado — ahora es un wrapper delgado 1:1 sobre decidir().
 export interface DecisionPiloto extends Decision {
-  capa: 'CAPA1';
+  capa: 'CAPA1' | 'COBERTURA_DOBLE';
+  // Solo presentes cuando capa === 'COBERTURA_DOBLE' — ver sección de abajo.
+  pickDoc?: string;
+  pickCol?: string;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// COBERTURA DOBLE — activación por distribución marcada (oct 2026)
+// ════════════════════════════════════════════════════════════════════════
+//
+// Pedido de Gunner, el mismo día que se sacó el escudo de Capa 2 (arriba),
+// tras llegar a una racha de 10 errores sin ningún techo: "algo que podemos
+// hacer del 1 es que se active también cuando ve más claridad en 2 docenas
+// dominantes y dos columnas dominantes y se mantenga si no se mete la otra
+// que está peleando". Aclaración suya sobre qué es "claridad": la
+// distribución de los últimos giros entre las 3 zonas de un mercado tiene
+// que estar MARCADA — ej. 4-2-1 (clara) vs 2-2-1 (pareja, no clara).
+//
+// Distinto del escudo que se sacó, en dos cosas a propósito:
+//   1. NO es reactivo a un error de la Capa 1 — mira el patrón de los
+//      últimos giros reales en CUALQUIER momento, gane o pierda la Capa 1.
+//   2. Cubre 2 DE 3 zonas en LOS DOS MERCADOS A LA VEZ (4 fichas: 2 docenas
+//      + 2 columnas), no 1 mercado o 1+1 como hacía el escudo — es más caro
+//      por giro (4 fichas en vez de 1-2), pero es lo que Gunner pidió.
+//
+// "Distribución marcada" — regla elegida (no validada todavía contra data
+// histórica, a diferencia del escudo que se sacó; mirar cómo se comporta
+// en mesa antes de confiarle plata en serio):
+//   En la ventana de COBERTURA_WINDOW giros reales, de las 3 zonas de un
+//   mercado, la diferencia entre la más frecuente y la menos frecuente
+//   (gap = top1 − top3) tiene que ser ≥ COBERTURA_GAP_MIN. Con ventana 7:
+//   4-2-1 → gap 3 (activa), 2-2-1 → gap 1 (no activa) — los dos ejemplos
+//   que dio Gunner. Si en la mesa se siente mal (activa muy poco / activa
+//   con patrones flojos), el ajuste es este número, nada más.
+//
+// Activa SOLO cuando docenas Y columnas están "marcadas" al mismo tiempo en
+// la misma ventana. Una vez activa, se queda cubriendo esas mismas 2+2
+// zonas — no se recalcula giro a giro, eso es "se mantenga".
+//
+// SALIDA — ajustada oct 2026 tras una corrección en caliente de Gunner: la
+// primera versión apagaba la cobertura con que la zona excluida saliera UNA
+// sola vez ("no me puedes mamar eso con un punto de diferencia"). Ahora hace
+// falta un cambio de verdad, cualquiera de estos dos (el que se dé primero):
+//   (a) la zona excluida (de docenas O columnas) sube su conteo en la
+//       ventana en ≥2 respecto al que tenía cuando se activó la cobertura
+//       (el 3-3-1 que la prendió ya no es un 3-3-1 — avanzó a 2, a 3: eso sí
+//       es significativo), o
+//   (b) la zona excluida "viene con fuerza": salió 2 de los últimos 3 giros
+//       reales, aunque la ventana completa todavía no lo refleje del todo.
+// Cualquiera de las dos apaga la cobertura y la Capa 1 vuelve a mandar sola,
+// lista para evaluar de nuevo desde cero con la ventana que seguís
+// acumulando.
+// ════════════════════════════════════════════════════════════════════════
+
+const COBERTURA_WINDOW = 7;
+const COBERTURA_GAP_MIN = 2; // top1 − top3 ≥ esto, en la ventana, para considerar la distribución "marcada"
+
+type ZonaDoc = 'd1' | 'd2' | 'd3';
+type ZonaCol = 'c1' | 'c2' | 'c3';
+const ZONA_DOC_TXT: Record<ZonaDoc, string> = { d1: '1-12', d2: '13-24', d3: '25-36' };
+const ZONA_COL_TXT: Record<ZonaCol, string> = { c1: 'Columna 1', c2: 'Columna 2', c3: 'Columna 3' };
+
+function docenaDeNumero(n: number): ZonaDoc | null {
+  if (n === 0) return null;
+  if (n <= 12) return 'd1';
+  if (n <= 24) return 'd2';
+  return 'd3';
+}
+function columnaDeNumero(n: number): ZonaCol | null {
+  if (n === 0) return null;
+  const m = n % 3;
+  if (m === 1) return 'c1';
+  if (m === 2) return 'c2';
+  return 'c3';
+}
+
+function conteoPorZona<T extends string>(ventana: number[], de: (n: number) => T | null, zonas: readonly T[]): Map<T, number> {
+  const m = new Map<T, number>(zonas.map((z) => [z, 0] as [T, number]));
+  for (const n of ventana) {
+    const z = de(n);
+    if (z) m.set(z, (m.get(z) ?? 0) + 1);
+  }
+  return m;
+}
+
+function distribucionMarcada<T extends string>(conteo: Map<T, number>): { marcada: boolean; top2: T[]; excluida: T } {
+  const ordenado = Array.from(conteo.entries()).sort((a, b) => b[1] - a[1]);
+  const gap = ordenado[0][1] - ordenado[2][1];
+  return { marcada: gap >= COBERTURA_GAP_MIN, top2: [ordenado[0][0], ordenado[1][0]], excluida: ordenado[2][0] };
+}
+
+// Estado propio de esta regla (separado de ultimoMercadoJugado de la Capa 1).
+let coberturaVentana: number[] = [];
+let coberturaActiva = false;
+let coberturaZonasDoc: ZonaDoc[] = [];
+let coberturaZonasCol: ZonaCol[] = [];
+let coberturaDocExcluida: ZonaDoc | null = null;
+let coberturaColExcluida: ZonaCol | null = null;
+// Conteo de la zona excluida de cada mercado, EN LA VENTANA, al momento de
+// activarse — línea base para medir si lo que pasa después es un cambio de
+// verdad (ver SALIDA arriba) o un punto suelto que no cuenta.
+let coberturaDocExcluidaBase = 0;
+let coberturaColExcluidaBase = 0;
+
+const COBERTURA_SALIDA_GAP_MIN = 2;  // la excluida sube esto o más desde la base (a) → sale
+const COBERTURA_FUERZA_VENTANA = 3;  // de los últimos N giros reales...
+const COBERTURA_FUERZA_MIN = 2;      // ...si la excluida salió esto o más veces (b) → sale
+
+// ── Llamar UNA vez por cada giro real (el número que salió), apenas se
+//    sabe — independiente de si la Capa 1 jugó o no ese giro. Alimenta la
+//    ventana, prende la cobertura doble cuando corresponde, y la apaga
+//    cuando la zona excluida vuelve con un cambio significativo (ver arriba). ──
+export function registrarGiroCobertura(numero: number): void {
+  coberturaVentana.push(numero);
+  if (coberturaVentana.length > COBERTURA_WINDOW) coberturaVentana.shift();
+
+  if (coberturaActiva) {
+    const conteoDoc = conteoPorZona(coberturaVentana, docenaDeNumero, ['d1', 'd2', 'd3'] as const);
+    const conteoCol = conteoPorZona(coberturaVentana, columnaDeNumero, ['c1', 'c2', 'c3'] as const);
+    const subioDoc = coberturaDocExcluida ? (conteoDoc.get(coberturaDocExcluida) ?? 0) - coberturaDocExcluidaBase : 0;
+    const subioCol = coberturaColExcluida ? (conteoCol.get(coberturaColExcluida) ?? 0) - coberturaColExcluidaBase : 0;
+
+    const ultimos = coberturaVentana.slice(-COBERTURA_FUERZA_VENTANA);
+    const fuerzaDoc = ultimos.filter((n) => docenaDeNumero(n) === coberturaDocExcluida).length;
+    const fuerzaCol = ultimos.filter((n) => columnaDeNumero(n) === coberturaColExcluida).length;
+
+    const sale =
+      subioDoc >= COBERTURA_SALIDA_GAP_MIN || subioCol >= COBERTURA_SALIDA_GAP_MIN ||
+      fuerzaDoc >= COBERTURA_FUERZA_MIN || fuerzaCol >= COBERTURA_FUERZA_MIN;
+
+    if (sale) {
+      coberturaActiva = false;
+      coberturaZonasDoc = [];
+      coberturaZonasCol = [];
+      coberturaDocExcluida = null;
+      coberturaColExcluida = null;
+      coberturaDocExcluidaBase = 0;
+      coberturaColExcluidaBase = 0;
+    }
+    return; // mientras sigue activa y no salió ninguna señal, las zonas cubiertas no cambian
+  }
+
+  if (coberturaVentana.length < COBERTURA_WINDOW) return;
+
+  const conteoDocAct = conteoPorZona(coberturaVentana, docenaDeNumero, ['d1', 'd2', 'd3'] as const);
+  const conteoColAct = conteoPorZona(coberturaVentana, columnaDeNumero, ['c1', 'c2', 'c3'] as const);
+  const doc = distribucionMarcada(conteoDocAct);
+  const col = distribucionMarcada(conteoColAct);
+
+  if (doc.marcada && col.marcada) {
+    coberturaActiva = true;
+    coberturaZonasDoc = doc.top2;
+    coberturaZonasCol = col.top2;
+    coberturaDocExcluida = doc.excluida;
+    coberturaColExcluida = col.excluida;
+    coberturaDocExcluidaBase = conteoDocAct.get(doc.excluida) ?? 0;
+    coberturaColExcluidaBase = conteoColAct.get(col.excluida) ?? 0;
+  }
+}
+
+// ── Reiniciar al empezar una sesión nueva. ──
+export function resetCobertura(): void {
+  coberturaVentana = [];
+  coberturaActiva = false;
+  coberturaZonasDoc = [];
+  coberturaZonasCol = [];
+  coberturaDocExcluida = null;
+  coberturaColExcluida = null;
+  coberturaDocExcluidaBase = 0;
+  coberturaColExcluidaBase = 0;
 }
 
 export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto {
-  return { ...decidir(doc, col), capa: 'CAPA1' };
+  const capa1 = decidir(doc, col);
+  if (!coberturaActiva) return { ...capa1, capa: 'CAPA1' };
+
+  const docTxt = coberturaZonasDoc.map((z) => ZONA_DOC_TXT[z]).join(' / ');
+  const colTxt = coberturaZonasCol.map((z) => ZONA_COL_TXT[z]).join(' / ');
+  return {
+    mercado: null,
+    accion: 'ENTRAR',
+    exposicion: 'REDUCIDA',
+    titulo: `◆ COBERTURA DOBLE · ${coberturaZonasDoc.join('+').toUpperCase()} / ${coberturaZonasCol.join('+').toUpperCase()}`,
+    motivo: `Distribución marcada en los dos mercados a la vez: se cubren 2 docenas y 2 columnas (4 fichas) hasta que salga la zona que quedó afuera.`,
+    nivel: 'precaucion',
+    capa: 'COBERTURA_DOBLE',
+    pickDoc: docTxt,
+    pickCol: colTxt,
+  };
 }
