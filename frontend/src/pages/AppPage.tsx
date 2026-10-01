@@ -6,7 +6,7 @@
 //   ✅ PIEZA 2 — OPTIMAL state strip
 //   ✅ PIEZA 3 — Control de Misión + Live Bet + Paño + Wheel + Entropy + Radar + Dispersión + WarTerminal
 //   ✅ REGISTRO — SessionRecorder: log por giro + export CSV (col-izquierda)
-//   ✅ PIEZA 4 — Quantum Pilot: cockpit único (decisión escudo+GOD, marcador,
+//   ✅ PIEZA 4 — Quantum Pilot: cockpit único (decisión copiloto+GOD, marcador,
 //               categorías, zona, bankroll — ver Quantumpilot.tsx v2)
 
 import { useEffect, useRef, useState } from 'react';
