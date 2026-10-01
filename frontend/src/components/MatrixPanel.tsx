@@ -38,11 +38,14 @@ import {
   fusedZone, fusedZoneByKey, liveDeviation, currentCellWr, currentCellMaxRun,
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
-// decidir() = Capa 1 sola (la usa el marcador propio de abajo, que reconstruye
-// TODA la sesión desde history — con la Capa 1 sola, que no tiene estado que
-// se corrompa al recalcularse muchas veces). decidirPiloto() = Capa 1 + Capa 2
-// (el escudo), función pura de lectura — es la que manda en la ORDEN en vivo.
-import { decidir, decidirPiloto, type MarketRead } from '@/domain/copilot';
+// decidirConEstado() = Capa 1 sola, versión PURA (recibe el "último mercado
+// jugado" por parámetro en vez de leer una variable compartida). La usa el
+// marcador de abajo (CopilotScoreboard), que reconstruye TODA la sesión
+// desde history con su PROPIA memoria local — así nunca se desalinea con la
+// decisión en vivo (bug real, corregido sep 2026: ver nota en
+// CopilotScoreboard). decidirPiloto() = Capa 1 + Capa 2 (el escudo), función
+// pura de lectura — es la que manda en la ORDEN en vivo.
+import { decidirPiloto, decidirConEstado, type MarketRead } from '@/domain/copilot';
 
 // ── PALETA "GEASS / SHIKON" DIRECTA EN EL COMPONENTE ──
 const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: string }> = {
@@ -498,7 +501,8 @@ export function ZoneDetailGrid({ direction = 'row', compact = false }: { directi
 // v4: partido en dos piezas exportadas — CopilotOrder (header + orden,
 // dueño de avisarle al store qué sugiere el piloto) y CopilotScoreboard
 // (el marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA, réplica de toda la
-// sesión vía decidir() Capa 1). Cada una es independiente — se pueden
+// sesión vía decidirConEstado() Capa 1, con memoria propia). Cada una es
+// independiente — se pueden
 // ubicar en cualquier lugar del layout.
 // ────────────────────────────────────────────────────────────────────────
 
@@ -572,14 +576,38 @@ export function CopilotOrder() {
 }
 
 /** Marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA del escudo — réplica de toda
- *  la sesión vía decidir() (Capa 1 sola, estado puro, no se corrompe al
- *  recalcularse). Independiente de CopilotOrder. */
+ *  la sesión vía decidirConEstado() (Capa 1 sola, estado puro, no se
+ *  corrompe al recalcularse). Independiente de CopilotOrder.
+ *
+ *  FIX (sep 2026) — bug real reportado por Gunner: "un acierto lo cuenta
+ *  como error y cuando tiene un error lo marca como dos". Antes este loop
+ *  llamaba a decidir(doc, col) directo, que lee/muta la variable de MÓDULO
+ *  ultimoMercadoJugado de copilot.ts — la MISMA que usa la decisión en vivo
+ *  (vía decidirPiloto, en CopilotOrder). Como ninguno de los dos reseteaba
+ *  esa memoria antes de arrancar, cada vez que este marcador recalculaba
+ *  TODA la sesión desde el giro 1 (pasa en cada giro nuevo), el primer giro
+ *  del replay heredaba lo que hubiera dejado la decisión en vivo (o el
+ *  replay anterior) en vez de arrancar sin memoria — la regla "evitar
+ *  refugio" podía terminar evaluando un giro contra el mercado equivocado,
+ *  contando el acierto de un mercado como error del otro, y el resultado
+ *  cambiaba entre una pasada y la siguiente para el mismo giro. Ya estaba
+ *  marcado como sospecha sin confirmar en la auditoría de código; quedó
+ *  confirmado con este síntoma. Ahora se usa decidirConEstado() con
+ *  `ultimoLocal`, una memoria PROPIA de este replay que arranca en null en
+ *  cada recálculo — nunca toca ni depende de la memoria de la decisión en
+ *  vivo, así que da el mismo resultado sin importar cuántas veces se corra
+ *  ni en qué orden rendericen los componentes. */
 export function CopilotScoreboard() {
   const history = useHistory();
   const { copHits, copMisses, copStreak, copLive } = useMemo(() => {
     const termo: Record<Market, number[]> = { doc: [], col: [] };
     const cellReg: Record<Market, Record<string, { h: number; m: number; streak: number; mx: number }>> = { doc: {}, col: {} };
     let hits = 0, misses = 0, streak = 0, maxStreak = 0;
+    // Memoria de "último mercado jugado" PROPIA de este replay — nunca la
+    // de copilot.ts. Arranca en null en CADA recálculo: un replay desde el
+    // giro 1 de la sesión siempre empieza sin nada jugado todavía, sea la
+    // primera vez que corre este useMemo o la enésima.
+    let ultimoLocal: Market | null = null;
 
     for (const row of history) {
       const key = cellKeyOf(row.hud, row.ent);
@@ -597,7 +625,9 @@ export function CopilotScoreboard() {
           liveStreak: liveRaw?.streak ?? 0, cellCeiling: currentCellMaxRun(row.hud, row.ent, mkt),
         };
       };
-      const sug = decidir(readMkt('doc'), readMkt('col')).mercado;
+      const { decision, ultimoJugado } = decidirConEstado(readMkt('doc'), readMkt('col'), ultimoLocal);
+      ultimoLocal = ultimoJugado;
+      const sug = decision.mercado;
 
       if (sug) {
         const res = sug === 'doc' ? row.docHit : row.colHit;
