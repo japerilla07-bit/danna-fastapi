@@ -347,23 +347,23 @@ function MarketEfficiencyCellImpl({ mkt, bare = false }: { mkt: Market; bare?: b
   // angosta. El color de estado (st.color) se mantiene en título/badge/
   // instrucción — es la señal de zona de toda la app, no algo a aplanar.
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '11px 12px', ...(bare ? bareBlock() : microPanel(st.color)) }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '13px 13px', ...(bare ? bareBlock() : microPanel(st.color)) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: `1px solid ${st.color}35`, paddingBottom: 5 }}>
-        <span style={{ fontFamily: FONT_HEAD, fontSize: 14, fontWeight: 800, letterSpacing: '0.2em', color: '#ffffff', textShadow: `0 0 9px ${st.glow}` }}>
+        <span style={{ fontFamily: FONT_HEAD, fontSize: 16, fontWeight: 800, letterSpacing: '0.2em', color: '#ffffff', textShadow: `0 0 9px ${st.glow}` }}>
           {title}
         </span>
-        <span style={{ fontFamily: FONT_HEAD, fontSize: 12.5, fontWeight: 800, letterSpacing: '0.06em', color: st.color, whiteSpace: 'nowrap', textShadow: `0 0 7px ${st.glow}` }}>
+        <span style={{ fontFamily: FONT_HEAD, fontSize: 13.5, fontWeight: 800, letterSpacing: '0.06em', color: st.color, whiteSpace: 'nowrap', textShadow: `0 0 7px ${st.glow}` }}>
           {st.label}{deviation === 'peor' ? ' ▼' : deviation === 'mejor' ? ' ▲' : ''}
         </span>
       </div>
 
-      <div style={{ fontFamily: FONT_MONO, fontSize: 12.5, color: '#8392a8', fontWeight: 400 }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 14, color: '#8392a8', fontWeight: 400 }}>
         HUD <b style={{ color: '#ffffff', fontWeight: 700 }}>{hud ?? '—'}</b>
         {'  ·  '}
         ENT <b style={{ color: '#ffffff', fontWeight: 700 }}>{ent ?? '—'}</b>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: FONT_MONO, fontSize: 12.5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: FONT_MONO, fontSize: 14 }}>
         <span>
           <span style={{ color: '#00ff9d' }}>✓{gHits}</span>
           {' '}
@@ -372,18 +372,18 @@ function MarketEfficiencyCellImpl({ mkt, bare = false }: { mkt: Market; bare?: b
         <span style={{ color: '#8092b5', fontWeight: 800 }}>{gTotal ? `${Math.round((gHits / gTotal) * 100)}%` : '—'}</span>
       </div>
       {gMax >= 4 && (
-        <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#f4f8ff', marginTop: -2 }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#f4f8ff', marginTop: -2 }}>
           peor racha hoy: <b>{gMax}</b>
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT_MONO, fontSize: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT_MONO, fontSize: 13 }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: luz, boxShadow: `0 0 6px ${luz}`, flexShrink: 0 }} />
         <span style={{ color: '#8092b5', fontWeight: 400 }}>últ. 10:</span>
         <b style={{ color: luz }}>{termoTotal > 0 ? `${termoHits}/${termoTotal}` : '—'}</b>
       </div>
 
-      <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#8392a8', fontWeight: 400 }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 13, color: '#8392a8', fontWeight: 400 }}>
         {'eficiencia '}
         {map ? (
           <>
@@ -397,7 +397,7 @@ function MarketEfficiencyCellImpl({ mkt, bare = false }: { mkt: Market; bare?: b
         )}
       </div>
 
-      <div style={{ fontFamily: FONT_HEAD, fontSize: 13.5, fontWeight: 600, color: st.color, marginTop: 1, lineHeight: 1.5, textShadow: `0 0 5px ${st.glow}` }}>
+      <div style={{ fontFamily: FONT_HEAD, fontSize: 15, fontWeight: 600, color: st.color, marginTop: 1, lineHeight: 1.5, textShadow: `0 0 5px ${st.glow}` }}>
         {INSTRUCCION[estado]}
       </div>
     </div>
@@ -521,7 +521,7 @@ export function CopilotOrder({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
-      <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 10.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 8px ${glow}` }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 12 : 10.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 8px ${glow}` }}>
         ● ESCUDO (CAPA 1+2) · ENTRADA SEGURA
       </span>
 
@@ -530,13 +530,13 @@ export function CopilotOrder({
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
           style={{ display: 'flex', flexDirection: 'column', gap: hero ? 7 : 4 }}>
-          <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 52 : 25, fontWeight: 900, color: '#ffffff', letterSpacing: '0.01em', textShadow: `0 0 ${hero ? 34 : 18}px ${glow}`, lineHeight: 1 }}>
+          <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 55 : 25, fontWeight: 900, color: '#ffffff', letterSpacing: '0.01em', textShadow: `0 0 ${hero ? 34 : 18}px ${glow}`, lineHeight: hero ? 1.05 : 1 }}>
             {d.titulo}
           </span>
           {/* texto secundario — siempre gris mate, sin glow (pedido
               explícito de Gunner, exactamente este texto fue su ejemplo:
               "Ni DOCENAS ni COLUMNAS..."). */}
-          <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 14.5 : 12.5, color: '#8a97ab', maxWidth: hero ? 460 : undefined, lineHeight: 1.5 }}>{d.motivo}</span>
+          <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 15.5 : 12.5, color: '#8a97ab', maxWidth: hero ? 460 : undefined, lineHeight: 1.5 }}>{d.motivo}</span>
         </motion.div>
       </AnimatePresence>
     </div>
@@ -591,11 +591,11 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   // con auto-fit: nunca desborda, envuelve a 2 filas (3+2) cuando el ancho
   // no alcanza, sin tocar ningún dato ni cálculo.
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(78px, 1fr))', gap: '10px 4px', padding: '10px 8px', ...(bare ? bareBlock() : microPanel('#22d3ee', 0.1)) }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(68px, 1fr))', gap: '10px 4px', padding: '10px 8px', ...(bare ? bareBlock() : microPanel('#22d3ee', 0.1)) }}>
       {STATS.map((s) => (
         <div key={s.k} style={{ padding: '0 6px', minWidth: 0 }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700, whiteSpace: 'nowrap' }}>{s.k}</div>
-          <div style={{ fontFamily: FONT_HEAD, fontSize: 21, fontWeight: 900, color: s.c, marginTop: 3, textShadow: s.glow ? `0 0 8px ${s.c}80` : 'none' }}>{s.v}</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700, whiteSpace: 'nowrap' }}>{s.k}</div>
+          <div style={{ fontFamily: FONT_HEAD, fontSize: 23, fontWeight: 900, color: s.c, marginTop: 3, textShadow: s.glow ? `0 0 8px ${s.c}80` : 'none' }}>{s.v}</div>
         </div>
       ))}
     </div>
