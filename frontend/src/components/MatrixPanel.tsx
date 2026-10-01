@@ -46,7 +46,7 @@ import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
-  useTermoHits, useTermoTotal, useTermoStreak, useSetCopSug, useSetCopPickOverride, type CellRec,
+  useTermoHits, useTermoTotal, useTermoStreak, useLiveDecision, type CellRec,
   useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak,
 } from '@/store/telemetryStore';
 import {
@@ -54,22 +54,25 @@ import {
   fusedZone, fusedZoneByKey, liveDeviation, currentCellWr, currentCellMaxRun,
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
-// decidirPiloto() = Capa 1 + Capa 2 (el escudo), función pura de lectura —
-// es la que manda en la ORDEN en vivo (CopilotOrder, abajo).
+// decidirPiloto() = Capa 1 + Capa 2 (el escudo), función pura de lectura.
 //
-// FIX (oct 2026) — Gunner: "los errores tampoco salen en el contador del
-// copiloto... ni normal ni con escudo". decidirConEstado() (Capa 1 SOLA) ya
-// NO se usa en este archivo: CopilotScoreboard la usaba para reconstruir
-// todo el historial a mano, lo que SOLO replicaba Capa 1 — cuando el escudo
-// (Capa 2) estaba activo, lo que de verdad se jugó (decidirPiloto, Capa1+2)
-// nunca se replayeaba, así que el marcador contaba una decisión hipotética
-// distinta a la real. El store (telemetryStore.ts) YA llevaba el contador
-// correcto en vivo (`copScore`, incrementado una vez por giro resuelto a
-// partir de `copSug` — que desde que CopilotOrder llama a decidirPiloto()
-// en vez de decidir() SÍ incluye Capa1+2) pero CopilotScoreboard no lo leía.
-// Ahora lee `copScore` directo vía los selectores del store — cero replay,
-// cero riesgo de desalinearse del escudo real.
-import { decidirPiloto, type MarketRead } from '@/domain/copilot';
+// Historial de bugs reales encontrados en este cálculo (dejar las notas,
+// ayudan a no repetir el mismo error dos veces):
+//
+// FIX #1 (oct 2026) — Gunner: "los errores tampoco salen en el contador del
+// copiloto... ni normal ni con escudo". CopilotScoreboard reconstruía el
+// historial a mano con decidirConEstado() (Capa 1 SOLA) — cuando el escudo
+// (Capa 2) estaba activo, el marcador contaba una decisión hipotética
+// distinta a la real. Se corrigió leyendo `copScore` directo del store.
+//
+// FIX #2 (oct 2026) — Gunner, con reproducción en vivo: "no está siguiendo
+// la sugerencia principal". decidirPiloto() ya NO se llama desde acá
+// (CopilotOrder, abajo): se mudó adentro de telemetryStore.ts → ingest()
+// (ver la nota junto a computeMarketRead() ahí) porque calcularla en el
+// render de este componente quedaba un giro desalineada del pick que de
+// verdad se mandaba a puntuar. CopilotOrder ahora LEE la decisión ya
+// calculada con `useLiveDecision()` — no la recalcula.
+import type { MarketRead } from '@/domain/copilot';
 
 const FONT_HEAD = "'Rajdhani', sans-serif";
 const FONT_MONO = "'JetBrains Mono', monospace";
@@ -478,16 +481,24 @@ function useMarketRead(mkt: Market): MarketRead {
   };
 }
 
-/** Header + orden del escudo ("ENTRADA SEGURA"). Es la ÚNICA pieza que le
- *  avisa al store qué mercado sugiere el piloto ahora mismo — si en algún
- *  momento se usa CopilotScoreboard sin esta pieza en el mismo árbol, el
- *  store deja de recibir la sugerencia en vivo. Quantum las usa siempre
- *  juntas, así que no pasa.
+/** Header + orden del escudo ("ENTRADA SEGURA").
  *
- *  v6: UN micropanel (borde + fondo + glow del color de nivel) para todo el
- *  bloque — v5 lo había dejado solo con acento lateral y perdió separación
- *  del resto de la columna. El glow grande en el título sigue siendo el
- *  más fuerte del panel: es la decisión jugándose ahora. */
+ *  FIX (oct 2026) — BUG REAL reportado por Gunner y reproducido en vivo:
+ *  "el copiloto sugiere algo pero sus contadores están mal... no está
+ *  siguiendo la sugerencia principal". Causa: este componente calculaba la
+ *  decisión con useMarketRead() (doc/col) + decidirPiloto() EN SU PROPIO
+ *  RENDER, y después la escribía a un ref a nivel módulo para que el store
+ *  la leyera al puntuar. Pero ese render ocurre ANTES de que el giro que
+ *  acaba de llegar se ingiera al store (el ingest corre en un useEffect de
+ *  AppPage.tsx, después del commit) — así que la decisión podía quedar un
+ *  giro más vieja que el pick que de verdad se mandó a puntuar, y lo que se
+ *  veía en pantalla no coincidía con lo que se contaba.
+ *
+ *  Fix: la decisión ahora se calcula UNA sola vez, adentro de
+ *  telemetryStore.ts → ingest() (ver su nota junto a computeMarketRead()),
+ *  justo después de actualizar el historial — y acá se LEE con
+ *  useLiveDecision() en vez de recalcularse. Lo que este componente muestra
+ *  y lo que el marcador cuenta son ahora, literalmente, el mismo dato. */
 export function CopilotOrder({
   hero = false,
   bare = false,
@@ -501,19 +512,7 @@ export function CopilotOrder({
    *  DECISIÓN sea UNA sola tarjeta en vez de anidar cajas) */
   bare?: boolean;
 }) {
-  const doc = useMarketRead('doc');
-  const col = useMarketRead('col');
-  const d = decidirPiloto(doc, col);
-
-  const setCopSug = useSetCopSug();
-  setCopSug(d.mercado);
-  // FIX (oct 2026) — ver nota de telemetryStore.ts: cuando la Capa 2 (escudo)
-  // manda, d.pickDoc/d.pickCol traen el texto de la zona que REALMENTE se
-  // juega (derivado de zonasEscudo, no del pick del backend). Si la Capa 1
-  // manda, los dos vienen undefined → se limpia el override (null, null) y
-  // el store sigue usando el pick del backend como siempre.
-  const setCopPickOverride = useSetCopPickOverride();
-  setCopPickOverride(d.pickDoc ?? null, d.pickCol ?? null);
+  const d = useLiveDecision();
 
   // v7: "precaución" pasa de ámbar a blanco neón — Gunner: "preferiría
   // meter un blanco neón en vez de un naranja". ok/peligro quedan iguales.
@@ -560,11 +559,11 @@ export function CopilotOrder({
  *  contaba aciertos/errores de una decisión hipotética distinta a la real.
  *  El store (telemetryStore.ts) YA lleva el contador correcto en vivo:
  *  `copScore`, incrementado una vez por giro resuelto a partir de
- *  `pend.copSug` — y `copSug` es exactamente lo que CopilotOrder escribe en
- *  cada render (`setCopSug(d.mercado)` con `d = decidirPiloto(...)`), así
- *  que YA incluye Capa1+2. Solo faltaba leerlo acá en vez de reinventar el
- *  cálculo — cero lógica nueva, cero replay, cero forma de desalinearse del
- *  escudo real. */
+ *  `pend.copSug` — que desde el FIX siguiente (oct 2026, ver nota junto a
+ *  computeMarketRead() en telemetryStore.ts) se calcula DENTRO de ingest(),
+ *  ya no desde el render de CopilotOrder, así que incluye Capa1+2 y nunca
+ *  queda un giro desalineado del pick que se puntúa. Esta pieza solo lee
+ *  `copScore` — cero lógica nueva, cero replay. */
 export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   const copHits = useCopHits();
   const copMisses = useCopMisses();
@@ -604,8 +603,10 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
 }
 
 /** Par de chips con la zona ACTUAL de cada mercado (doc/col) — mismo
- *  useMarketRead()/fusedZone() que usa CopilotOrder, así nunca puede
- *  mostrar algo distinto de lo que el escudo está viendo en este momento.
+ *  useMarketRead()/fusedZone() que usa internamente ingest() en
+ *  telemetryStore.ts (vía computeMarketRead(), misma fórmula exacta) para
+ *  calcular la decisión del piloto, así nunca puede mostrar algo distinto
+ *  de lo que el escudo está viendo en este momento.
  *  v6: vuelven a ser micro-chips con borde + fondo (pedido explícito de
  *  Gunner: "no hay micropaneles") — livianos, una sola capa, sin el pill
  *  pesado de las versiones viejas. */
