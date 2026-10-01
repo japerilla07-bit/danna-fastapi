@@ -306,17 +306,36 @@ export interface DecisionPiloto extends Decision {
 // abajo). El otro mercado se evalúa totalmente aparte: puede estar cubierto,
 // esperando, o ninguno de los dos — las cuatro combinaciones son válidas.
 //
-// SALIDA — "reactivo al cambio, pero inteligente" (palabras de Gunner): no
-// apaga con que la zona excluida salga UNA sola vez ("no me puedes mamar eso
-// con un punto de diferencia"). Para CADA mercado activo, por separado, hace
-// falta un cambio de verdad — cualquiera de estos dos, el que se dé primero:
-//   (a) su zona excluida sube su conteo en la ventana en ≥2 respecto al que
-//       tenía cuando se activó esa cobertura (un 3-3-1 que ya no es 3-3-1 —
-//       avanzó a 2, a 3: eso sí es significativo), o
-//   (b) su zona excluida "viene con fuerza": salió 2 de los últimos 3 giros
-//       reales, aunque la ventana completa todavía no lo refleje del todo.
-// Cualquiera de las dos apaga LA COBERTURA DE ESE MERCADO (no la del otro) y
-// la Capa 1 vuelve a decidir ese lado sola, lista para evaluar de nuevo.
+// SALIDA — CORREGIDO EN CALIENTE #2 (mesa en vivo, sesión real con CSV de
+// evidencia). La primera versión de salida solo miraba si la zona EXCLUIDA
+// subía o volvía con fuerza — y se quedó pegada cubriendo un par que ya no
+// era el correcto, porque nunca revisaba si una de las dos zonas CUBIERTAS
+// se había vuelto la más débil. Caso real (columna, ventana de 7): cuando
+// activó cubría C1+C2 (excluía C3). Varios giros después la ventana real
+// era C1=1 / C2=4 / C3=2 — es decir, C1 ya era la más débil y lo correcto
+// era cubrir C2+C3 — pero como C3 (la excluida original) nunca subió ni
+// volvió con fuerza, la cobertura se quedó mal: cubriendo C1+C2 cuando las
+// fuertes eran C2 y C3. Eso es exactamente lo que Gunner reportó con
+// pantallas y el CSV de la sesión.
+//
+// Arreglo: en vez de rastrear solo el movimiento de la zona excluida, en
+// CADA giro (mientras el mercado está activo) se vuelve a calcular
+// distribucionMarcada() sobre la ventana REAL actual — el mismo cálculo que
+// se usa para activar — y se compara el par top2 resultante contra el par
+// que está cubierto ahora mismo:
+//   - Si ya no hay distribución marcada (el gap cayó bajo el mínimo) → se
+//     apaga esa cobertura, sin más.
+//   - Si sigue habiendo distribución marcada pero el par top2 CAMBIÓ (ya no
+//     son las mismas 2 zonas) → se apaga la cobertura vieja y, en el mismo
+//     giro, se prende la nueva (el par y la excluida que diga la ventana
+//     ahora). Esto cubre los dos casos que pedía Gunner: la excluida que
+//     vuelve con fuerza (ahora entra al top2 y desplaza a la que se debilitó)
+//     Y el caso nuevo que no estaba cubierto (una de las cubiertas se volvió
+//     la débil).
+//   - Si el par top2 es el mismo de siempre → sigue activa, sin tocar nada.
+// Esto reemplaza por completo las reglas viejas de "subió ≥2" / "volvió 2 de
+// 3" — ya no hacen falta: distribucionMarcada() aplicada giro a giro hace lo
+// mismo pero sin el punto ciego.
 // ════════════════════════════════════════════════════════════════════════
 
 const COBERTURA_WINDOW = 7;
@@ -364,16 +383,19 @@ let coberturaVentana: number[] = [];
 let coberturaDocActiva = false;
 let coberturaZonasDoc: ZonaDoc[] = [];
 let coberturaDocExcluida: ZonaDoc | null = null;
-let coberturaDocExcluidaBase = 0; // conteo de la excluida EN LA VENTANA al activarse — línea base (ver SALIDA arriba)
 
 let coberturaColActiva = false;
 let coberturaZonasCol: ZonaCol[] = [];
 let coberturaColExcluida: ZonaCol | null = null;
-let coberturaColExcluidaBase = 0;
 
-const COBERTURA_SALIDA_GAP_MIN = 2;  // la excluida sube esto o más desde la base (a) → sale
-const COBERTURA_FUERZA_VENTANA = 3;  // de los últimos N giros reales...
-const COBERTURA_FUERZA_MIN = 2;      // ...si la excluida salió esto o más veces (b) → sale
+// top2 de distribucionMarcada() viene ordenado por conteo, no por nombre de
+// zona — para comparar "es el mismo par de antes" hay que ordenar por zona.
+function mismoPar<T extends string>(a: T[], b: T[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((z, i) => z === sb[i]);
+}
 
 // ── Llamar UNA vez por cada giro real (el número que salió), apenas se
 //    sabe — independiente de si la Capa 1 jugó o no ese giro. Alimenta la
@@ -386,12 +408,18 @@ export function registrarGiroCobertura(numero: number): void {
   // ── DOCENAS ──
   if (coberturaDocActiva) {
     const conteoDoc = conteoPorZona(coberturaVentana, docenaDeNumero, ['d1', 'd2', 'd3'] as const);
-    const subioDoc = coberturaDocExcluida ? (conteoDoc.get(coberturaDocExcluida) ?? 0) - coberturaDocExcluidaBase : 0;
-    const ultimos = coberturaVentana.slice(-COBERTURA_FUERZA_VENTANA);
-    const fuerzaDoc = ultimos.filter((n) => docenaDeNumero(n) === coberturaDocExcluida).length;
-    if (subioDoc >= COBERTURA_SALIDA_GAP_MIN || fuerzaDoc >= COBERTURA_FUERZA_MIN) {
-      coberturaDocActiva = false; coberturaZonasDoc = []; coberturaDocExcluida = null; coberturaDocExcluidaBase = 0;
+    const d = distribucionMarcada(conteoDoc);
+    if (!d.marcada) {
+      // Ya no hay distribución marcada en la ventana real → se apaga.
+      coberturaDocActiva = false; coberturaZonasDoc = []; coberturaDocExcluida = null;
+    } else if (!mismoPar(d.top2, coberturaZonasDoc)) {
+      // Sigue marcada, pero el par top2 real CAMBIÓ (una cubierta se debilitó
+      // y/o la excluida volvió con fuerza) → se apaga la vieja y se prende
+      // la nueva ya mismo, con el par y la excluida que diga la ventana ahora.
+      coberturaZonasDoc = d.top2;
+      coberturaDocExcluida = d.excluida;
     }
+    // si sigue marcada y el par es el mismo, no se toca nada.
   } else if (coberturaVentana.length >= COBERTURA_WINDOW) {
     const conteoDoc = conteoPorZona(coberturaVentana, docenaDeNumero, ['d1', 'd2', 'd3'] as const);
     const d = distribucionMarcada(conteoDoc);
@@ -399,18 +427,18 @@ export function registrarGiroCobertura(numero: number): void {
       coberturaDocActiva = true;
       coberturaZonasDoc = d.top2;
       coberturaDocExcluida = d.excluida;
-      coberturaDocExcluidaBase = conteoDoc.get(d.excluida) ?? 0;
     }
   }
 
   // ── COLUMNAS (mismo patrón, totalmente aparte) ──
   if (coberturaColActiva) {
     const conteoCol = conteoPorZona(coberturaVentana, columnaDeNumero, ['c1', 'c2', 'c3'] as const);
-    const subioCol = coberturaColExcluida ? (conteoCol.get(coberturaColExcluida) ?? 0) - coberturaColExcluidaBase : 0;
-    const ultimos = coberturaVentana.slice(-COBERTURA_FUERZA_VENTANA);
-    const fuerzaCol = ultimos.filter((n) => columnaDeNumero(n) === coberturaColExcluida).length;
-    if (subioCol >= COBERTURA_SALIDA_GAP_MIN || fuerzaCol >= COBERTURA_FUERZA_MIN) {
-      coberturaColActiva = false; coberturaZonasCol = []; coberturaColExcluida = null; coberturaColExcluidaBase = 0;
+    const c = distribucionMarcada(conteoCol);
+    if (!c.marcada) {
+      coberturaColActiva = false; coberturaZonasCol = []; coberturaColExcluida = null;
+    } else if (!mismoPar(c.top2, coberturaZonasCol)) {
+      coberturaZonasCol = c.top2;
+      coberturaColExcluida = c.excluida;
     }
   } else if (coberturaVentana.length >= COBERTURA_WINDOW) {
     const conteoCol = conteoPorZona(coberturaVentana, columnaDeNumero, ['c1', 'c2', 'c3'] as const);
@@ -419,7 +447,6 @@ export function registrarGiroCobertura(numero: number): void {
       coberturaColActiva = true;
       coberturaZonasCol = c.top2;
       coberturaColExcluida = c.excluida;
-      coberturaColExcluidaBase = conteoCol.get(c.excluida) ?? 0;
     }
   }
 }
@@ -430,11 +457,9 @@ export function resetCobertura(): void {
   coberturaDocActiva = false;
   coberturaZonasDoc = [];
   coberturaDocExcluida = null;
-  coberturaDocExcluidaBase = 0;
   coberturaColActiva = false;
   coberturaZonasCol = [];
   coberturaColExcluida = null;
-  coberturaColExcluidaBase = 0;
 }
 
 export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto {
