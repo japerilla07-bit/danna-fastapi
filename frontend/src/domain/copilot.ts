@@ -42,7 +42,9 @@ export interface Decision {
 
 // ── Puntaje de seguridad de un mercado (más alto = más seguro para entrar) ──
 // NO mide "va a acertar". Mide "qué tan protegido estás de una racha si entrás".
-function seguridad(m: MarketRead): number {
+// Exportada (oct 2026) para que COBERTURA DOBLE pueda marcar cuál de los dos
+// mercados tiene mejor rendimiento ahora mismo — ver decidirPiloto() abajo.
+export function seguridad(m: MarketRead): number {
   let s = 0;
   // 1. Estado de la celda (lo más importante para evitar rachas)
   const estadoScore: Record<Zone, number> = {
@@ -72,6 +74,17 @@ function seguridad(m: MarketRead): number {
 // vez que de verdad entró (NO se actualiza en PARAR/ESPERAR, solo cuando se juega).
 // Sirve solo para la regla de "evitar refugio" de abajo.
 let ultimoMercadoJugado: Market | null = null;
+
+// Reiniciar al empezar una sesión nueva — AGREGADO oct 2026 al correr la
+// validación histórica (ver abajo): hacía falta una forma de poner en cero
+// la memoria de "evitar refugio" entre sesiones simuladas, y no existía.
+// HALLAZGO: telemetryStore.ts (reset(), botón "RESET MAPA") llama a
+// resetCobertura() pero NUNCA llamaba esto — la memoria de "evitar refugio"
+// podía arrastrarse de una mesa a la siguiente en la app real. No se tocó
+// telemetryStore.ts todavía (no estaba pedido); queda señalado para decidir.
+export function resetUltimoMercado(): void {
+  ultimoMercadoJugado = null;
+}
 
 // ────────────────────────────────────────────────────────────────────────
 // decidirConEstado — BUG REAL encontrado y corregido (sep 2026)
@@ -250,6 +263,12 @@ export interface DecisionPiloto extends Decision {
   // Solo presente el lado que está cubierto — ver sección de abajo.
   pickDoc?: string;
   pickCol?: string;
+  // Solo presente con capa === 'COBERTURA_DOBLE': de los dos mercados que se
+  // están cubriendo a la vez, cuál tiene mejor rendimiento AHORA (mismo
+  // puntaje seguridad() que usa la Capa 1 para elegir mercado) — pedido de
+  // Gunner en vivo ("marcar la de mejor rendimiento entre docenas y
+  // columnas"), para saber cuál priorizar si solo puede entrar a una.
+  principal?: Market;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -428,10 +447,20 @@ export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto 
   let capa: DecisionPiloto['capa'];
   let titulo: string;
   let motivo: string;
+  let principal: Market | undefined;
   if (coberturaDocActiva && coberturaColActiva) {
     capa = 'COBERTURA_DOBLE';
+    // Mejor rendimiento AHORA entre los dos — mismo puntaje que decide la
+    // Capa 1 (seguridad()), mismo desempate (WR de celda). Pedido de Gunner
+    // en vivo: "va a marcar la de mejor rendimiento entre docenas y
+    // columnas" — las dos se siguen cubriendo (4 fichas), esto es solo para
+    // saber cuál priorizar si tenés que elegir una.
+    const sDoc = seguridad(doc);
+    const sCol = seguridad(col);
+    principal = sDoc > sCol || (sDoc === sCol && (doc.cellWr ?? 0) >= (col.cellWr ?? 0)) ? 'doc' : 'col';
+    const nombrePrincipal = principal === 'doc' ? 'DOCENAS' : 'COLUMNAS';
     titulo = `◆ COBERTURA DOBLE · ${coberturaZonasDoc.join('+').toUpperCase()} / ${coberturaZonasCol.join('+').toUpperCase()}`;
-    motivo = 'Distribución marcada en los dos mercados a la vez: se cubren 2 docenas y 2 columnas (4 fichas) hasta que salga, en cada una, la zona que quedó afuera.';
+    motivo = `Distribución marcada en los dos mercados a la vez: se cubren 2 docenas y 2 columnas (4 fichas) hasta que salga, en cada una, la zona que quedó afuera. Mejor rendimiento ahora: ${nombrePrincipal} — priorizala si tenés que elegir una.`;
   } else if (coberturaDocActiva) {
     capa = 'COBERTURA_DOC';
     titulo = `◆ COBERTURA DOCENAS · ${coberturaZonasDoc.join('+').toUpperCase()}`;
@@ -451,5 +480,6 @@ export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto 
     capa,
     pickDoc: docTxt,
     pickCol: colTxt,
+    principal,
   };
 }
