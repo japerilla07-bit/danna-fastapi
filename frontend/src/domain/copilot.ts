@@ -303,6 +303,40 @@ export interface DecisionPiloto extends Decision {
                                  // 1 de columnas (2 mercados a la vez), no el
                                  // top2 de una sola categoría — ver validación
                                  // arriba (racha de 5+ giros sin cortar)
+  // FIX (oct 2026) — BUG REAL encontrado por Gunner con reproducción exacta
+  // (escudo mostrando "DOCENAS (d2+d1)", cayó el 33 — fuera de esa cobertura
+  // — y el contador de ERRORES no se movió). Causa: el store resolvía el
+  // marcador del copiloto (copScore) y la propia alimentación del escudo
+  // (registrarGiroReal) contra el pick de TEXTO del BACKEND
+  // (bet_advice.docenas.pick / .columnas.pick), que es una sugerencia
+  // DISTINTA e independiente de las zonas que el escudo realmente eligió
+  // (zonasEscudo). Cuando la Capa 1 manda, eso es correcto (la Capa 1 no
+  // elige zona, solo mercado — el texto de zona siempre fue del backend).
+  // Pero cuando la Capa 2 (escudo) manda, las zonas que de verdad se están
+  // jugando son zonasEscudo, no las del backend — y nadie las traducía a un
+  // texto resoluble. pickDoc/pickCol llevan ESE texto (solo presentes
+  // cuando la Capa 2 juega) para que el store resuelva acierto/error contra
+  // lo que el escudo REALMENTE apostó. En modo híbrido vienen los DOS
+  // (1 zona de docenas + 1 de columnas, las 2 fichas reales de ese modo).
+  pickDoc?: string;
+  pickCol?: string;
+}
+
+// Traduce una zona del escudo al mismo formato de texto que ya entiende
+// numerosDe()/resolvePick() en telemetryStore.ts (coincide 1:1 con cómo el
+// backend arma sus picks: "1-12"/"13-24"/"25-36" para docenas, "Columna N"
+// para columnas) — así no hace falta tocar la resolución del store, solo
+// darle el texto correcto cuando quien manda es el escudo.
+const ZONA_DOC_TXT: Record<'d1' | 'd2' | 'd3', string> = { d1: '1-12', d2: '13-24', d3: '25-36' };
+const ZONA_COL_TXT: Record<'c1' | 'c2' | 'c3', string> = { c1: 'Columna 1', c2: 'Columna 2', c3: 'Columna 3' };
+
+function pickTextoDeZonas(zonas: ZonaEscudo[]): { pickDoc?: string; pickCol?: string } {
+  const docs = zonas.filter((z): z is 'd1' | 'd2' | 'd3' => z.startsWith('d'));
+  const cols = zonas.filter((z): z is 'c1' | 'c2' | 'c3' => z.startsWith('c'));
+  const out: { pickDoc?: string; pickCol?: string } = {};
+  if (docs.length > 0) out.pickDoc = docs.map((z) => ZONA_DOC_TXT[z]).join(' / ');
+  if (cols.length > 0) out.pickCol = cols.map((z) => ZONA_COL_TXT[z]).join(' / ');
+  return out;
 }
 
 // Config final (ver historial arriba) — NO retocar sin volver a medir contra
@@ -441,6 +475,7 @@ function calcularDecisionEscudo(): DecisionPiloto | null {
       capa: 'CAPA2_ESCUDO',
       zonasEscudo: zonasHibrido,
       escudoHibrido: true,
+      ...pickTextoDeZonas(zonasHibrido),
     };
   }
 
@@ -477,6 +512,7 @@ function calcularDecisionEscudo(): DecisionPiloto | null {
     nivel: 'precaucion',
     capa: 'CAPA2_ESCUDO',
     zonasEscudo: zonas,
+    ...pickTextoDeZonas(zonas),
   };
 }
 
