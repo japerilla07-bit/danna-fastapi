@@ -24,8 +24,8 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import { create } from 'zustand';
-import { classifyZone, cellKeyOf, type Zone, type Market } from '@/domain/zoneMatrix';
-import { registrarGiroReal, resetEscudo } from '@/domain/copilot';
+import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, type Zone, type Market } from '@/domain/zoneMatrix';
+import { registrarGiroReal, resetEscudo, decidirPiloto, type MarketRead, type DecisionPiloto } from '@/domain/copilot';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -126,9 +126,11 @@ interface TelemetryState {
   counters: Counters;
   cellReg: CellReg;
   copScore: CopScore;
+  // FIX (oct 2026) — ver nota completa junto a computeMarketRead() más abajo.
+  // La decisión del piloto (Capa1+2) que se usa TANTO para puntuar como para
+  // mostrar en pantalla (CopilotOrder la lee de acá en vez de recalcularla).
+  liveDecision: DecisionPiloto;
   ingest: (p: IngestPayload) => void;
-  setCopSug: (mkt: 'doc' | 'col' | null) => void;
-  setCopPickOverride: (doc: string | null, col: string | null) => void;
   reset: () => void;
 }
 
@@ -143,6 +145,66 @@ const EMPTY_COUNTERS: Counters = {
   docStreak: 0, docMaxStreak: 0, colStreak: 0, colMaxStreak: 0,
 };
 
+// ────────────────────────────────────────────────────────────────────────
+// FIX (oct 2026) — BUG REAL encontrado por Gunner, reproducido en vivo:
+// "el copiloto sugiere algo pero sus contadores están mal... no está
+// siguiendo la sugerencia principal". Causa de fondo (no era un bug de
+// datos, era de TIMING): la decisión visual del copiloto (CopilotOrder, en
+// MatrixPanel.tsx) se calculaba con useMarketRead(), que lee el `history`
+// del store — y ese history TODAVÍA NO incluye el giro que acaba de llegar
+// en el momento en que CopilotOrder renderiza (el ingest() de ESE giro
+// corre en un useEffect de AppPage.tsx, que se ejecuta DESPUÉS de que este
+// render ya pintó la pantalla). Mientras tanto, docPick/colPick (el texto
+// que se manda a ingest()) SÍ salen frescos del bet_advice del backend en
+// ESE MISMO render. Resultado: la decisión que se guardaba en el pendiente
+// (vía un ref que escribía CopilotOrder) podía ser la de "un giro atrás" —
+// un mercado/zona distinto del que realmente se mostró en pantalla para el
+// giro que se estaba puntuando. Con suerte no se notaba (la sugerencia no
+// cambia todo el tiempo); en pruebas manuales rápidas, donde sí cambia
+// seguido, el desalineamiento se ve clarísimo (exactamente lo que Gunner
+// reprodujo).
+//
+// Fix: la decisión (Capa1+2) se recalcula ACÁ, dentro de ingest(), justo
+// después de actualizar el history con el giro que acaba de llegar — con
+// la MISMA fórmula exacta que usaba useMarketRead() (ver computeMarketRead
+// debajo), pero ya sin depender de en qué momento renderiza un componente.
+// Pasa a ser la ÚNICA fuente: se guarda en el pendiente (para puntuar) Y en
+// el store como `liveDecision` (para mostrar — CopilotOrder ahora LEE este
+// valor en vez de recalcularlo con sus propios hooks). Lo que se ve en
+// pantalla y lo que se cuenta son, literalmente, el mismo dato calculado
+// una sola vez.
+// ────────────────────────────────────────────────────────────────────────
+function computeMarketRead(history: TelemetrySpin[], cellReg: CellReg, mkt: Market): MarketRead {
+  const last = history[history.length - 1];
+  const hud = last ? last.hud : null;
+  const ent = last ? last.ent : null;
+  const key = cellKeyOf(hud, ent);
+  const live = key ? (cellReg[mkt][key] ?? null) : null;
+  const ventana = ventanaResuelta(history, mkt, 10);
+  let termoStreak = 0;
+  for (const r of ventana) { if (!r) termoStreak++; else break; }
+  return {
+    mkt,
+    estado: fusedZone(hud, ent, mkt, live),
+    cellWr: currentCellWr(hud, ent, mkt),
+    termoHits: ventana.filter((x) => x).length,
+    termoTotal: ventana.length,
+    termoStreak,
+    liveStreak: live?.streak ?? 0,
+    cellCeiling: currentCellMaxRun(hud, ent, mkt),
+  };
+}
+
+// Decisión inicial (sin giros todavía) — misma fórmula, historial vacío.
+// Así liveDecision nunca es null/undefined (CopilotOrder no necesita un
+// caso especial para el primer render).
+function decisionInicial(): DecisionPiloto {
+  const vacio: CellReg = { doc: {}, col: {} };
+  const doc = computeMarketRead([], vacio, 'doc');
+  const col = computeMarketRead([], vacio, 'col');
+  return decidirPiloto(doc, col);
+}
+
 function bumpCell(reg: Record<string, CellRec>, key: string, hit: boolean): Record<string, CellRec> {
   const prev = reg[key] ?? { hits: 0, misses: 0, streak: 0, maxStreak: 0 };
   let { hits, misses, streak, maxStreak } = prev;
@@ -154,19 +216,13 @@ function bumpCell(reg: Record<string, CellRec>, key: string, hit: boolean): Reco
 // ────────────────────────────────────────────────────────────────────────
 // Store
 // ────────────────────────────────────────────────────────────────────────
-
-// Sugerencia actual del copiloto (ref sincrónica a nivel módulo). El copiloto la
-// escribe en cada render; el ingest la lee en el instante exacto de registrar el
-// giro pendiente. Así el marcador cuenta SOLO lo que D.A.N.N.A. mostraba en ese
-// giro — si decía "esperar"/"parar" (null), ese giro no se cuenta.
-let copSugRef: 'doc' | 'col' | null = null;
-
-// Mismo patrón que copSugRef, para el texto de zona que calcula el escudo
-// (copilot.ts, DecisionPiloto.pickDoc/pickCol) cuando es la Capa 2 la que
-// manda. null cuando manda la Capa 1 (ahí se sigue usando el pick del
-// backend, sin cambios). Ver nota del FIX (oct 2026) en la interfaz Pending.
-let copPickDocRef: string | null = null;
-let copPickColRef: string | null = null;
+//
+// FIX (oct 2026) — el mecanismo viejo (copSugRef/copPickDocRef/copPickColRef,
+// refs a nivel módulo que CopilotOrder escribía en su propio render) se dio
+// de baja: era la causa del desalineamiento de timing descrito arriba, junto
+// a computeMarketRead(). La decisión ahora se calcula adentro de ingest()
+// (ver más abajo) y se guarda en `liveDecision`, que es lo único que lee
+// CopilotOrder para mostrar en pantalla.
 
 export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   history: [],
@@ -175,21 +231,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   counters: { ...EMPTY_COUNTERS },
   cellReg: { doc: {}, col: {} },
   copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
-
-  setCopSug: (mkt) => {
-    // ref sincrónica: la sugerencia actual del copiloto, disponible al instante
-    // para el ingest, sin depender del timing de un useEffect (evita contar
-    // giros donde D.A.N.N.A. decía "esperar").
-    copSugRef = mkt;
-  },
-
-  setCopPickOverride: (doc, col) => {
-    // ref sincrónica (mismo patrón que setCopSug) con el texto de zona que
-    // realmente juega el escudo cuando manda la Capa 2 (null/null si manda
-    // la Capa 1 — ahí no hay override, se usa el pick del backend de siempre).
-    copPickDocRef = doc;
-    copPickColRef = col;
-  },
+  liveDecision: decisionInicial(),
 
   ingest: (p) => {
     const st = get();
@@ -295,28 +337,38 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       ? [...histResuelto.slice(1), spinRow]
       : [...histResuelto, spinRow];
 
-    // ── 3) ESTE giro pasa a ser el nuevo pendiente (con lo que sugirió el copiloto) ──
+    // ── 3) Recalcular la decisión del PILOTO con el history YA actualizado
+    //    (incluye el giro que acaba de llegar) — ver nota FIX (oct 2026)
+    //    junto a computeMarketRead(), más arriba. Esto reemplaza al viejo
+    //    copSugRef/copPickDocRef/copPickColRef: ya no depende de en qué
+    //    momento renderizó CopilotOrder, así que no puede desalinearse.
+    const docRead = computeMarketRead(history, cellReg, 'doc');
+    const colRead = computeMarketRead(history, cellReg, 'col');
+    const liveDecision = decidirPiloto(docRead, colRead);
+
+    // ── 4) ESTE giro pasa a ser el nuevo pendiente (con lo que el PILOTO
+    //    recién decidió, recalculado arriba — no lo que mostraba un render
+    //    viejo) ──
     const pending: Pending = {
       n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick,
-      copSug: copSugRef,
-      copPickDocOverride: copPickDocRef,
-      copPickColOverride: copPickColRef,
+      copSug: liveDecision.mercado,
+      copPickDocOverride: liveDecision.pickDoc ?? null,
+      copPickColOverride: liveDecision.pickCol ?? null,
     };
 
-    set({ history, lastN: p.n, pending, counters, cellReg, copScore });
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore, liveDecision });
   },
 
   reset: () => {
+    resetEscudo(); // apaga y limpia la Capa 2 (racha viva, ventana de 7 giros) —
+                    // ANTES de recalcular decisionInicial(), que lee ese estado.
     set({
       history: [], lastN: -1, pending: null,
       counters: { ...EMPTY_COUNTERS },
       cellReg: { doc: {}, col: {} },
       copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+      liveDecision: decisionInicial(),
     });
-    copSugRef = null;
-    copPickDocRef = null;
-    copPickColRef = null;
-    resetEscudo(); // apaga y limpia la Capa 2 (racha viva, ventana de 7 giros)
   },
 }));
 
@@ -363,13 +415,12 @@ export const useResetTelemetry = () => useTelemetryStore((s) => s.reset);
 // History completo (para recalcular el marcador del copiloto sin depender de timing).
 export const useHistory = (): TelemetrySpin[] => useTelemetryStore((s) => s.history);
 
+// ── Decisión del PILOTO (Capa1+2) — ÚNICA fuente, para mostrar Y para
+//    puntuar (ver FIX (oct 2026) junto a computeMarketRead() más arriba).
+//    CopilotOrder (MatrixPanel.tsx) la lee de acá en vez de recalcularla. ──
+export const useLiveDecision = (): DecisionPiloto => useTelemetryStore((s) => s.liveDecision);
+
 // ── Marcador del COPILOTO (lo que sugiere D.A.N.N.A.) ──
-export const useSetCopSug = () => useTelemetryStore((s) => s.setCopSug);
-// FIX (oct 2026) — canal paralelo a setCopSug: cuando la Capa 2 (escudo)
-// manda, lleva el texto de ZONA exacta que de verdad se juega (ver
-// DecisionPiloto.pickDoc/pickCol en copilot.ts). Lo escribe CopilotOrder en
-// cada render, igual que setCopSug.
-export const useSetCopPickOverride = () => useTelemetryStore((s) => s.setCopPickOverride);
 export const useCopHits = (): number => useTelemetryStore((s) => s.copScore.hits);
 export const useCopMisses = (): number => useTelemetryStore((s) => s.copScore.misses);
 export const useCopStreak = (): number => useTelemetryStore((s) => s.copScore.maxStreak);
