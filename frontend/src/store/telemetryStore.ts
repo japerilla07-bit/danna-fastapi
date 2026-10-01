@@ -331,11 +331,26 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     // ── 4) ESTE giro pasa a ser el nuevo pendiente (con lo que el PILOTO
     //    recién decidió, recalculado arriba — no lo que mostraba un render
     //    viejo) ──
+    //
+    // FIX (oct 2026) — pedido de Gunner en vivo: contar COBERTURA_DOBLE como
+    // un acierto si ganaba CUALQUIERA de los dos mercados (docenas O
+    // columnas) era "maquillaje" — inflaba el marcador sin decir la verdad
+    // de ninguno de los dos lados en particular. Ahora, cuando la cobertura
+    // es DOBLE, el conteo (aciertos/errores/racha — lo que alimenta el
+    // freno) sigue SOLO al mercado `principal` (el de mejor rendimiento,
+    // mismo criterio que ya calcula decidirPiloto en copilot.ts); el otro
+    // lado NO se marca como override, así que no se puntúa — igual que ya
+    // pasa en COBERTURA_DOC/COBERTURA_COL, que son de un solo mercado desde
+    // siempre. Las DOS zonas se siguen jugando igual (pickDoc/pickCol siguen
+    // ahí para mostrar en pantalla); lo único que cambia es a cuál de las
+    // dos le hace caso el marcador.
+    const suprimirDoc = liveDecision.capa === 'COBERTURA_DOBLE' && liveDecision.principal === 'col';
+    const suprimirCol = liveDecision.capa === 'COBERTURA_DOBLE' && liveDecision.principal === 'doc';
     const pending: Pending = {
       n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick,
       copSug: liveDecision.mercado,
-      copPickDocOverride: liveDecision.pickDoc ?? null,
-      copPickColOverride: liveDecision.pickCol ?? null,
+      copPickDocOverride: suprimirDoc ? null : (liveDecision.pickDoc ?? null),
+      copPickColOverride: suprimirCol ? null : (liveDecision.pickCol ?? null),
     };
 
     set({ history, lastN: p.n, pending, counters, cellReg, copScore, liveDecision });
