@@ -25,7 +25,7 @@
 
 import { create } from 'zustand';
 import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, type Zone, type Market } from '@/domain/zoneMatrix';
-import { decidirPiloto, type MarketRead, type DecisionPiloto } from '@/domain/copilot';
+import { decidirPiloto, registrarGiroCobertura, resetCobertura, type MarketRead, type DecisionPiloto } from '@/domain/copilot';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -83,6 +83,12 @@ interface Pending {
   docPick: string;
   colPick: string;
   copSug: 'doc' | 'col' | null;  // qué mercado sugirió el copiloto en este giro (null = esperar/parar)
+  // Presentes SOLO cuando la COBERTURA DOBLE (oct 2026, ver copilot.ts) está
+  // jugando — el texto de las 2+2 zonas que de verdad se están cubriendo,
+  // para puntuar el copiloto contra ESO en vez del pick de mercado único
+  // del backend. null en cualquier otro caso (Capa 1 normal).
+  copPickDocOverride: string | null;
+  copPickColOverride: string | null;
 }
 
 export interface CellRec {
@@ -237,24 +243,51 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       const key = cellKeyOf(pend.hud, pend.ent);
 
       // ── Marcador del COPILOTO (lo que D.A.N.N.A. REALMENTE sugirió este
-      //    giro) — se resuelve contra copSug (el mercado que eligió la
-      //    Capa 1), usando docHit/colHit (el mismo pick de BACKEND de
-      //    arriba, que también alimenta counters/cellReg más abajo).
+      //    giro) — normalmente se resuelve contra copSug (el mercado que
+      //    eligió la Capa 1), usando docHit/colHit (el mismo pick de
+      //    BACKEND de arriba, que también alimenta counters/cellReg más
+      //    abajo). Cuando la COBERTURA DOBLE (oct 2026, ver copilot.ts)
+      //    está jugando, pend.copPickDocOverride/colOverride traen el texto
+      //    de las 2+2 zonas reales — se resuelve contra ESO en vez del pick
+      //    de mercado único, y cuentan las DOS fichas (docenas y columnas).
+      const copHitDoc: boolean | null = pend.copPickDocOverride
+        ? resolvePick(pend.copPickDocOverride, spin)
+        : (pend.copSug === 'doc' ? docHit : null);
+      const copHitCol: boolean | null = pend.copPickColOverride
+        ? resolvePick(pend.copPickColOverride, spin)
+        : (pend.copSug === 'col' ? colHit : null);
+
+      // FIX (oct 2026) — reauditado a pedido de Gunner. Antes esto armaba un
+      // array [copHitDoc, copHitCol] y sumaba cada resultado no-null como un
+      // evento SEPARADO, en orden fijo (doc primero, col después). Fuera de
+      // COBERTURA DOBLE nunca hay dos no-null a la vez, así que no se notaba.
+      // Con COBERTURA DOBLE activa, los dos SIEMPRE son no-null (docena y
+      // columna se juegan juntas) — y un giro MIXTO (ganó un lado, perdió el
+      // otro) quedaba en racha=0 o racha=1 según cuál de los dos se procesara
+      // último: un artefacto del orden del código, no un hecho real de la
+      // mesa (los dos resultados pasan en el MISMO giro, no uno tras otro).
       //
-      //    Hasta oct 2026 esto también podía resolverse contra un "override"
-      //    de zonas propio de un escudo de Capa 2, que Gunner dio de baja
-      //    ("el escudo numero 2... no sirve") — se sacó, ver copilot.ts. El
-      //    marcador del copiloto siempre fue y vuelve a ser 1:1 con lo que
-      //    sugiere la Capa 1.
+      // Fix: un giro = UN solo evento para este marcador, en los dos modos.
+      // Acierto = ganó AL MENOS un lado (si hay dos jugándose); error =
+      // perdieron los dos. Así "racha de errores seguidos" sigue significando
+      // "giros seguidos", igual que antes de que existiera la cobertura doble
+      // y que el freno de la sección 3.1 del manual (pensado en giros, no en
+      // fichas sueltas) — un giro mixto (un lado ganó) corta la racha, no la
+      // deja en el aire.
       const copHit: boolean | null =
-        pend.copSug === 'doc' ? docHit : pend.copSug === 'col' ? colHit : null;
+        copHitDoc !== null && copHitCol !== null ? (copHitDoc || copHitCol) : (copHitDoc ?? copHitCol);
 
       if (copHit !== null) {
         const cs = { ...st.copScore };
-        if (copHit === true) { cs.hits += 1; cs.streak = 0; }
+        if (copHit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         copScore = cs;
       }
+
+      // ── Alimentar la ventana de COBERTURA DOBLE con el número real de
+      //    este giro — independiente de si se jugó o no, de si acertó o
+      //    no. Exactamente una vez por giro real resuelto. ──
+      registrarGiroCobertura(spin);
 
       if (docHit !== null || colHit !== null) {
         const c = { ...counters };
@@ -301,12 +334,16 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     const pending: Pending = {
       n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick,
       copSug: liveDecision.mercado,
+      copPickDocOverride: liveDecision.pickDoc ?? null,
+      copPickColOverride: liveDecision.pickCol ?? null,
     };
 
     set({ history, lastN: p.n, pending, counters, cellReg, copScore, liveDecision });
   },
 
   reset: () => {
+    resetCobertura(); // limpia la ventana y apaga la cobertura doble —
+                       // ANTES de recalcular decisionInicial(), que la lee.
     set({
       history: [], lastN: -1, pending: null,
       counters: { ...EMPTY_COUNTERS },
@@ -373,12 +410,9 @@ export const useCopStreak = (): number => useTelemetryStore((s) => s.copScore.ma
 // existía useCopStreak(), que a pesar del nombre devuelve maxStreak (la
 // peor racha histórica de la sesión), no la racha actual. CopilotScoreboard
 // (MatrixPanel.tsx) necesitaba "RACHA AHORA" y, al no tener este selector,
-// terminó recalculándolo a mano recorriendo todo el history con
-// decidirConEstado() — que es solo Capa 1 y por eso ignoraba al escudo
-// (Capa 2) por completo. copScore YA se mantiene correcto en vivo (ver
-// ingest(), más arriba: usa pend.copSug, que desde que MatrixPanel escribe
-// ahí la salida de decidirPiloto() incluye Capa1+Capa2) — solo faltaba
-// este selector para leerlo.
+// terminó recalculándolo a mano recorriendo todo el history. copScore YA se
+// mantiene correcto en vivo (ver ingest(), más arriba) — solo faltaba este
+// selector para leerlo.
 export const useCopLiveStreak = (): number => useTelemetryStore((s) => s.copScore.streak);
 export const useCopWr = (): number | null => useTelemetryStore((s) => {
   const t = s.copScore.hits + s.copScore.misses;
