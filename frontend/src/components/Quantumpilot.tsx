@@ -28,39 +28,13 @@
 // Se sacó "EFICIENCIA POR CATEGORÍA" (el grid chico del final): quedó
 // redundante contra CategoryTable, que ya trae lo mismo y más completo.
 //
-// v3 (sep 2026) — REDISEÑO "INSTRUMENT PANEL" (sin cards), mismo pase que
-// MatrixPanel.tsx/CategoryTable.tsx/GodBetPanel.tsx/BankrollLedger.tsx.
-// Lo que cambió es SOLO presentación — cero lógica nueva, cero cambio de
-// props, cero cambio de comportamiento de click/override:
-//   - La fila "ESTADO/HUD/RADAR/Σp" eran 4 cajas con fondo en gradiente,
-//     borde y sombra cada una. Ahora es UNA barra de instrumento con
-//     divisores finos de 1px — el mismo patrón que ya usaba
-//     CopilotScoreboard (MatrixPanel.tsx) — así todo el panel habla un solo
-//     idioma visual.
-//   - "MESA" (barra CCS) perdió la caja alrededor; la barra en sí (el
-//     gauge) se mantiene — un medidor es exactamente lo que corresponde en
-//     un instrument panel, lo que sobraba era el marco.
-//   - DocColQuickPick (pick de docenas/columnas) y el botón TARGET LOCK de
-//     GOD perdieron el fondo en pill/gradiente, el borde y los corner-
-//     brackets decorativos. Quedan como acento lateral + texto — el único
-//     glow real del panel sigue siendo el pick activo de TARGET LOCK (ahí
-//     sí hay algo "pasando ahora"), no cada número de la pantalla.
-//   - "ERRORES · GOD TARGET" era una fila en caja; ahora es una segunda
-//     barra de instrumento igual a CopilotScoreboard (CONSEC / MÁX /
-//     ERR/HIT con divisores), para no mezclar dos lenguajes visuales en la
-//     misma columna.
-//   - SeccionLabel pasó a ser una "banda": el mismo texto rotulador de
-//     siempre + una línea fina debajo, marcando el corte entre secciones
-//     en vez de dejar todo flotando en el mismo espacio.
-//   - La grilla de 3 columnas (260px / 545-600px / 320px), el acordeón-less
-//     layout, CategoryTable/GodBetPanel/ZoneDetailGrid/BankrollLedger y
-//     TODA la lógica de abajo (useDrag, ParticleCanvas, override, topPick,
-//     fetch de /api/pilot/override) quedan intactos.
-//
 // Tracker de override (sin cambios):
 //   - Click en TARGET LOCK o en cualquier sugerencia → POST /api/pilot/override
 //   - GET /api/pilot/override al montar para sincronizar estado
 //   - El backend cuenta wins/losses sobre la apuesta elegida por el usuario.
+//
+// v3 (rediseño trading) — SOLO VISUAL. Cero cambios de lógica, hooks, fetch,
+// prop names, IDs ni conectores.
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
@@ -68,6 +42,8 @@ import { CopilotOrder, CopilotScoreboard, ZoneDetailGrid, ZoneQuickBadges } from
 import { CategoryTable, toState, pickLabel, type BadgeState } from '@/components/CategoryTable';
 import { GodBetPanel } from '@/components/GodBetPanel';
 import { BankrollLedger } from '@/components/BankrollLedger';
+
+const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
@@ -273,12 +249,12 @@ function ParticleCanvas({ active }: { active: boolean }) {
     resize();
     window.addEventListener('resize', resize);
 
-    const N = 40;
+    const N = 30;
     const nodes = Array.from({ length: N }).map(() => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 1.5,
-      vy: (Math.random() - 0.5) * 1.5,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: (Math.random() - 0.5) * 0.6,
     }));
 
     const draw = () => {
@@ -287,7 +263,7 @@ function ParticleCanvas({ active }: { active: boolean }) {
       const W = canvas.width;
       const H = canvas.height;
       const isAct = activeRef.current;
-      const colorBase = isAct ? 'rgba(220, 38, 38' : 'rgba(100, 116, 139';
+      const colorBase = isAct ? 'rgba(239, 68, 68' : 'rgba(34, 211, 238';
 
       for (let i = 0; i < N; i++) {
         nodes[i].x += nodes[i].vx;
@@ -299,9 +275,9 @@ function ParticleCanvas({ active }: { active: boolean }) {
           const dx = nodes[i].x - nodes[j].x;
           const dy = nodes[i].y - nodes[j].y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 60) {
+          if (dist < 90) {
             ctx.beginPath();
-            ctx.strokeStyle = `${colorBase}, ${1 - dist / 60})`;
+            ctx.strokeStyle = `${colorBase}, ${0.5 * (1 - dist / 90)})`;
             ctx.lineWidth = 0.5;
             ctx.moveTo(nodes[i].x, nodes[i].y);
             ctx.lineTo(nodes[j].x, nodes[j].y);
@@ -309,8 +285,8 @@ function ParticleCanvas({ active }: { active: boolean }) {
           }
         }
         ctx.beginPath();
-        ctx.fillStyle = `${colorBase}, 0.8)`;
-        ctx.arc(nodes[i].x, nodes[i].y, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `${colorBase}, 0.6)`;
+        ctx.arc(nodes[i].x, nodes[i].y, 1.1, 0, Math.PI * 2);
         ctx.fill();
       }
       rafRef.current = requestAnimationFrame(draw);
@@ -326,7 +302,7 @@ function ParticleCanvas({ active }: { active: boolean }) {
   return (
     <canvas
       ref={ref}
-      className="absolute inset-0 w-full h-full pointer-events-none opacity-30 z-0"
+      className="absolute inset-0 w-full h-full pointer-events-none opacity-20 z-0"
     />
   );
 }
@@ -340,50 +316,92 @@ const fmtPctClass = (pct: number): string => {
   return 'text-red-400';
 };
 
-// Banda de sección: rótulo + línea fina debajo, reutilizada en todo el
-// cockpit para que cada bloque diga de dónde sale el número (evita el
-// "¿cuál marcador miro?") y marque el corte con la sección siguiente sin
-// meter una caja — es la idea de "banda" de la crítica de Gunner, aplicada
-// como el separador estándar de todo el panel. `right` es para contenido
-// extra alineado a la derecha del rótulo (p. ej. los chips de ZONA).
-function Band({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+// Rótulo chico de sección, reutilizado en todo el cockpit para que cada
+// bloque diga de dónde sale el número (evita el "¿cuál marcador miro?").
+function SeccionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: '1px solid rgba(34, 211, 238, 0.15)', paddingBottom: 4,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '2px 0 2px',
+        fontFamily: MONO,
+        fontSize: 9,
+        letterSpacing: '0.26em',
+        color: '#64748b',
+        textTransform: 'uppercase',
+        fontWeight: 800,
       }}
     >
-      <span className="text-[11px] text-cyan-500/70" style={{ letterSpacing: '0.3em' }}>{children}</span>
-      {right}
+      <span style={{ width: 3, height: 11, background: '#22d3ee', boxShadow: '0 0 5px rgba(34,211,238,0.45)' }} />
+      <span>{children}</span>
+      <span style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(34,211,238,0.20) 0%, transparent 100%)' }} />
     </div>
   );
 }
 
-// Pick concreto de DOCENAS/COLUMNAS (1-12, Col 2, etc.) — responde el
+// Chip DOCENAS/COLUMNAS con pick concreto (1-12, Col 2, etc.) — responde el
 // reclamo de Gunner: el veredicto del escudo ("DOCENAS · ENTRÁ") dice QUÉ
 // MERCADO, no CUÁL docena/columna específica. Lee bet_advice con la MISMA
 // función (toState/pickLabel) que usa CategoryTable, así nunca puede mostrar
 // algo distinto de lo que dice la fila "Docenas"/"Columnas" de la tabla.
 // Va pegado a CopilotOrder, arriba de todo — cero scroll para verlo.
-//
-// v3: sin pill de fondo — acento lateral del color de estado + texto, igual
-// que el resto de los bloques de estado de este rediseño. El badge BET/PRB/
-// WT pasa de chip con fondo a texto plano del mismo color.
-const BADGE_COLOR: Record<BadgeState, string> = { bet: '#4ade80', prb: '#fbbf24', wt: '#6b7280' };
+const BADGE_BG: Record<BadgeState, string> = {
+  bet: 'bg-green-600/20 border-green-500/50 text-green-300',
+  prb: 'bg-amber-600/20 border-amber-500/50 text-amber-300',
+  wt:  'bg-gray-700/25 border-gray-600/40 text-gray-400',
+};
 const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
 
+// (Los BADGE_BG/BADGE_TXT de arriba se dejan por compat — el nuevo
+// DocColQuickPick ya no los usa pero los mantengo por si algo externo los
+// importara; no rompen nada.)
+void BADGE_BG;
+void BADGE_TXT;
+
+const QUICK_BG: Record<BadgeState, { bg: string; bd: string; tx: string }> = {
+  bet: { bg: 'rgba(16,185,129,0.10)', bd: 'rgba(16,185,129,0.40)', tx: '#10b981' },
+  prb: { bg: 'rgba(245,158,11,0.10)', bd: 'rgba(245,158,11,0.40)', tx: '#f59e0b' },
+  wt:  { bg: 'rgba(100,116,139,0.06)', bd: 'rgba(100,116,139,0.25)', tx: '#64748b' },
+};
+
 function DocColQuickPick({ label, state, pick }: { label: string; state: BadgeState; pick: string }) {
-  const color = BADGE_COLOR[state];
+  const c = QUICK_BG[state];
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderLeft: `3px solid ${color}`, paddingLeft: 9 }}>
-      <span className="text-[10px] font-bold text-gray-400 shrink-0" style={{ letterSpacing: '0.15em' }}>{label}</span>
-      <span className="flex items-center gap-2 min-w-0">
-        <span className="text-[9px] font-bold shrink-0" style={{ color, letterSpacing: '0.1em' }}>{BADGE_TXT[state]}</span>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '6px 10px',
+        borderRadius: 3,
+        background: c.bg,
+        border: `1px solid ${c.bd}`,
+        fontFamily: MONO,
+      }}
+    >
+      <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', letterSpacing: '0.14em', flexShrink: 0 }}>
+        {label}
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{
+          fontSize: 8.5, fontWeight: 800, padding: '1px 5px', borderRadius: 2,
+          background: 'rgba(0,0,0,0.3)', color: c.tx, border: `1px solid ${c.bd}`,
+          flexShrink: 0, letterSpacing: '0.06em',
+        }}>{state === 'bet' ? 'BET' : state === 'prb' ? 'PRB' : 'WT'}</span>
         <span
           title={pick}
-          className="text-[13px] font-black text-white"
-          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            color: '#e2e8f0',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: 150,
+          }}
         >
           {pick}
         </span>
@@ -529,27 +547,23 @@ export function QuantumPilot({
         style={{
           left: pos.x,
           top: pos.y,
-          background:
-            'linear-gradient(135deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
-          backdropFilter: 'blur(20px)',
+          background: 'linear-gradient(135deg, #0a0e17 0%, #0d1219 100%)',
           border: godBet.active
-            ? '1px solid rgba(220, 38, 38, 0.6)'
-            : '1px solid rgba(34, 211, 238, 0.4)',
+            ? '1px solid rgba(239,68,68,0.55)'
+            : '1px solid rgba(34,211,238,0.35)',
           boxShadow: godBet.active
-            ? '0 0 18px rgba(220, 38, 38, 0.5), inset 0 1px 0 rgba(248, 113, 113, 0.2)'
-            : '0 0 18px rgba(34, 211, 238, 0.4), inset 0 1px 0 rgba(103, 232, 249, 0.2)',
+            ? '0 0 0 1px rgba(239,68,68,0.10), 0 4px 14px rgba(0,0,0,0.5)'
+            : '0 0 0 1px rgba(34,211,238,0.06), 0 4px 14px rgba(0,0,0,0.5)',
         }}
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
         onClick={() => setMinimized(false)}
       >
         <span
-          className={`text-2xl ${godBet.active ? 'animate-pulse' : ''}`}
+          className={godBet.active ? 'animate-pulse' : ''}
           style={{
-            color: godBet.active ? '#f87171' : '#67e8f9',
-            textShadow: godBet.active
-              ? '0 0 10px rgba(248, 113, 113, 0.8)'
-              : '0 0 10px rgba(103, 232, 249, 0.8)',
+            fontSize: 20,
+            color: godBet.active ? '#f87171' : '#22d3ee',
           }}
         >
           ⚡
@@ -558,63 +572,95 @@ export function QuantumPilot({
     );
   }
 
+  const kpiCell: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: '8px 12px',
+    minWidth: 0,
+    borderLeft: '1px solid rgba(148,163,184,0.10)',
+    fontFamily: MONO,
+  };
+  const kpiLabel: React.CSSProperties = {
+    fontSize: 8.5,
+    color: '#64748b',
+    letterSpacing: '0.20em',
+    fontWeight: 800,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  };
+  const kpiValue: React.CSSProperties = {
+    fontSize: 15,
+    fontWeight: 900,
+    letterSpacing: '0.02em',
+    fontVariantNumeric: 'tabular-nums',
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
+  };
+
   // ── Render principal
   return (
     <div
-      className="fixed z-50 w-[1200px] max-w-[95vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[1200px] max-w-[95vw] max-h-[96vh] rounded-lg overflow-hidden font-mono text-gray-200 select-none flex flex-col"
       style={{
         left: pos.x,
         top: pos.y,
-        background:
-          'linear-gradient(145deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.92) 50%, rgba(8, 12, 22, 0.95) 100%)',
-        backdropFilter: 'blur(20px) saturate(140%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+        background: 'linear-gradient(180deg, #0b1017 0%, #080c14 100%)',
         border: godBet.active
-          ? '1px solid rgba(220, 38, 38, 0.5)'
-          : '1px solid rgba(34, 211, 238, 0.25)',
+          ? '1px solid rgba(239,68,68,0.45)'
+          : '1px solid rgba(148,163,184,0.15)',
         boxShadow: godBet.active
-          ? '0 0 0 1px rgba(220, 38, 38, 0.15) inset, 0 0 25px rgba(220, 38, 38, 0.35), 0 8px 32px rgba(0, 0, 0, 0.6)'
-          : '0 0 0 1px rgba(34, 211, 238, 0.08) inset, 0 0 25px rgba(34, 211, 238, 0.18), 0 8px 32px rgba(0, 0, 0, 0.6)',
+          ? '0 0 0 1px rgba(239,68,68,0.08) inset, 0 12px 40px rgba(0,0,0,0.75)'
+          : '0 0 0 1px rgba(34,211,238,0.05) inset, 0 12px 40px rgba(0,0,0,0.75)',
       }}
     >
       <ParticleCanvas active={godBet.active} />
 
       {/* ═══ Header ═══ */}
       <div
-        className="relative z-10 flex items-center justify-between px-4 py-3 cursor-grab active:cursor-grabbing"
+        className="relative z-10 flex items-center justify-between px-4 py-2.5 cursor-grab active:cursor-grabbing"
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
         style={{
           background: godBet.active
-            ? 'linear-gradient(90deg, rgba(127, 29, 29, 0.4) 0%, rgba(69, 10, 10, 0.2) 100%)'
-            : 'linear-gradient(90deg, rgba(8, 47, 73, 0.4) 0%, rgba(15, 23, 42, 0.2) 100%)',
+            ? 'linear-gradient(180deg, rgba(60,15,15,0.55) 0%, rgba(15,8,8,0.30) 100%)'
+            : 'linear-gradient(180deg, rgba(15,25,35,0.55) 0%, rgba(8,12,20,0.30) 100%)',
           borderBottom: godBet.active
-            ? '1px solid rgba(220, 38, 38, 0.3)'
-            : '1px solid rgba(34, 211, 238, 0.2)',
+            ? '1px solid rgba(239,68,68,0.28)'
+            : '1px solid rgba(148,163,184,0.12)',
         }}
       >
         <div className="flex items-center gap-2.5">
           <span
-            className={`text-xl ${godBet.active ? 'text-red-400 animate-pulse' : 'text-cyan-400'}`}
-            style={{
-              textShadow: godBet.active
-                ? '0 0 10px rgba(220, 38, 38, 0.8), 0 0 20px rgba(220, 38, 38, 0.4)'
-                : '0 0 10px rgba(34, 211, 238, 0.8), 0 0 20px rgba(34, 211, 238, 0.4)',
-            }}
+            className={godBet.active ? 'text-red-400 animate-pulse' : 'text-cyan-400'}
+            style={{ fontSize: 16 }}
           >
             ⚡
           </span>
           <span
-            className="font-bold text-[15px]"
             style={{
-              letterSpacing: '0.25em',
+              fontFamily: MONO,
+              fontWeight: 800,
+              fontSize: 12,
+              letterSpacing: '0.34em',
               color: godBet.active ? '#fca5a5' : '#67e8f9',
-              textShadow: godBet.active
-                ? '0 0 8px rgba(220, 38, 38, 0.5)'
-                : '0 0 8px rgba(34, 211, 238, 0.4)',
             }}
           >
             QUANTUM PILOT
+          </span>
+          <span
+            style={{
+              fontFamily: MONO,
+              fontSize: 8.5,
+              color: '#475569',
+              letterSpacing: '0.2em',
+              paddingLeft: 6,
+              borderLeft: '1px solid rgba(148,163,184,0.15)',
+              fontWeight: 700,
+            }}
+          >
+            v2.4 · live
           </span>
         </div>
         <button
@@ -630,85 +676,182 @@ export function QuantumPilot({
         className="relative z-10 h-px w-full"
         style={{
           background: godBet.active
-            ? 'linear-gradient(90deg, transparent 0%, rgba(220, 38, 38, 0.6) 50%, transparent 100%)'
-            : 'linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.5) 50%, transparent 100%)',
+            ? 'linear-gradient(90deg, transparent 0%, rgba(239,68,68,0.4) 50%, transparent 100%)'
+            : 'linear-gradient(90deg, transparent 0%, rgba(34,211,238,0.35) 50%, transparent 100%)',
         }}
       />
 
       <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col p-4 gap-3 pilot-scroll">
-        {/* ═══ 1. Estado verdict — una sola barra de instrumento, divisores
-             finos en vez de 4 cajas sueltas. Mismo patrón que
-             CopilotScoreboard (MatrixPanel.tsx). ═══ */}
-        <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: '1px solid rgba(34, 211, 238, 0.12)', paddingBottom: 8 }}>
-          <div style={{ flex: 1, paddingRight: 12, borderRight: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <span className="text-[11px] text-gray-500" style={{ letterSpacing: '0.25em' }}>ESTADO</span>
+        {/* ═══ 1. Estado verdict — barra de KPIs trading ═══ */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1.4fr 0.9fr 0.8fr 1.5fr',
+            background: 'rgba(6,9,17,0.65)',
+            border: '1px solid rgba(148,163,184,0.10)',
+            borderRadius: 4,
+            overflow: 'hidden',
+          }}
+        >
+          {/* ESTADO */}
+          <div
+            style={{
+              ...kpiCell,
+              borderLeft: 'none',
+              background: godBet.active
+                ? 'linear-gradient(180deg, rgba(60,15,15,0.35) 0%, rgba(20,6,6,0.15) 100%)'
+                : 'linear-gradient(180deg, rgba(80,40,8,0.25) 0%, rgba(20,12,4,0.10) 100%)',
+            }}
+          >
+            <span style={kpiLabel}>Estado</span>
             <span
-              className="font-black text-base"
               style={{
-                letterSpacing: '0.08em', marginTop: 2,
-                color: godBet.active ? '#f87171' : '#fbbf24',
-                textShadow: godBet.active
-                  ? '0 0 10px rgba(248, 113, 113, 0.6)'
-                  : '0 0 10px rgba(251, 191, 36, 0.5)',
+                ...kpiValue,
+                fontSize: 16,
+                letterSpacing: '0.14em',
+                color: godBet.active ? '#f87171' : '#f59e0b',
               }}
             >
               {topPick ? 'CON PICK' : 'EN ESPERA'}
             </span>
           </div>
-          <div style={{ padding: '0 12px', borderRight: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 64 }}>
-            <span className="text-[11px] text-gray-500" style={{ letterSpacing: '0.2em' }}>HUD</span>
-            <span className="font-bold text-[13px] truncate" style={{ color: '#67e8f9', marginTop: 2 }}>{hudState}</span>
-          </div>
-          <div style={{ padding: '0 12px', borderRight: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 54 }}>
-            <span className="text-[11px] text-gray-500" style={{ letterSpacing: '0.2em' }}>RADAR</span>
-            <span className="font-black text-base" style={{ color: godBet.radar_score >= 7 ? '#4ade80' : '#cbd5e1', marginTop: 2 }}>
-              {godBet.radar_score}/10
+
+          {/* HUD */}
+          <div style={kpiCell}>
+            <span style={kpiLabel}>HUD</span>
+            <span
+              style={{
+                ...kpiValue,
+                fontSize: 14,
+                color: '#67e8f9',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: '100%',
+              }}
+            >
+              {hudState}
             </span>
           </div>
+
+          {/* RADAR */}
+          <div style={kpiCell}>
+            <span style={kpiLabel}>Radar</span>
+            <span
+              style={{
+                ...kpiValue,
+                fontSize: 15,
+                color: godBet.radar_score >= 7 ? '#10b981' : '#cbd5e1',
+              }}
+            >
+              {godBet.radar_score}<span style={{ fontSize: 10, color: '#475569', marginLeft: 1 }}>/10</span>
+            </span>
+          </div>
+
+          {/* SIGMA / grupos */}
           <div
-            style={{ paddingLeft: 12, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 90 }}
+            style={{ ...kpiCell, alignItems: 'flex-end' }}
             title={`Grupos individuales de ${godBet.best_p_key ?? '—'} y su suma`}
           >
-            <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.12em' }}>
+            <span style={{ ...kpiLabel, textAlign: 'right', width: '100%' }}>
               {({
                 docenas: 'DOC', columnas: 'COL', color: 'CLR',
                 paridad: 'PAR', rango: 'RNG',
               } as Record<string, string>)[godBet.best_p_key ?? ''] ?? (godBet.best_p_key ?? 'P').toUpperCase()}
             </span>
-            <span className="text-[11px] font-mono text-cyan-400 leading-tight">
+            <span
+              style={{
+                fontFamily: MONO,
+                fontVariantNumeric: 'tabular-nums',
+                fontSize: 10,
+                color: '#67e8f9',
+                lineHeight: 1.35,
+                whiteSpace: 'nowrap',
+              }}
+            >
               {(godBet.best_g1 ?? '—')} {godBet.best_p1 != null ? (godBet.best_p1 * 100).toFixed(1) : '—'}
             </span>
-            <span className="text-[11px] font-mono text-cyan-500 leading-tight">
+            <span
+              style={{
+                fontFamily: MONO,
+                fontVariantNumeric: 'tabular-nums',
+                fontSize: 10,
+                color: '#22d3ee',
+                lineHeight: 1.35,
+                whiteSpace: 'nowrap',
+              }}
+            >
               {(godBet.best_g2 ?? '—')} {godBet.best_p2 != null ? (godBet.best_p2 * 100).toFixed(1) : '—'}
             </span>
-            <span className="font-black text-xs font-mono" style={{ color: '#67e8f9' }}>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontVariantNumeric: 'tabular-nums',
+                fontSize: 11,
+                fontWeight: 900,
+                color: '#e2e8f0',
+                marginTop: 2,
+              }}
+            >
               Σ{godBet.best_p_raw != null ? (godBet.best_p_raw * 100).toFixed(1) : '—'}%
             </span>
           </div>
         </div>
 
-        {/* ═══ Mesa CCS bar — el gauge se mantiene (es un medidor real, no
-             una card); lo que se sacó fue el marco alrededor. ═══ */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span className="text-[11px] text-gray-500" style={{ letterSpacing: '0.2em' }}>MESA</span>
+        {/* ═══ Mesa CCS bar ═══ */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '7px 12px',
+            background: 'rgba(6,9,17,0.6)',
+            border: '1px solid rgba(148,163,184,0.10)',
+            borderRadius: 4,
+            fontFamily: MONO,
+          }}
+        >
+          <span style={{ fontSize: 9, color: '#64748b', letterSpacing: '0.24em', fontWeight: 800 }}>MESA</span>
           <div
-            className="flex-1 h-1.5 rounded-full overflow-hidden"
-            style={{ background: 'rgba(15, 23, 42, 0.8)' }}
+            style={{
+              flex: 1,
+              height: 5,
+              borderRadius: 1,
+              overflow: 'hidden',
+              background: 'rgba(15,23,42,0.9)',
+              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.7)',
+              position: 'relative',
+            }}
           >
             <div
-              className="h-full rounded-full transition-all"
               style={{
+                height: '100%',
                 width: `${Math.min(100, ccsPct)}%`,
                 background:
                   ccsPct >= 69
-                    ? 'linear-gradient(90deg, #22d3ee 0%, #4ade80 100%)'
+                    ? 'linear-gradient(90deg, #22d3ee 0%, #10b981 100%)'
                     : ccsPct >= 50
                     ? 'linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%)'
-                    : 'linear-gradient(90deg, #475569 0%, #64748b 100%)',
+                    : 'linear-gradient(90deg, #334155 0%, #475569 100%)',
+                transition: 'width 400ms ease, background 200ms',
               }}
             />
+            {/* tick marks a 50 y 70 */}
+            <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1, background: 'rgba(255,255,255,0.12)' }} />
+            <div style={{ position: 'absolute', top: 0, bottom: 0, left: '70%', width: 1, background: 'rgba(255,255,255,0.20)' }} />
           </div>
-          <span className={`text-[13px] font-bold ${fmtPctClass(ccsPct)}`}>{ccsPct}/100</span>
+          <span
+            style={{
+              fontFamily: MONO,
+              fontVariantNumeric: 'tabular-nums',
+              fontSize: 13,
+              fontWeight: 900,
+              color: ccsPct >= 69 ? '#10b981' : ccsPct >= 50 ? '#f59e0b' : '#94a3b8',
+              minWidth: 66,
+              textAlign: 'right',
+            }}
+          >
+            {ccsPct}/100
+          </span>
         </div>
 
         {/* ═══ DASHBOARD — 3 columnas, todo siempre visible, sin acordeones:
@@ -717,12 +860,12 @@ export function QuantumPilot({
              chicos, no hace falta más aire) y B flexible entre un mínimo
              y un máximo, para que no se infle con espacio vacío cuando el
              panel es más ancho de lo que su contenido necesita. ═══ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '260px minmax(545px, 600px) 320px', gap: 14, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '270px minmax(520px, 580px) 320px', gap: 14, alignItems: 'start' }}>
         <div className="flex flex-col gap-3">
 
         {/* ═══ 2. DECISIÓN — escudo (en vivo) + GOD (alta precisión) ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <Band>DECISIÓN</Band>
+        <div className="flex flex-col gap-2">
+          <SeccionLabel>Decisión</SeccionLabel>
           <CopilotOrder />
 
           {/* Pick concreto de cada mercado — el escudo dice QUÉ mercado
@@ -741,71 +884,140 @@ export function QuantumPilot({
             );
           })()}
 
-          <div className="mt-1">
-            <span className="text-[10px] text-gray-500 px-1" style={{ letterSpacing: '0.2em' }}>
+          <div style={{ marginTop: 4 }}>
+            <span
+              style={{
+                fontFamily: MONO,
+                fontSize: 8.5,
+                color: '#64748b',
+                letterSpacing: '0.16em',
+                fontWeight: 700,
+              }}
+            >
               GOD · ALTA PRECISIÓN (motor alterno — activa solo con OPTIMAL + Radar ≥7)
             </span>
           </div>
 
-          {/* v3: sin caja/corner-brackets — acento lateral del color activo
-              (ámbar = override del operador, cian = target normal del motor)
-              + texto. El glow grande en el pick (pick_pretty) es el único
-              glow fuerte de esta columna: es la decisión en curso. */}
           {topPick ? (
             <button
               onClick={() => handleBetClick(topPick)}
               disabled={loadingKey === topPick.bet_key}
-              className="w-full text-left transition-all"
+              className="relative w-full flex flex-col p-3.5 rounded text-left transition-all group overflow-hidden"
               style={{
-                background: 'none',
-                border: 'none',
-                borderLeft: override?.bet_key === topPick.bet_key ? '3px solid #fbbf24' : '3px solid #22d3ee',
-                paddingLeft: 11,
-                cursor: 'pointer',
+                fontFamily: MONO,
+                background:
+                  override?.bet_key === topPick.bet_key
+                    ? 'linear-gradient(180deg, rgba(120,53,15,0.35) 0%, rgba(40,20,4,0.45) 100%)'
+                    : 'linear-gradient(180deg, rgba(8,47,73,0.30) 0%, rgba(10,18,30,0.55) 100%)',
+                border:
+                  override?.bet_key === topPick.bet_key
+                    ? '1px solid rgba(251,191,36,0.60)'
+                    : '1px solid rgba(34,211,238,0.28)',
+                boxShadow:
+                  override?.bet_key === topPick.bet_key
+                    ? '0 0 0 1px rgba(251,191,36,0.10) inset, 0 0 14px rgba(251,191,36,0.18)'
+                    : '0 0 0 1px rgba(34,211,238,0.06) inset, 0 0 14px rgba(34,211,238,0.08)',
+                borderRadius: 4,
               }}
             >
-              <div className="flex justify-between items-center mb-1">
+              <span
+                className="absolute top-1 left-1 w-2.5 h-2.5 border-t border-l"
+                style={{
+                  borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251,191,36,0.75)' : 'rgba(34,211,238,0.55)',
+                }}
+              />
+              <span
+                className="absolute top-1 right-1 w-2.5 h-2.5 border-t border-r"
+                style={{
+                  borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251,191,36,0.75)' : 'rgba(34,211,238,0.55)',
+                }}
+              />
+              <span
+                className="absolute bottom-1 left-1 w-2.5 h-2.5 border-b border-l"
+                style={{
+                  borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251,191,36,0.75)' : 'rgba(34,211,238,0.55)',
+                }}
+              />
+              <span
+                className="absolute bottom-1 right-1 w-2.5 h-2.5 border-b border-r"
+                style={{
+                  borderColor: override?.bet_key === topPick.bet_key ? 'rgba(251,191,36,0.75)' : 'rgba(34,211,238,0.55)',
+                }}
+              />
+
+              <div className="flex justify-between items-center mb-2 relative">
                 <span
-                  className="text-[12px] font-bold"
-                  style={{ letterSpacing: '0.2em', color: override?.bet_key === topPick.bet_key ? '#fcd34d' : '#67e8f9' }}
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: 2,
+                    letterSpacing: '0.20em',
+                    background: override?.bet_key === topPick.bet_key ? 'rgba(251,191,36,0.15)' : 'rgba(34,211,238,0.10)',
+                    color: override?.bet_key === topPick.bet_key ? '#fcd34d' : '#67e8f9',
+                    border: override?.bet_key === topPick.bet_key ? '1px solid rgba(251,191,36,0.30)' : '1px solid rgba(34,211,238,0.22)',
+                  }}
                 >
                   {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : 'TARGET LOCK'}
                 </span>
                 {verdict?.override_forced_go ? (
                   <span
-                    className="text-[9.5px] font-bold"
-                    style={{ letterSpacing: '0.15em', color: '#fde68a' }}
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 8.5,
+                      fontWeight: 800,
+                      padding: '2px 6px',
+                      borderRadius: 2,
+                      letterSpacing: '0.16em',
+                      color: '#fde68a',
+                      backgroundColor: 'rgba(251,191,36,0.08)',
+                      border: '1px solid rgba(251,191,36,0.35)',
+                    }}
                     title="Override forzó GO sobre threshold del Pilot (CCS ≥ 60% en mesa CAUTION)"
                   >
-                    ⚠ OVERRIDE FORZADO
+                    OVERRIDE FORZADO
                   </span>
                 ) : null}
                 <span
-                  className="text-base font-black"
                   style={{
+                    fontFamily: MONO,
+                    fontVariantNumeric: 'tabular-nums',
+                    fontSize: 16,
+                    fontWeight: 900,
                     color:
                       topPick.conf_pct >= 80 ? '#67e8f9'
-                        : topPick.conf_pct >= 60 ? '#22d3ee'
-                        : topPick.conf_pct >= 40 ? '#fbbf24'
-                        : '#94a3b8',
+                      : topPick.conf_pct >= 60 ? '#22d3ee'
+                      : topPick.conf_pct >= 40 ? '#fbbf24'
+                      : '#94a3b8',
                   }}
                 >
                   {topPick.conf_pct}%
                 </span>
               </div>
-              <div className="flex justify-between items-end">
-                <span className="text-[13px] text-gray-500" style={{ letterSpacing: '0.2em' }}>
+              <div className="flex justify-between items-end mt-1 relative gap-2">
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 9.5,
+                    color: '#64748b',
+                    letterSpacing: '0.20em',
+                    fontWeight: 700,
+                  }}
+                >
                   {CAT_LABEL[topPick.bet_key] ?? topPick.bet_key.toUpperCase()}
                 </span>
                 <span
-                  className="text-2xl font-black tracking-wider"
                   style={{
+                    fontFamily: MONO,
+                    fontSize: 20,
+                    fontWeight: 900,
+                    letterSpacing: '0.02em',
                     color: '#ffffff',
-                    textShadow:
-                      override?.bet_key === topPick.bet_key
-                        ? '0 0 14px rgba(251, 191, 36, 0.7)'
-                        : '0 0 12px rgba(34, 211, 238, 0.5)',
-                    letterSpacing: '0.05em',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '65%',
                   }}
                 >
                   {topPick.pick_pretty}
@@ -813,38 +1025,97 @@ export function QuantumPilot({
               </div>
             </button>
           ) : (
-            <div style={{ borderLeft: '3px solid #475569', paddingLeft: 11, padding: '2px 0 2px 11px' }}>
-              <span className="text-[12px] text-gray-600 font-bold" style={{ letterSpacing: '0.2em' }}>
+            <div
+              className="flex items-center justify-center p-3.5 rounded"
+              style={{
+                background: 'rgba(6,9,17,0.5)',
+                border: '1px dashed rgba(100,116,139,0.30)',
+                borderRadius: 4,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: '#475569',
+                  fontWeight: 800,
+                  letterSpacing: '0.22em',
+                }}
+              >
                 GOD SIN TARGET — ESPERANDO
               </span>
             </div>
           )}
         </div>
 
-        {/* ═══ 3. MARCADOR — escudo (en vivo) + target de GOD, lado a lado.
-             v3: la fila ERRORES pasa a ser una segunda barra de instrumento
-             (mismos divisores de CopilotScoreboard), en vez de una caja con
-             fondo propio — las dos filas de esta columna hablan el mismo
-             idioma visual ahora. ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <Band>MARCADOR</Band>
+        {/* ═══ 3. MARCADOR — escudo (en vivo) + target de GOD, lado a lado ═══ */}
+        <div className="flex flex-col gap-2">
+          <SeccionLabel>Marcador</SeccionLabel>
           <CopilotScoreboard />
-          <div style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 6 }}>
-            <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.15em', minWidth: 110 }}>
-              GOD TARGET
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 12px',
+              background: 'rgba(6,9,17,0.65)',
+              border: '1px solid rgba(148,163,184,0.10)',
+              borderRadius: 4,
+              fontFamily: MONO,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 9,
+                color: '#64748b',
+                letterSpacing: '0.20em',
+                fontWeight: 800,
+              }}
+            >
+              ERRORES · GOD TARGET
             </span>
-            <div style={{ display: 'flex', flex: 1 }}>
-              <div style={{ flex: 1, padding: '0 10px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em' }}>CONSEC</div>
-                <div className="font-bold text-sm" style={{ color: consecErr > 0 ? '#f87171' : '#94a3b8' }}>{consecErr}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <span style={{ fontSize: 9, color: '#64748b', letterSpacing: '0.12em' }}>CONSEC</span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: 900,
+                    fontSize: 15,
+                    color: consecErr > 0 ? '#ef4444' : '#94a3b8',
+                  }}
+                >
+                  {consecErr}
+                </span>
               </div>
-              <div style={{ flex: 1, padding: '0 10px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em' }}>MÁX</div>
-                <div className="font-bold text-sm text-white">{maxConsecErr}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <span style={{ fontSize: 9, color: '#64748b', letterSpacing: '0.12em' }}>MÁX</span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: 900,
+                    fontSize: 15,
+                    color: '#ffffff',
+                  }}
+                >
+                  {maxConsecErr}
+                </span>
               </div>
-              <div style={{ flex: 1, padding: '0 10px' }}>
-                <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em' }}>ERR/HIT</div>
-                <div className="font-bold text-sm" style={{ color: '#fb923c' }}>{errHit.toFixed(1)}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <span style={{ fontSize: 9, color: '#64748b', letterSpacing: '0.12em' }}>ERR/HIT</span>
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontVariantNumeric: 'tabular-nums',
+                    fontWeight: 900,
+                    fontSize: 15,
+                    color: '#fb923c',
+                  }}
+                >
+                  {errHit.toFixed(1)}
+                </span>
               </div>
             </div>
           </div>
@@ -861,8 +1132,8 @@ export function QuantumPilot({
              sin acordeón. Los picks de DOCENAS/COLUMNAS que importan para
              operar YA están a la izquierda, en DECISIÓN; esto es la lectura
              completa (color, paridad, rango, números, guardianes…). ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <Band>SUGERENCIAS POR CATEGORÍA (las 9)</Band>
+        <div className="flex flex-col gap-2">
+          <SeccionLabel>Sugerencias por categoría (las 9)</SeccionLabel>
           <CategoryTable payload={payload} counters={counters} errorHist={errorHist} />
           <GodBetPanel
             payload={payload}
@@ -879,8 +1150,11 @@ export function QuantumPilot({
         {/* ── fin columna B / columna C (zona) — propia columna para que
              "las celdas" nunca queden abajo de la tabla de categorías
              esperando scroll ── */}
-        <div className="flex flex-col gap-1.5">
-          <Band right={<ZoneQuickBadges />}>ZONA</Band>
+        <div className="flex flex-col gap-2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 1 }}>
+            <SeccionLabel>Zona</SeccionLabel>
+            <ZoneQuickBadges />
+          </div>
           {/* apiladas (doc arriba, col abajo), versión COMPACTA: Gunner —
               "la celda de columnas debe estar por debajo de la de docenas
               mostrando su eficiencia si no no sirve". Con la tarjeta
@@ -894,7 +1168,9 @@ export function QuantumPilot({
           {/* ═══ BANKROLL — reubicado acá (debajo de COLUMNAS), pedido de
                Gunner: antes cerraba la columna A y quedaba cortado/mal
                ubicado. Misma columna angosta que las celdas de zona. ═══ */}
-          <Band>BANKROLL</Band>
+          <div style={{ marginTop: 4 }}>
+            <SeccionLabel>Bankroll</SeccionLabel>
+          </div>
           <BankrollLedger bankroll={bankroll} />
         </div>
 
