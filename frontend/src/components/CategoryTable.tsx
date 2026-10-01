@@ -1,14 +1,21 @@
 // CategoryTable — Tabla de categorías.
 //
-// Columnas: badge | nombre | pick | W: L: Seq: Max: | AVG
+// Columnas: estado | nombre | pick | W: L: Seq: Max: | AVG
 //
-// v4 (sep 2026) — se sacó el histograma E1-E7 (los cuadritos chicos que
-// marcaban cuántas veces se acertó tras 1/2/3.../7 errores seguidos).
-// Pedido explícito de Gunner: "podemos eliminar los cuadros pequeños que
-// marcan cuantas veces cada error". AVG (el promedio de errores antes de
-// acertar) se queda — es el resumen de esa misma info; el desglose
-// giro-a-giro no se usaba para operar en vivo. `errorHist` se sigue
-// recibiendo (alimenta AVG), solo dejó de leerse fila E1-E7.
+// v5 (sep 2026) — REDISEÑO "INSTRUMENT PANEL" (sin cards). Pedido explícito
+// de Gunner tras una crítica visual externa: dejar de pensar en cajas (pill
+// de color por badge, borde + fondo por panel) y pasar a una única
+// superficie de datos — jerarquía por texto/color/posición, color SOLO para
+// eventos, y la única fila que "brilla" es la que de verdad está jugándose
+// (estado BET). El resto es texto plano. Se sacó la dependencia de
+// className="panel"/"panel-head"/"cat-table-inline" (CSS externo que no se
+// controla desde acá — mismo criterio que ya se usó en v2 para CategoryRow)
+// a favor de estilos inline, igual que el resto del archivo.
+//
+// v4 (sep 2026) — se había sacado el histograma E1-E7 (los cuadritos chicos
+// que marcaban cuántas veces se acertó tras 1/2/3.../7 errores seguidos).
+// AVG (el promedio de errores antes de acertar) se queda — es el resumen de
+// esa misma info. `errorHist` se sigue recibiendo (alimenta AVG).
 //
 // error_hist[key] = { E1, E2, E3, E4, E5, E6, E7, hits_counted, avg_errors }
 
@@ -105,20 +112,16 @@ const CATEGORIES = [
 
 // ── Componente fila ───────────────────────────────────────────────
 //
-// v3 (sep 2026) — REORGANIZACIÓN COMPLETA. El Quantum Pilot pasó a un
-// layout de 2 columnas mucho más ancho (ver Quantumpilot.tsx), así que
-// esta fila vuelve a ser DE UNA SOLA LÍNEA — como una fila de tabla real —
-// en vez de apilarse en 3 (eso era el parche para el panel de 480px que
-// ya no existe). Autocontenida igual que v2, sin depender de CSS externo.
-// Orden de columnas, de izquierda a derecha: badge · nombre · pick ·
-// W:L:Seq:Max · AVG (el histograma E1-E7 que iba después se sacó en v4).
-// Todo visible siempre, nada se oculta — nombre/pick truncan primero (son
-// texto), los números nunca.
+// v5 — sin pill de fondo en el estado: el color YA es la señal (texto
+// BET/PRB/WT coloreado), no hace falta encerrarlo en una cajita. La única
+// fila que recibe tratamiento especial es la que está en BET de verdad
+// (acento lateral + un lavado de fondo casi imperceptible) — "la decisión
+// activa" es lo único que debe destacar, todo lo demás queda discreto.
 
-const BADGE_STYLE: Record<BadgeState, React.CSSProperties> = {
-  bet: { background: 'rgba(34,197,94,0.18)', color: '#86efac', border: '1px solid rgba(34,197,94,0.4)' },
-  prb: { background: 'rgba(245,158,11,0.18)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.4)' },
-  wt:  { background: 'rgba(100,116,139,0.18)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.35)' },
+const STATE_COLOR: Record<BadgeState, string> = {
+  bet: '#4ade80',  // verde — evento accionable
+  prb: '#fbbf24',  // ámbar — esperar
+  wt:  '#64748b',  // gris — sin acción, simplemente está ahí
 };
 const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
 
@@ -139,23 +142,26 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false }: Ro
   const avg = safeInt(errorHist?.avg_errors ? errorHist.avg_errors * 10 : 0) / 10;
   const avgStr = (w + l) === 0 ? '0.0' : avg.toFixed(1);
   const accent = god ? '#fca5a5' : '#67e8f9';
-  const borderColor = god ? 'rgba(220,38,38,0.12)' : 'rgba(34,211,238,0.10)';
+  const stateColor = state === 'bet' && god ? '#f87171' : STATE_COLOR[state];
+  const activo = state === 'bet'; // único estado que "brilla" en la fila
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', borderBottom: `1px solid ${borderColor}` }}>
-      {/* badge */}
-      <span
-        style={{
-          ...BADGE_STYLE[state],
-          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-          letterSpacing: '0.08em', flexShrink: 0, width: 26, textAlign: 'center',
-        }}
-      >
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '6px 6px 6px 7px',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        borderLeft: `3px solid ${activo ? stateColor : 'transparent'}`,
+        background: activo ? `${stateColor}0d` : 'transparent',
+      }}
+    >
+      {/* estado — texto de color, sin cápsula */}
+      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', color: stateColor, flexShrink: 0, width: 24 }}>
         {BADGE_TXT[state]}
       </span>
 
       {/* nombre */}
-      <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 108, flexShrink: 0 }}>
+      <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 104, flexShrink: 0 }}>
         {label}
       </span>
 
@@ -164,7 +170,6 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false }: Ro
         title={pick}
         style={{
           fontSize: 12.5, fontWeight: 700, color: accent,
-          textShadow: `0 0 6px ${god ? 'rgba(248,113,113,0.35)' : 'rgba(34,211,238,0.35)'}`,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           flex: '1 1 auto', minWidth: 40,
         }}
@@ -197,7 +202,7 @@ interface Props {
   countersGod?:  Record<string, Counter>;
   errorHistGod?: Record<string, ErrorHist>;
   title?:        string;
-  inlinePanel?:  boolean;  // true → no renderiza .panel wrapper (uso en GodBetPanel)
+  inlinePanel?:  boolean;  // true → sin encabezado propio ni wrapper (uso en GodBetPanel, que pone su propio título)
 }
 
 export function CategoryTable({
@@ -251,15 +256,17 @@ export function CategoryTable({
 
   const inner = (
     <>
-      <div className="panel-head">
-        <span className="icon">◈</span>
-        <span className="title">{title}</span>
-      </div>
+      {!inlinePanel && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 6 }}>
+          <span style={{ color: god ? '#f87171' : '#67e8f9', fontSize: 10 }}>◈</span>
+          <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.2em', color: '#cbd5e1' }}>{title}</span>
+        </div>
+      )}
       {/* encabezado de columnas — mismos anchos que CategoryRow, así queda
           claro qué es cada número sin tener que adivinar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 4px 5px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <span style={{ width: 26, flexShrink: 0 }} />
-        <span style={{ width: 108, flexShrink: 0, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em' }}>CATEGORÍA</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 5px 7px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <span style={{ width: 24, flexShrink: 0 }} />
+        <span style={{ width: 104, flexShrink: 0, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em' }}>CATEGORÍA</span>
         <span style={{ flex: '1 1 auto', minWidth: 40, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em' }}>PICK</span>
         <span style={{ flexShrink: 0, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em', width: 116 }}>W / L / SEQ / MAX</span>
         <span style={{ width: 52, flexShrink: 0, fontSize: 8.5, color: '#475569', letterSpacing: '0.1em' }}>AVG</span>
@@ -280,6 +287,6 @@ export function CategoryTable({
     </>
   );
 
-  if (inlinePanel) return <div className="cat-table-inline">{inner}</div>;
-  return <div className="panel">{inner}</div>;
+  if (inlinePanel) return <>{inner}</>;
+  return <div style={{ display: 'flex', flexDirection: 'column' }}>{inner}</div>;
 }
