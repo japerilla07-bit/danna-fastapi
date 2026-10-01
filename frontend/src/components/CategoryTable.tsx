@@ -1,14 +1,36 @@
 // CategoryTable — Tabla de categorías.
 //
-// Columnas: badge | nombre | pick | W: L: Seq: Max: | AVG
+// Columnas: estado | nombre | pick | W: L: Seq: Max: | AVG
 //
-// v4 (sep 2026) — se sacó el histograma E1-E7 (los cuadritos chicos que
-// marcaban cuántas veces se acertó tras 1/2/3.../7 errores seguidos).
-// Pedido explícito de Gunner: "podemos eliminar los cuadros pequeños que
-// marcan cuantas veces cada error". AVG (el promedio de errores antes de
-// acertar) se queda — es el resumen de esa misma info; el desglose
-// giro-a-giro no se usaba para operar en vivo. `errorHist` se sigue
-// recibiendo (alimenta AVG), solo dejó de leerse fila E1-E7.
+// v5 (sep 2026) — REDISEÑO "INSTRUMENT PANEL" (sin cards). Pedido explícito
+// de Gunner tras una crítica visual externa: dejar de pensar en cajas (pill
+// de color por badge, borde + fondo por panel) y pasar a una única
+// superficie de datos — jerarquía por texto/color/posición, color SOLO para
+// eventos, y la única fila que "brilla" es la que de verdad está jugándose
+// (estado BET). El resto es texto plano. Se sacó la dependencia de
+// className="panel"/"panel-head"/"cat-table-inline" (CSS externo que no se
+// controla desde acá — mismo criterio que ya se usó en v2 para CategoryRow)
+// a favor de estilos inline, igual que el resto del archivo.
+//
+// v6 (sep 2026) — CORRECCIÓN sobre v5: Gunner probó v5 en vivo y la rechazó
+// — "los textos son pequeños no es facil leer, no hay separacion clara, no
+// hay cian flash no hay micropaneles". v5 interpretó "sin cards" como CERO
+// contenedores, y eso quedó ilegible bajo presión real de mesa. Corrección:
+// - MICROPANEL: la tabla entera (no cada fila — eso volvería a ser "cards
+//   dentro de cards") vuelve a tener UN borde cian visible + fondo sutil +
+//   radio chico. Una sola capa, nada anidado.
+// - Tamaños de fuente subidos en todo dato que se lee para operar (pick,
+//   nombre de categoría, stats) — ya no es "letra de letra chica de excel".
+// - Separadores reales: el borde entre header y filas, y entre filas, sube
+//   de opacidad a algo que se ve de verdad sin gritar.
+// - Glow cian reinstalado en el header y en el pick de la fila activa — el
+//   "flash" que le daba identidad a la app y que v5 le había sacado casi
+//   entero.
+//
+// v4 (sep 2026) — se había sacado el histograma E1-E7 (los cuadritos chicos
+// que marcaban cuántas veces se acertó tras 1/2/3.../7 errores seguidos).
+// AVG (el promedio de errores antes de acertar) se queda — es el resumen de
+// esa misma info. `errorHist` se sigue recibiendo (alimenta AVG).
 //
 // error_hist[key] = { E1, E2, E3, E4, E5, E6, E7, hits_counted, avg_errors }
 
@@ -103,29 +125,28 @@ const CATEGORIES = [
   { key: 'guardian_columna', label: 'Guardián (Columna)' },
 ] as const;
 
-// ── Estilos compartidos ───────────────────────────────────────────
-
-const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
-
 // ── Componente fila ───────────────────────────────────────────────
 //
-// v3 (sep 2026) — REORGANIZACIÓN COMPLETA. El Quantum Pilot pasó a un
-// layout de 2 columnas mucho más ancho (ver Quantumpilot.tsx), así que
-// esta fila vuelve a ser DE UNA SOLA LÍNEA — como una fila de tabla real —
-// en vez de apilarse en 3 (eso era el parche para el panel de 480px que
-// ya no existe). Autocontenida igual que v2, sin depender de CSS externo.
-// Orden de columnas, de izquierda a derecha: badge · nombre · pick ·
-// W:L:Seq:Max · AVG (el histograma E1-E7 que iba después se sacó en v4).
-// Todo visible siempre, nada se oculta — nombre/pick truncan primero (son
-// texto), los números nunca.
-//
-// v5 (rediseño trading) — solo cambio visual: badges planos, filas densas,
-// números tabulares, jerarquía tipográfica terminal. Lógica intacta.
+// v5 — sin pill de fondo en el estado: el color YA es la señal (texto
+// BET/PRB/WT coloreado), no hace falta encerrarlo en una cajita. La única
+// fila que recibe tratamiento especial es la que está en BET de verdad
+// (acento lateral + un lavado de fondo casi imperceptible) — "la decisión
+// activa" es lo único que debe destacar, todo lo demás queda discreto.
 
-const BADGE_STYLE: Record<BadgeState, React.CSSProperties> = {
-  bet: { background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.35)' },
-  prb: { background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.35)' },
-  wt:  { background: 'rgba(100,116,139,0.08)', color: '#64748b', border: '1px solid rgba(100,116,139,0.22)' },
+// v7 (oct 2026) — rediseño cockpit, dos pedidos puntuales de Gunner sobre
+// el prototipo:
+//   1. "Blanco neón en vez de naranja" — PRB deja de ser ámbar.
+//   2. Badges tipo píldora para el estado + zebra striping muy sutil en las
+//      filas, para seguir W/L/SEQ/MAX horizontalmente sin más altura.
+const STATE_COLOR: Record<BadgeState, string> = {
+  bet: '#4ade80',  // verde — evento accionable
+  prb: '#f4f8ff',  // blanco neón — esperar (antes ámbar)
+  wt:  '#67e8f9',  // cian — sin acción, simplemente está ahí
+};
+const BADGE_BG: Record<BadgeState, string> = {
+  bet: 'rgba(74,222,128,0.14)',
+  prb: 'rgba(244,248,255,0.12)',
+  wt:  'rgba(34,211,238,0.12)',
 };
 const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
 
@@ -136,115 +157,74 @@ interface RowProps {
   counter: Counter | undefined;
   errorHist: ErrorHist | undefined;
   god?: boolean;
+  zebra?: boolean;
 }
 
-function CategoryRow({ label, state, pick, counter, errorHist, god = false }: RowProps) {
+function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebra = false }: RowProps) {
   const w   = safeInt(counter?.wins);
   const l   = safeInt(counter?.losses);
   const seq = safeInt(counter?.consec_errors);
   const max = safeInt(counter?.max_consec_errors);
   const avg = safeInt(errorHist?.avg_errors ? errorHist.avg_errors * 10 : 0) / 10;
   const avgStr = (w + l) === 0 ? '0.0' : avg.toFixed(1);
-  const accent = god ? '#f87171' : '#22d3ee';
-  const borderColor = god ? 'rgba(248,113,113,0.10)' : 'rgba(148,163,184,0.08)';
-
-  const numStyle: React.CSSProperties = {
-    fontFamily: MONO,
-    fontVariantNumeric: 'tabular-nums',
-    fontSize: 10,
-    color: '#64748b',
-  };
+  const accent = god ? '#fca5a5' : '#67e8f9';
+  const stateColor = state === 'bet' && god ? '#f87171' : STATE_COLOR[state];
+  const stateBg = state === 'bet' && god ? 'rgba(248,113,113,0.16)' : BADGE_BG[state];
+  const activo = state === 'bet'; // único estado que "brilla" en la fila
 
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: '28px 108px minmax(0, 1fr) auto 52px',
-        alignItems: 'center',
-        gap: 10,
-        padding: '6px 8px',
-        borderBottom: `1px solid ${borderColor}`,
-        background: god ? 'rgba(248,113,113,0.015)' : 'transparent',
-        transition: 'background 120ms',
+        display: 'flex', alignItems: 'center', gap: 11,
+        padding: '8px 8px 8px 10px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderLeft: `4px solid ${activo ? stateColor : 'transparent'}`,
+        // la fila activa (BET) manda sobre la cebra — es el único realce
+        // que debe notarse de verdad.
+        background: activo ? `${stateColor}18` : zebra ? 'rgba(255,255,255,0.02)' : 'transparent',
       }}
     >
-      {/* badge */}
-      <span
-        style={{
-          ...BADGE_STYLE[state],
-          fontFamily: MONO,
-          fontSize: 8.5,
-          fontWeight: 800,
-          padding: '1px 0',
-          borderRadius: 2,
-          letterSpacing: '0.06em',
-          flexShrink: 0,
-          width: 26,
-          textAlign: 'center',
-        }}
-      >
-        {BADGE_TXT[state]}
+      {/* estado — badge tipo píldora con fondo semitransparente */}
+      <span style={{ flexShrink: 0, width: 32 }}>
+        <span
+          style={{
+            display: 'inline-block', fontSize: 9.5, fontWeight: 800, letterSpacing: '0.04em',
+            color: stateColor, background: stateBg, borderRadius: 4, padding: '2px 6px',
+          }}
+        >
+          {BADGE_TXT[state]}
+        </span>
       </span>
 
       {/* nombre */}
-      <span
-        style={{
-          fontFamily: MONO,
-          fontSize: 10,
-          color: god ? '#94a3b8' : '#94a3b8',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          letterSpacing: '0.02em',
-          flexShrink: 0,
-          width: 108,
-        }}
-        title={label}
-      >
+      <span style={{ fontSize: 12.5, color: '#a8b7cc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 112, flexShrink: 0 }}>
         {label}
       </span>
 
-      {/* pick — se lleva el espacio que sobra */}
+      {/* pick — se lleva el espacio que sobra. Glow cian cuando la fila está
+          activa (BET) — es el único dato "jugándose ahora" en esta tabla. */}
       <span
         title={pick}
         style={{
-          fontFamily: MONO,
-          fontSize: 12,
-          fontWeight: 700,
-          color: accent,
-          textShadow: `0 0 4px ${god ? 'rgba(248,113,113,0.2)' : 'rgba(34,211,238,0.2)'}`,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          minWidth: 40,
-          letterSpacing: '0.01em',
+          fontSize: 14.5, fontWeight: 800, color: accent,
+          textShadow: activo ? `0 0 8px ${stateColor}99` : 'none',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          flex: '1 1 auto', minWidth: 40,
         }}
       >
         {pick}
       </span>
 
       {/* stats — nunca se recortan */}
-      <span
-        style={{
-          display: 'flex',
-          gap: 8,
-          fontFamily: MONO,
-          fontVariantNumeric: 'tabular-nums',
-          fontSize: 10,
-          color: '#475569',
-          flexShrink: 0,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <span>W:<b style={{ color: '#cbd5e1', fontWeight: 700, marginLeft: 2 }}>{w}</b></span>
-        <span>L:<b style={{ color: '#cbd5e1', fontWeight: 700, marginLeft: 2 }}>{l}</b></span>
-        <span>Sq:<b style={{ color: seq > 0 ? '#f59e0b' : '#cbd5e1', fontWeight: 700, marginLeft: 2 }}>{seq}</b></span>
-        <span>Mx:<b style={{ color: max >= 3 ? '#ef4444' : '#cbd5e1', fontWeight: 700, marginLeft: 2 }}>{max}</b></span>
+      <span style={{ display: 'flex', gap: 9, fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap' }}>
+        <span>W:<b style={{ color: '#e2e8f0' }}>{w}</b></span>
+        <span>L:<b style={{ color: '#e2e8f0' }}>{l}</b></span>
+        <span>Sq:<b style={{ color: '#e2e8f0' }}>{seq}</b></span>
+        <span>Mx:<b style={{ color: '#e2e8f0' }}>{max}</b></span>
       </span>
 
-      <span style={{ ...numStyle, flexShrink: 0, whiteSpace: 'nowrap', width: 52, textAlign: 'right' }}>
-        <span style={{ color: '#475569' }}>avg</span>
-        <b style={{ color: '#cbd5e1', fontWeight: 700, marginLeft: 4 }}>{avgStr}</b>
+      <span style={{ fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap', width: 58 }}>
+        AVG:<b style={{ color: '#e2e8f0' }}>{avgStr}</b>
       </span>
     </div>
   );
@@ -260,7 +240,7 @@ interface Props {
   countersGod?:  Record<string, Counter>;
   errorHistGod?: Record<string, ErrorHist>;
   title?:        string;
-  inlinePanel?:  boolean;  // true → no renderiza .panel wrapper (uso en GodBetPanel)
+  inlinePanel?:  boolean;  // true → sin encabezado propio ni wrapper (uso en GodBetPanel, que pone su propio título)
 }
 
 export function CategoryTable({
@@ -312,69 +292,25 @@ export function CategoryTable({
     };
   });
 
-  const accentBar = god ? '#ef4444' : '#22d3ee';
-
   const inner = (
     <>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '8px 10px 6px',
-          borderBottom: '1px solid rgba(148,163,184,0.10)',
-        }}
-      >
-        <span
-          style={{
-            width: 3,
-            height: 14,
-            background: accentBar,
-            boxShadow: `0 0 6px ${god ? 'rgba(239,68,68,0.5)' : 'rgba(34,211,238,0.5)'}`,
-          }}
-        />
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            letterSpacing: '0.22em',
-            color: god ? '#fca5a5' : '#67e8f9',
-            fontWeight: 800,
-            textTransform: 'uppercase',
-          }}
-        >
-          {title}
-        </span>
-        <span
-          style={{
-            flex: 1,
-            height: 1,
-            background: `linear-gradient(90deg, ${god ? 'rgba(239,68,68,0.25)' : 'rgba(34,211,238,0.25)'} 0%, transparent 100%)`,
-          }}
-        />
-      </div>
-
+      {!inlinePanel && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingBottom: 8 }}>
+          <span style={{ color: god ? '#f87171' : '#22d3ee', fontSize: 11, textShadow: god ? '0 0 8px rgba(248,113,113,0.6)' : '0 0 8px rgba(34,211,238,0.6)' }}>◈</span>
+          <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.2em', color: '#e2e8f0', textShadow: god ? '0 0 10px rgba(248,113,113,0.35)' : '0 0 10px rgba(34,211,238,0.35)' }}>{title}</span>
+        </div>
+      )}
       {/* encabezado de columnas — mismos anchos que CategoryRow, así queda
           claro qué es cada número sin tener que adivinar */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '28px 108px minmax(0, 1fr) auto 52px',
-          alignItems: 'center',
-          gap: 10,
-          padding: '5px 8px',
-          borderBottom: '1px solid rgba(148,163,184,0.14)',
-          background: 'rgba(148,163,184,0.02)',
-        }}
-      >
-        <span style={{ width: 26 }} />
-        <span style={{ fontFamily: MONO, fontSize: 8, color: '#475569', letterSpacing: '0.14em', fontWeight: 700 }}>CATEGORÍA</span>
-        <span style={{ fontFamily: MONO, fontSize: 8, color: '#475569', letterSpacing: '0.14em', fontWeight: 700 }}>PICK</span>
-        <span style={{ fontFamily: MONO, fontSize: 8, color: '#475569', letterSpacing: '0.14em', fontWeight: 700 }}>W / L / SEQ / MAX</span>
-        <span style={{ fontFamily: MONO, fontSize: 8, color: '#475569', letterSpacing: '0.14em', fontWeight: 700, textAlign: 'right' }}>AVG</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '0 8px 7px 10px', borderBottom: '1px solid rgba(34,211,238,0.18)' }}>
+        <span style={{ width: 26, flexShrink: 0 }} />
+        <span style={{ width: 112, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>CATEGORÍA</span>
+        <span style={{ flex: '1 1 auto', minWidth: 40, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>PICK</span>
+        <span style={{ flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700, width: 128 }}>W / L / SEQ / MAX</span>
+        <span style={{ width: 58, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>AVG</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {rows.map((row) => (
+        {rows.map((row, i) => (
           <CategoryRow
             key={row.key}
             label={row.label}
@@ -383,35 +319,27 @@ export function CategoryTable({
             counter={row.counter}
             errorHist={row.errorHist}
             god={god}
+            zebra={i % 2 === 1}
           />
         ))}
       </div>
     </>
   );
 
-  if (inlinePanel) {
-    return (
-      <div
-        className="cat-table-inline"
-        style={{
-          background: god ? 'rgba(20,8,8,0.4)' : 'rgba(13,18,25,0.4)',
-          border: `1px solid ${god ? 'rgba(248,113,113,0.10)' : 'rgba(148,163,184,0.08)'}`,
-          borderRadius: 4,
-          overflow: 'hidden',
-        }}
-      >
-        {inner}
-      </div>
-    );
-  }
+  // inlinePanel=true (uso dentro de GodBetPanel) → sin micropanel propio,
+  // GodBetPanel ya pone el suyo — evita "caja dentro de caja".
+  if (inlinePanel) return <>{inner}</>;
   return (
     <div
-      className="panel"
       style={{
-        background: 'linear-gradient(180deg, rgba(13,18,25,0.9) 0%, rgba(10,14,23,0.95) 100%)',
-        border: '1px solid rgba(148,163,184,0.10)',
-        borderRadius: 4,
-        overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+        background: 'rgba(10, 16, 28, 0.55)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        border: '1px solid rgba(34, 211, 238, 0.25)',
+        borderRadius: 8,
+        boxShadow: '0 0 16px rgba(34, 211, 238, 0.08), inset 0 1px 0 rgba(34,211,238,0.05)',
+        padding: '10px 10px 2px',
       }}
     >
       {inner}
