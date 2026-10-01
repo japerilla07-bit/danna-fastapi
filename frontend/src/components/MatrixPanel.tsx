@@ -46,7 +46,7 @@ import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
-  useTermoHits, useTermoTotal, useTermoStreak, useSetCopSug, type CellRec,
+  useTermoHits, useTermoTotal, useTermoStreak, useSetCopSug, useSetCopPickOverride, type CellRec,
   useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak,
 } from '@/store/telemetryStore';
 import {
@@ -507,6 +507,13 @@ export function CopilotOrder({
 
   const setCopSug = useSetCopSug();
   setCopSug(d.mercado);
+  // FIX (oct 2026) — ver nota de telemetryStore.ts: cuando la Capa 2 (escudo)
+  // manda, d.pickDoc/d.pickCol traen el texto de la zona que REALMENTE se
+  // juega (derivado de zonasEscudo, no del pick del backend). Si la Capa 1
+  // manda, los dos vienen undefined → se limpia el override (null, null) y
+  // el store sigue usando el pick del backend como siempre.
+  const setCopPickOverride = useSetCopPickOverride();
+  setCopPickOverride(d.pickDoc ?? null, d.pickCol ?? null);
 
   // v7: "precaución" pasa de ámbar a blanco neón — Gunner: "preferiría
   // meter un blanco neón en vez de un naranja". ok/peligro quedan iguales.
