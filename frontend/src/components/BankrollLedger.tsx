@@ -27,6 +27,18 @@
 // La prop `bankroll` se sigue recibiendo (para no tener que tocar de nuevo
 // Quantumpilot.tsx/AppPage.tsx, que ya la pasan) pero NO se lee en ningún
 // lado del render — el panel no depende de ningún dato que venga del motor.
+//
+// v4 (sep 2026) — REDISEÑO "INSTRUMENT PANEL": se sacó className="panel
+// bk-panel"/"panel-head" (CSS externo que impone borde+fondo+radio, mismo
+// criterio que CategoryTable.tsx v5 y GodBetPanel.tsx) a favor de un
+// encabezado de texto plano. Las filas (FilaTexto/FilaSaldo) no cambiaron —
+// ya eran líneas simples con un borde inferior, sin caja, desde la v3.
+//
+// v5 (sep 2026) — CORRECCIÓN: Gunner probó v4 en vivo — "no es facil leer,
+// no hay separacion clara, no hay cian flash no hay micropaneles". Se le
+// devuelve UN micropanel propio (borde cian + fondo sutil, una sola capa)
+// a todo el bloque, y el encabezado recupera el glow cian. labelStyle sube
+// de tamaño para que se lea mejor dentro del micropanel.
 
 import { useState, useRef } from 'react';
 
@@ -41,8 +53,6 @@ interface Bankroll {
 interface Props {
   bankroll: Bankroll;
 }
-
-const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 
 function fmtCOP(v: number): string {
   return '$' + Math.round(Math.abs(v)).toLocaleString('es-CO');
@@ -69,43 +79,39 @@ const rowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  padding: '9px 0',
-  borderBottom: '1px solid rgba(148,163,184,0.08)',
+  padding: '10px 0',
+  borderBottom: '1px solid var(--panel-bd)',
   gap: '12px',
 };
 const labelStyle: React.CSSProperties = {
-  fontFamily: MONO,
-  fontSize: '9.5px',
-  letterSpacing: '0.18em',
-  color: '#64748b',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '11px',
+  letterSpacing: '1.5px',
+  color: 'var(--txt-lo)',
   textTransform: 'uppercase',
-  fontWeight: 700,
 };
 const valueStyle: React.CSSProperties = {
-  fontFamily: MONO,
+  fontFamily: 'var(--font-mono)',
   fontWeight: 700,
   fontSize: '22px',
   lineHeight: 1,
-  letterSpacing: '-0.3px',
+  letterSpacing: '-0.5px',
   whiteSpace: 'nowrap',
-  color: '#e2e8f0',
+  color: 'var(--txt-hi)',
   textAlign: 'right',
-  fontVariantNumeric: 'tabular-nums',
 };
 const editBtnStyle = (color: string): React.CSSProperties => ({
   background: 'transparent',
-  border: `1px solid ${color}40`,
-  borderRadius: '2px',
+  border: `1px solid ${color}59`,
+  borderRadius: '6px',
   color,
-  fontFamily: MONO,
+  fontFamily: 'var(--font-mono)',
   fontSize: '9px',
-  fontWeight: 700,
-  letterSpacing: '0.12em',
-  padding: '2px 7px',
+  letterSpacing: '1px',
+  padding: '2px 8px',
   cursor: 'pointer',
   width: 'fit-content',
   transition: 'all 150ms',
-  textTransform: 'uppercase',
 });
 
 // ── Fila genérica editable (texto libre: MESA) ────────────────────────
@@ -140,16 +146,16 @@ function FilaTexto({
 
   return (
     <div style={rowStyle}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
         <span style={labelStyle}>{label}</span>
         {!editing && (
           <button
             onClick={start}
-            style={editBtnStyle('#22d3ee')}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(34,211,238,0.08)'; }}
+            style={editBtnStyle('var(--cyan)')}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,229,255,0.08)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
-            ✎ Editar
+            ✎ EDITAR
           </button>
         )}
       </div>
@@ -162,28 +168,16 @@ function FilaTexto({
           onBlur={commit}
           onKeyDown={onKey}
           placeholder={placeholder}
-          style={{
-            width: '60%',
-            minWidth: 0,
-            textAlign: 'right',
-            fontSize: '13px',
-            fontFamily: MONO,
-            background: 'rgba(34,211,238,0.05)',
-            border: '1px solid rgba(34,211,238,0.35)',
-            borderRadius: 2,
-            color: '#e2e8f0',
-            padding: '4px 8px',
-            outline: 'none',
-          }}
+          style={{ width: '60%', minWidth: 0, textAlign: 'right', fontSize: '15px' }}
         />
       ) : (
         <span
           style={{
             ...valueStyle,
-            fontSize: '14px',
+            fontSize: '15px',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            color: value ? '#e2e8f0' : '#475569',
+            color: value ? 'var(--txt-hi)' : 'var(--txt-lo)',
           }}
         >
           {value || placeholder}
@@ -198,7 +192,7 @@ function FilaSaldo({
   label,
   value,
   onSave,
-  color = '#22d3ee',
+  color = 'var(--cyan)',
   lastRow = false,
 }: {
   label: string;
@@ -233,7 +227,7 @@ function FilaSaldo({
 
   return (
     <div style={{ ...rowStyle, borderBottom: lastRow ? 'none' : rowStyle.borderBottom }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
         <span style={labelStyle}>{label}</span>
         {!editing && (
           <button
@@ -242,7 +236,7 @@ function FilaSaldo({
             onMouseEnter={(e) => { e.currentTarget.style.background = `${color}14`; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
-            ✎ {value != null ? 'Editar' : 'Ingresar'} saldo
+            ✎ {value != null ? 'EDITAR' : 'INGRESAR'} SALDO
           </button>
         )}
       </div>
@@ -255,24 +249,10 @@ function FilaSaldo({
           onBlur={commit}
           onKeyDown={onKey}
           placeholder="0"
-          style={{
-            width: '55%',
-            minWidth: 0,
-            textAlign: 'right',
-            fontSize: '18px',
-            fontFamily: MONO,
-            fontVariantNumeric: 'tabular-nums',
-            background: `${color}10`,
-            border: `1px solid ${color}55`,
-            borderRadius: 2,
-            color,
-            padding: '4px 8px',
-            outline: 'none',
-            fontWeight: 700,
-          }}
+          style={{ width: '55%', minWidth: 0, textAlign: 'right', fontSize: '22px', color }}
         />
       ) : (
-        <span style={{ ...valueStyle, fontSize: '20px', color: value != null ? '#e2e8f0' : '#475569' }}>
+        <span style={{ ...valueStyle, color: value != null ? 'var(--txt-hi)' : 'var(--txt-lo)' }}>
           {value != null ? fmtCOP(value) : '— sin llenar —'}
         </span>
       )}
@@ -312,75 +292,44 @@ export function BankrollLedger(_props: Props) {
 
   return (
     <div
-      className="panel bk-panel"
       style={{
-        background: 'linear-gradient(180deg, rgba(13,18,25,0.9) 0%, rgba(10,14,23,0.95) 100%)',
-        border: '1px solid rgba(148,163,184,0.10)',
-        borderRadius: 4,
-        padding: '12px 14px',
+        display: 'flex', flexDirection: 'column',
+        background: 'rgba(10, 16, 28, 0.55)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        border: '1px solid rgba(34, 211, 238, 0.25)',
+        borderRadius: 8,
+        boxShadow: '0 0 16px rgba(34, 211, 238, 0.08), inset 0 1px 0 rgba(34,211,238,0.05)',
+        padding: '10px 12px 2px',
       }}
     >
-      <div
-        className="panel-head"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          paddingBottom: 10,
-          marginBottom: 4,
-          borderBottom: '1px solid rgba(148,163,184,0.10)',
-        }}
-      >
-        <span
-          className="icon"
-          style={{
-            width: 3,
-            height: 14,
-            background: '#10b981',
-            boxShadow: '0 0 6px rgba(16,185,129,0.5)',
-            display: 'inline-block',
-          }}
-        ></span>
-        <span
-          className="title"
-          style={{
-            fontFamily: MONO,
-            fontSize: 10,
-            letterSpacing: '0.22em',
-            color: '#10b981',
-            fontWeight: 800,
-            textTransform: 'uppercase',
-          }}
-        >
-          Bankroll &amp; Ledger
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingBottom: 6 }}>
+        <span style={{ color: 'var(--green)', fontSize: 12.5, textShadow: '0 0 8px rgba(0,255,156,0.6)' }}>💰</span>
+        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.2em', color: 'var(--txt-hi)', textShadow: '0 0 10px rgba(34,211,238,0.3)' }}>
+          BANKROLL &amp; LEDGER
         </span>
-        <span
-          style={{
-            flex: 1,
-            height: 1,
-            background: 'linear-gradient(90deg, rgba(16,185,129,0.25) 0%, transparent 100%)',
-          }}
-        />
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
         <FilaTexto label="MESA" value={mesa} onSave={setMesa} placeholder="ej. Casino X — mesa 3" />
 
-        <FilaSaldo label="SALDO INICIAL" value={saldoInicial} onSave={setSaldoInicial} color="#22d3ee" />
+        <FilaSaldo label="SALDO INICIAL" value={saldoInicial} onSave={setSaldoInicial} color="var(--cyan)" />
 
-        <FilaSaldo label="SALDO FINAL" value={saldoFinal} onSave={setSaldoFinal} color="#f59e0b" lastRow={!hayPL} />
+        {/* v7 (oct 2026): blanco neón en vez de ámbar — Gunner: "preferiría
+            meter un blanco neón en vez de un naranja" (pedido general de
+            paleta, aplicado acá también). */}
+        <FilaSaldo label="SALDO FINAL" value={saldoFinal} onSave={setSaldoFinal} color="#f4f8ff" lastRow={!hayPL} />
 
         {hayPL && (
-          <div style={{ ...rowStyle, borderBottom: 'none', paddingTop: 12, marginTop: 4, borderTop: '1px solid rgba(148,163,184,0.12)' }}>
+          <div style={{ ...rowStyle, borderBottom: 'none' }}>
             <span style={labelStyle}>P&amp;L (FINAL − INICIAL)</span>
             <span
               style={{
                 ...valueStyle,
-                fontSize: '22px',
-                color: plPos ? '#10b981' : '#ef4444',
+                color: plPos ? 'var(--green)' : 'var(--red)',
                 textShadow: plPos
-                  ? '0 0 10px rgba(16,185,129,0.35)'
-                  : '0 0 10px rgba(239,68,68,0.35)',
+                  ? '0 0 14px rgba(0,255,156,0.45)'
+                  : '0 0 14px rgba(255,45,79,0.45)',
               }}
             >
               {plPos ? '+' : '−'}{fmtCOP(pl)}
