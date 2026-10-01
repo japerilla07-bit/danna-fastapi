@@ -40,27 +40,36 @@
 // Lectura pura del store + la matriz. No decide ni bloquea al motor.
 // ════════════════════════════════════════════════════════════════════════
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
-  useTermoHits, useTermoTotal, useTermoStreak, useHistory, useSetCopSug, type CellRec,
+  useTermoHits, useTermoTotal, useTermoStreak, useSetCopSug, type CellRec,
+  useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, labelByKey,
   fusedZone, fusedZoneByKey, liveDeviation, currentCellWr, currentCellMaxRun,
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
-// decidirConEstado() = Capa 1 sola, versión PURA (recibe el "último mercado
-// jugado" por parámetro en vez de leer una variable compartida). La usa el
-// marcador de abajo (CopilotScoreboard), que reconstruye TODA la sesión
-// desde history con su PROPIA memoria local — así nunca se desalinea con la
-// decisión en vivo (bug real, corregido sep 2026: ver nota en
-// CopilotScoreboard). decidirPiloto() = Capa 1 + Capa 2 (el escudo), función
-// pura de lectura — es la que manda en la ORDEN en vivo.
-import { decidirPiloto, decidirConEstado, type MarketRead } from '@/domain/copilot';
+// decidirPiloto() = Capa 1 + Capa 2 (el escudo), función pura de lectura —
+// es la que manda en la ORDEN en vivo (CopilotOrder, abajo).
+//
+// FIX (oct 2026) — Gunner: "los errores tampoco salen en el contador del
+// copiloto... ni normal ni con escudo". decidirConEstado() (Capa 1 SOLA) ya
+// NO se usa en este archivo: CopilotScoreboard la usaba para reconstruir
+// todo el historial a mano, lo que SOLO replicaba Capa 1 — cuando el escudo
+// (Capa 2) estaba activo, lo que de verdad se jugó (decidirPiloto, Capa1+2)
+// nunca se replayeaba, así que el marcador contaba una decisión hipotética
+// distinta a la real. El store (telemetryStore.ts) YA llevaba el contador
+// correcto en vivo (`copScore`, incrementado una vez por giro resuelto a
+// partir de `copSug` — que desde que CopilotOrder llama a decidirPiloto()
+// en vez de decidir() SÍ incluye Capa1+2) pero CopilotScoreboard no lo leía.
+// Ahora lee `copScore` directo vía los selectores del store — cero replay,
+// cero riesgo de desalinearse del escudo real.
+import { decidirPiloto, type MarketRead } from '@/domain/copilot';
 
 const FONT_HEAD = "'Rajdhani', sans-serif";
 const FONT_MONO = "'JetBrains Mono', monospace";
@@ -444,9 +453,12 @@ export function ZoneDetailGrid({
 //
 // v4: partido en dos piezas exportadas — CopilotOrder (header + orden,
 // dueño de avisarle al store qué sugiere el piloto) y CopilotScoreboard
-// (el marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA, réplica de toda la
-// sesión vía decidirConEstado() Capa 1, con memoria propia). Cada una es
+// (el marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA). Cada una es
 // independiente — se pueden ubicar en cualquier lugar del layout.
+// v7 (oct 2026): CopilotScoreboard dejó de recalcular el marcador a mano
+// (solo Capa 1, ignoraba el escudo) — ahora lee copScore directo del store,
+// que ya lo mantiene correcto en vivo con Capa1+2. Ver su propio comentario
+// más abajo para el detalle del bug.
 // ────────────────────────────────────────────────────────────────────────
 
 function useMarketRead(mkt: Market): MarketRead {
@@ -525,89 +537,33 @@ export function CopilotOrder({
   );
 }
 
-/** Marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA del escudo — réplica de toda
- *  la sesión vía decidirConEstado() (Capa 1 sola, estado puro, no se
- *  corrompe al recalcularse). Independiente de CopilotOrder.
+/** Marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA del escudo.
  *
- *  v6: vuelve a tener UN micropanel (borde cian + fondo + glow) — v5 lo
- *  había dejado como fila suelta y Gunner la reclamó sin separación del
- *  resto. Los divisores internos (borderRight finos entre cada stat) se
- *  mantienen — siguen siendo la forma correcta de separar los 5 números
- *  SIN meter una caja por número.
+ *  v6: UN micropanel (borde cian + fondo + glow) — v5 lo había dejado como
+ *  fila suelta y Gunner la reclamó sin separación del resto.
  *
- *  FIX (sep 2026) — bug real reportado por Gunner: "un acierto lo cuenta
- *  como error y cuando tiene un error lo marca como dos". Antes este loop
- *  llamaba a decidir(doc, col) directo, que lee/muta la variable de MÓDULO
- *  ultimoMercadoJugado de copilot.ts — la MISMA que usa la decisión en vivo
- *  (vía decidirPiloto, en CopilotOrder). Como ninguno de los dos reseteaba
- *  esa memoria antes de arrancar, cada vez que este marcador recalculaba
- *  TODA la sesión desde el giro 1 (pasa en cada giro nuevo), el primer giro
- *  del replay heredaba lo que hubiera dejado la decisión en vivo (o el
- *  replay anterior) en vez de arrancar sin memoria — la regla "evitar
- *  refugio" podía terminar evaluando un giro contra el mercado equivocado,
- *  contando el acierto de un mercado como error del otro, y el resultado
- *  cambiaba entre una pasada y la siguiente para el mismo giro. Ya estaba
- *  marcado como sospecha sin confirmar en la auditoría de código; quedó
- *  confirmado con este síntoma. Ahora se usa decidirConEstado() con
- *  `ultimoLocal`, una memoria PROPIA de este replay que arranca en null en
- *  cada recálculo — nunca toca ni depende de la memoria de la decisión en
- *  vivo, así que da el mismo resultado sin importar cuántas veces se corra
- *  ni en qué orden rendericen los componentes. */
+ *  FIX (oct 2026) — bug real reportado por Gunner: "los errores tampoco
+ *  salen en el contador del copiloto... ni normal ni con escudo". Esto NO
+ *  es el mismo bug de sep 2026 (ya corregido, ver historial de copilot.ts) —
+ *  es uno distinto, más profundo: este componente recalculaba TODO el
+ *  historial llamando a decidirConEstado(), que es **Capa 1 sola**. Cuando
+ *  el escudo (Capa 2, en copilot.ts) estaba o había estado activo, la
+ *  decisión que de verdad se jugó (decidirPiloto, Capa1+2, la que ve el
+ *  operador en CopilotOrder) nunca entraba en este cálculo — el marcador
+ *  contaba aciertos/errores de una decisión hipotética distinta a la real.
+ *  El store (telemetryStore.ts) YA lleva el contador correcto en vivo:
+ *  `copScore`, incrementado una vez por giro resuelto a partir de
+ *  `pend.copSug` — y `copSug` es exactamente lo que CopilotOrder escribe en
+ *  cada render (`setCopSug(d.mercado)` con `d = decidirPiloto(...)`), así
+ *  que YA incluye Capa1+2. Solo faltaba leerlo acá en vez de reinventar el
+ *  cálculo — cero lógica nueva, cero replay, cero forma de desalinearse del
+ *  escudo real. */
 export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
-  const history = useHistory();
-  const { copHits, copMisses, copStreak, copLive } = useMemo(() => {
-    const termo: Record<Market, number[]> = { doc: [], col: [] };
-    const cellReg: Record<Market, Record<string, { h: number; m: number; streak: number; mx: number }>> = { doc: {}, col: {} };
-    let hits = 0, misses = 0, streak = 0, maxStreak = 0;
-    // Memoria de "último mercado jugado" PROPIA de este replay — nunca la
-    // de copilot.ts. Arranca en null en CADA recálculo: un replay desde el
-    // giro 1 de la sesión siempre empieza sin nada jugado todavía, sea la
-    // primera vez que corre este useMemo o la enésima.
-    let ultimoLocal: Market | null = null;
-
-    for (const row of history) {
-      const key = cellKeyOf(row.hud, row.ent);
-      const readMkt = (mkt: Market): MarketRead => {
-        const liveRaw = key ? cellReg[mkt][key] : undefined;
-        const liveObj = liveRaw ? { hits: liveRaw.h, misses: liveRaw.m, maxStreak: liveRaw.mx } : null;
-        const estado = fusedZone(row.hud, row.ent, mkt, liveObj);
-        const t = termo[mkt].slice(-10);
-        const th = t.filter((x) => x === 1).length;
-        let ts = 0;
-        for (let i = t.length - 1; i >= 0; i--) { if (t[i] === 0) ts++; else break; }
-        return {
-          mkt, estado, cellWr: currentCellWr(row.hud, row.ent, mkt),
-          termoHits: th, termoTotal: t.length, termoStreak: ts,
-          liveStreak: liveRaw?.streak ?? 0, cellCeiling: currentCellMaxRun(row.hud, row.ent, mkt),
-        };
-      };
-      const { decision, ultimoJugado } = decidirConEstado(readMkt('doc'), readMkt('col'), ultimoLocal);
-      ultimoLocal = ultimoJugado;
-      const sug = decision.mercado;
-
-      if (sug) {
-        const res = sug === 'doc' ? row.docHit : row.colHit;
-        if (res !== null && res !== undefined) {
-          if (res) { hits++; streak = 0; }
-          else { misses++; streak++; if (streak > maxStreak) maxStreak = streak; }
-        }
-      }
-
-      (['doc', 'col'] as Market[]).forEach((mkt) => {
-        const r = mkt === 'doc' ? row.docHit : row.colHit;
-        if (r === null || r === undefined) return;
-        termo[mkt].push(r ? 1 : 0);
-        if (key) {
-          const c = cellReg[mkt][key] ?? { h: 0, m: 0, streak: 0, mx: 0 };
-          if (r) { c.h++; c.streak = 0; } else { c.m++; c.streak++; if (c.streak > c.mx) c.mx = c.streak; }
-          cellReg[mkt][key] = c;
-        }
-      });
-    }
-    return { copHits: hits, copMisses: misses, copStreak: maxStreak, copLive: streak };
-  }, [history]);
-
-  const copWr = (copHits + copMisses) > 0 ? (copHits / (copHits + copMisses)) * 100 : null;
+  const copHits = useCopHits();
+  const copMisses = useCopMisses();
+  const copWr = useCopWr();
+  const copLive = useCopLiveStreak();
+  const copStreak = useCopStreak(); // peor racha de la sesión (maxStreak)
 
   // v7 (oct 2026): glow reservado para lo crítico/accionable (ACIERTOS,
   // ERRORES, RACHA AHORA — lo que está pasando ahora mismo), apagado en lo
