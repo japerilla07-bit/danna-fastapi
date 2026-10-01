@@ -73,8 +73,53 @@ function seguridad(m: MarketRead): number {
 // Sirve solo para la regla de "evitar refugio" de abajo.
 let ultimoMercadoJugado: Market | null = null;
 
-// ── Decisión final cruzando los dos mercados ──
-export function decidir(doc: MarketRead, col: MarketRead): Decision {
+// ────────────────────────────────────────────────────────────────────────
+// decidirConEstado — BUG REAL encontrado y corregido (sep 2026)
+// ────────────────────────────────────────────────────────────────────────
+//
+// Gunner reportó: "hay un error en el contador del escudo, un acierto lo
+// cuenta como error y cuando tiene un error lo marca como dos".
+//
+// Causa: decidir() (como estaba antes) mutaba ultimoMercadoJugado — una
+// variable de MÓDULO, compartida — inline, dentro de la misma función que
+// además se usa para dos cosas muy distintas:
+//   1. La decisión EN VIVO del giro actual (vía decidirPiloto, llamada
+//      desde CopilotOrder en cada render — no una vez por giro real, sino
+//      una vez por cada re-render de React).
+//   2. El marcador del escudo (CopilotScoreboard, en MatrixPanel.tsx), que
+//      recalcula TODA la sesión desde el giro 1 cada vez que llega un giro
+//      nuevo, llamando a decidir() una vez por cada fila del historial.
+//
+// Las dos comparten la MISMA variable ultimoMercadoJugado, y ninguna la
+// reseteaba a null antes de arrancar. Consecuencia: cada vez que el
+// marcador recalculaba el historial completo, el giro 1 de ESE replay no
+// arrancaba con "nada jugado todavía" (que es lo correcto — es el inicio
+// de la sesión), sino con lo que hubiera quedado de la decisión en vivo o
+// del replay anterior. Eso podía hacer que la regla "evitar refugio"
+// evaluara un giro histórico contra el mercado equivocado, y el resultado
+// de ESE giro (acierto/error) se le atribuía al mercado que no era — un
+// acierto de columnas podía contarse como error de docenas, y como el
+// replay entero se repite en cada giro nuevo, un mismo error podía quedar
+// contado más de una vez entre una pasada y la siguiente. Ya estaba
+// marcado como sospecha sin confirmar en la auditoría de código de
+// ago/sep 2026 ("podría desalinear unos pocos giros entre el marcador y
+// la decisión real"); quedó confirmado con este síntoma real.
+//
+// Fix: se saca TODA la lógica de decisión a esta función PURA, que recibe
+// el "último mercado jugado" como parámetro y devuelve el valor
+// actualizado junto con la Decision, en vez de leer/mutar una variable
+// compartida. decidir() (abajo) es ahora un wrapper delgado sobre esta
+// función para el camino EN VIVO — mismo comportamiento exacto de
+// siempre, ni un número de la lógica cambió. El marcador (MatrixPanel.tsx,
+// CopilotScoreboard) usa decidirConEstado() directo con SU PROPIA variable
+// local, que arranca en null en cada recálculo — así el replay nunca pisa
+// la memoria de la decisión en vivo, y da el mismo resultado sin importar
+// cuántas veces se vuelva a correr.
+export function decidirConEstado(
+  doc: MarketRead,
+  col: MarketRead,
+  ultimoJugado: Market | null
+): { decision: Decision; ultimoJugado: Market | null } {
   const sDoc = seguridad(doc);
   const sCol = seguridad(col);
   // Empate: en vez de favorecer siempre docenas, desempata por el mejor WR de celda.
@@ -86,10 +131,13 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
   // ── PARAR: los dos mercados peligrosos a la vez ──
   if (sDoc < -10 && sCol < -10) {
     return {
-      mercado: null, accion: 'PARAR', exposicion: 'CERO',
-      titulo: '✋ ESPERÁ — mesa brava',
-      motivo: 'Las dos zonas vienen mal ahora. No es momento de exponer bankroll.',
-      nivel: 'alto',
+      ultimoJugado,
+      decision: {
+        mercado: null, accion: 'PARAR', exposicion: 'CERO',
+        titulo: '✋ ESPERÁ — mesa brava',
+        motivo: 'Las dos zonas vienen mal ahora. No es momento de exponer bankroll.',
+        nivel: 'alto',
+      },
     };
   }
 
@@ -99,10 +147,13 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
   //    dentro de rachas; evitarlas corta rachas de 4/6/7 sin perder WR ni volumen.
   if (mejorS < 25) {
     return {
-      mercado: null, accion: 'ESPERAR', exposicion: 'CERO',
-      titulo: '⏸ ESPERÁ una mejor',
-      motivo: `Ni ${nombre('doc')} ni ${nombre('col')} están en zona sólida. No entres en la menos mala.`,
-      nivel: 'precaucion',
+      ultimoJugado,
+      decision: {
+        mercado: null, accion: 'ESPERAR', exposicion: 'CERO',
+        titulo: '⏸ ESPERÁ una mejor',
+        motivo: `Ni ${nombre('doc')} ni ${nombre('col')} están en zona sólida. No entres en la menos mala.`,
+        nivel: 'precaucion',
+      },
     };
   }
 
@@ -117,17 +168,20 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
   // (las tormentas raras de verdad pasan igual, sigue en 6), pero SÍ baja la
   // racha promedio por sesión — le gana al azar el 78% de las veces, de las
   // mejores cifras que dio cualquier ajuste en todo el proyecto.
-  if (ultimoMercadoJugado !== null && m.mkt !== ultimoMercadoJugado) {
-    const venia = ultimoMercadoJugado === 'doc' ? doc : col;
+  if (ultimoJugado !== null && m.mkt !== ultimoJugado) {
+    const venia = ultimoJugado === 'doc' ? doc : col;
     if (venia.termoStreak >= 2) {
       return {
-        mercado: null, accion: 'ESPERAR', exposicion: 'CERO',
-        titulo: '⏸ ESPERÁ — no persigas el cambio',
-        motivo: `Venís perdiendo en ${nombre(ultimoMercadoJugado)} y el copiloto salta a ${nombre(m.mkt)}. Dejá pasar este giro.`,
-        nivel: 'precaucion',
+        // No se actualiza ultimoJugado acá: no jugamos, la memoria de la
+        // apuesta anterior sigue vigente para el próximo giro.
+        ultimoJugado,
+        decision: {
+          mercado: null, accion: 'ESPERAR', exposicion: 'CERO',
+          titulo: '⏸ ESPERÁ — no persigas el cambio',
+          motivo: `Venís perdiendo en ${nombre(ultimoJugado)} y el copiloto salta a ${nombre(m.mkt)}. Dejá pasar este giro.`,
+          nivel: 'precaucion',
+        },
       };
-      // No se actualiza ultimoMercadoJugado acá: no jugamos, la memoria de la
-      // apuesta anterior sigue vigente para el próximo giro.
     }
   }
 
@@ -139,8 +193,6 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
   // Si venís con 2+ errores en esta celda, bajá la mano (racha viva, no techo histórico).
   if (m.liveStreak >= 2) { exposicion = 'MÍNIMA'; nivel = 'precaucion'; }
 
-  ultimoMercadoJugado = m.mkt; // memoria actualizada SOLO ahora que de verdad jugamos
-
   const motivoRotacion = rota ? ` (mejor que ${nombre(otro.mkt)} ahora)` : '';
   const expoTxt: Record<Exposicion, string> = {
     NORMAL: 'Progresión normal.', REDUCIDA: 'Progresión suave.',
@@ -148,11 +200,29 @@ export function decidir(doc: MarketRead, col: MarketRead): Decision {
   };
 
   return {
-    mercado: m.mkt, accion, exposicion,
-    titulo: `▸ ${nombre(m.mkt)} · ${accion === 'ENTRAR' ? 'ENTRÁ' : 'ENTRÁ SUAVE'}`,
-    motivo: `Zona ${m.estado.toLowerCase()}${motivoRotacion}. ${expoTxt[exposicion]}`,
-    nivel,
+    ultimoJugado: m.mkt, // memoria actualizada SOLO ahora que de verdad jugamos
+    decision: {
+      mercado: m.mkt, accion, exposicion,
+      titulo: `▸ ${nombre(m.mkt)} · ${accion === 'ENTRAR' ? 'ENTRÁ' : 'ENTRÁ SUAVE'}`,
+      motivo: `Zona ${m.estado.toLowerCase()}${motivoRotacion}. ${expoTxt[exposicion]}`,
+      nivel,
+    },
   };
+}
+
+// ── Decisión final cruzando los dos mercados — camino EN VIVO. ──
+// Wrapper delgado sobre decidirConEstado(): lee/actualiza la memoria
+// compartida ultimoMercadoJugado para que cualquier código que ya llama
+// decidir(doc, col) (ej. decidirPiloto, más abajo) siga funcionando
+// exactamente igual que siempre — el comportamiento y la lógica NO
+// cambiaron, solo se movió a una función pura reutilizable. Para un
+// reproductor histórico (que recalcula muchos giros seguidos y necesita
+// su PROPIA memoria, aislada de la decisión en vivo) usar
+// decidirConEstado() directo, no esta función — ver nota arriba.
+export function decidir(doc: MarketRead, col: MarketRead): Decision {
+  const { decision, ultimoJugado } = decidirConEstado(doc, col, ultimoMercadoJugado);
+  ultimoMercadoJugado = ultimoJugado;
+  return decision;
 }
 
 // ════════════════════════════════════════════════════════════════════════
