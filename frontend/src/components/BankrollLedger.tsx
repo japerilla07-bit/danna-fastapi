@@ -27,6 +27,12 @@
 // La prop `bankroll` se sigue recibiendo (para no tener que tocar de nuevo
 // Quantumpilot.tsx/AppPage.tsx, que ya la pasan) pero NO se lee en ningún
 // lado del render — el panel no depende de ningún dato que venga del motor.
+//
+// v4 (sep 2026) — REDISEÑO "INSTRUMENT PANEL": se sacó className="panel
+// bk-panel"/"panel-head" (CSS externo que impone borde+fondo+radio, mismo
+// criterio que CategoryTable.tsx v5 y GodBetPanel.tsx) a favor de un
+// encabezado de texto plano. Las filas (FilaTexto/FilaSaldo) no cambiaron —
+// ya eran líneas simples con un borde inferior, sin caja, desde la v3.
 
 import { useState, useRef } from 'react';
 
@@ -279,10 +285,10 @@ export function BankrollLedger(_props: Props) {
   const plPos = pl >= 0;
 
   return (
-    <div className="panel bk-panel">
-      <div className="panel-head">
-        <span className="icon" style={{ color: 'var(--green)' }}>💰</span>
-        <span className="title">BANKROLL &amp; LEDGER</span>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 4 }}>
+        <span style={{ color: 'var(--green)', fontSize: 11 }}>💰</span>
+        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.2em', color: 'var(--txt-hi)' }}>BANKROLL &amp; LEDGER</span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
