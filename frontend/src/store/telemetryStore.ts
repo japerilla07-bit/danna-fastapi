@@ -301,6 +301,17 @@ export const useSetCopSug = () => useTelemetryStore((s) => s.setCopSug);
 export const useCopHits = (): number => useTelemetryStore((s) => s.copScore.hits);
 export const useCopMisses = (): number => useTelemetryStore((s) => s.copScore.misses);
 export const useCopStreak = (): number => useTelemetryStore((s) => s.copScore.maxStreak);
+// FIX (oct 2026) — faltaba exponer la racha VIVA (copScore.streak): solo
+// existía useCopStreak(), que a pesar del nombre devuelve maxStreak (la
+// peor racha histórica de la sesión), no la racha actual. CopilotScoreboard
+// (MatrixPanel.tsx) necesitaba "RACHA AHORA" y, al no tener este selector,
+// terminó recalculándolo a mano recorriendo todo el history con
+// decidirConEstado() — que es solo Capa 1 y por eso ignoraba al escudo
+// (Capa 2) por completo. copScore YA se mantiene correcto en vivo (ver
+// ingest(), más arriba: usa pend.copSug, que desde que MatrixPanel escribe
+// ahí la salida de decidirPiloto() incluye Capa1+Capa2) — solo faltaba
+// este selector para leerlo.
+export const useCopLiveStreak = (): number => useTelemetryStore((s) => s.copScore.streak);
 export const useCopWr = (): number | null => useTelemetryStore((s) => {
   const t = s.copScore.hits + s.copScore.misses;
   return t > 0 ? (s.copScore.hits / t) * 100 : null;
