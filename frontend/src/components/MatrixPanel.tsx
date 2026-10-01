@@ -621,14 +621,18 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
     { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff1e38' : '#cbd5e1', glow: false },
   ];
 
+  // FIX (oct 2026) — Gunner: "esta cortado". `flexWrap: 'nowrap'` + 5 stats
+  // en una sola fila asumía una columna ancha; en el rail angosto del
+  // cockpit (280px) RACHA AHORA/PEOR RACHA no entraban y el contenedor
+  // nuevo (con overflow:hidden, por las esquinas redondeadas de la tarjeta
+  // glass) las cortaba a la mitad en vez de solo apretarlas. Pasa a grid
+  // con auto-fit: nunca desborda, envuelve a 2 filas (3+2) cuando el ancho
+  // no alcanza, sin tocar ningún dato ni cálculo.
   return (
-    <div style={{ display: 'flex', flexWrap: 'nowrap', padding: '10px 4px', ...(bare ? bareBlock() : microPanel('#22d3ee', 0.1)) }}>
-      {STATS.map((s, i, arr) => (
-        <div key={s.k} style={{
-          flex: '1', padding: '0 12px',
-          borderRight: i < arr.length - 1 ? '1px solid rgba(34,211,238,0.18)' : 'none',
-        }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700 }}>{s.k}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(78px, 1fr))', gap: '10px 4px', padding: '10px 8px', ...(bare ? bareBlock() : microPanel('#22d3ee', 0.1)) }}>
+      {STATS.map((s) => (
+        <div key={s.k} style={{ padding: '0 6px', minWidth: 0 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700, whiteSpace: 'nowrap' }}>{s.k}</div>
           <div style={{ fontFamily: FONT_HEAD, fontSize: 21, fontWeight: 900, color: s.c, marginTop: 3, textShadow: s.glow ? `0 0 8px ${s.c}80` : 'none' }}>{s.v}</div>
         </div>
       ))}
