@@ -944,24 +944,38 @@ export function QuantumPilot({
               <CopilotScoreboard bare />
             </div>
             {/* GOD TARGET — mismo contenedor que MARCADOR, separado por un
-                lavado de fondo (tono), no por una línea. ERR/HIT deja de
-                ser naranja (#fb923c) — pasa a rojizo, coherente con que es
-                literalmente una proporción de errores. */}
-            <div style={{ display: 'flex', alignItems: 'center', padding: '12px 4px 14px', marginTop: 8, background: 'rgba(255,255,255,0.025)' }}>
-              <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.2em', minWidth: 96, paddingLeft: 10 }}>
-                GOD TARGET
-              </span>
-              <div style={{ display: 'flex', flex: 1 }}>
-                <div style={{ flex: 1, padding: '0 12px', borderLeft: '1px solid rgba(255,255,255,0.07)' }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em' }}>CONSEC</div>
+                lavado de fondo (tono), no por una línea.
+                FIX (oct 2026) — Gunner: "los contadores de errores estan
+                mal no marca los errores ni aciertos que son". Antes este
+                bloque solo mostraba derivados (CONSEC/MÁX/ERR·HIT) y nunca
+                el conteo real de aciertos/errores de GOD — `hits`/`misses`
+                ya se calculaban arriba (de godTarget.wins/losses) pero no
+                se pintaban en ningún lado. Ahora ACIERTOS/ERRORES van
+                primero, mismo lenguaje visual que MARCADOR (verde/rojo), y
+                CONSEC/MÁX/ERR·HIT quedan como detalle al lado. Mismo grid
+                auto-fit que CopilotScoreboard — nunca corta, envuelve a 2
+                filas si no entra. */}
+            <div style={{ padding: '12px 10px 14px', marginTop: 8, background: 'rgba(255,255,255,0.025)' }}>
+              <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.2em' }}>GOD TARGET</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(66px, 1fr))', gap: '10px 4px', marginTop: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ACIERTOS</div>
+                  <div className="font-bold text-base" style={{ color: '#00ff9d' }}>{hits}</div>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERRORES</div>
+                  <div className="font-bold text-base" style={{ color: '#ff3b56' }}>{misses}</div>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>CONSEC</div>
                   <div className="font-bold text-base" style={{ color: consecErr > 0 ? '#ff6b7f' : '#94a3b8' }}>{consecErr}</div>
                 </div>
-                <div style={{ flex: 1, padding: '0 12px', borderLeft: '1px solid rgba(255,255,255,0.07)' }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em' }}>MÁX</div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>MÁX</div>
                   <div className="font-bold text-base text-white">{maxConsecErr}</div>
                 </div>
-                <div style={{ flex: 1, padding: '0 12px', borderLeft: '1px solid rgba(255,255,255,0.07)' }}>
-                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em' }}>ERR/HIT</div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="text-[9px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERR/HIT</div>
                   <div className="font-bold text-base" style={{ color: '#ff6b7f' }}>{errHit.toFixed(1)}</div>
                 </div>
               </div>
