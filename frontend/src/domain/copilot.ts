@@ -458,9 +458,12 @@ export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto 
     const sDoc = seguridad(doc);
     const sCol = seguridad(col);
     principal = sDoc > sCol || (sDoc === sCol && (doc.cellWr ?? 0) >= (col.cellWr ?? 0)) ? 'doc' : 'col';
-    const nombrePrincipal = principal === 'doc' ? 'DOCENAS' : 'COLUMNAS';
+    // El aviso de cuál priorizar NO va metido en esta frase — Gunner en vivo:
+    // "ese aviso no sirve, toca que diga solo y que se note". Pasa a ser un
+    // elemento propio y grande en la UI (MatrixPanel.tsx, CopilotOrder),
+    // leyendo este mismo campo `principal` — ver abajo.
     titulo = `◆ COBERTURA DOBLE · ${coberturaZonasDoc.join('+').toUpperCase()} / ${coberturaZonasCol.join('+').toUpperCase()}`;
-    motivo = `Distribución marcada en los dos mercados a la vez: se cubren 2 docenas y 2 columnas (4 fichas) hasta que salga, en cada una, la zona que quedó afuera. Mejor rendimiento ahora: ${nombrePrincipal} — priorizala si tenés que elegir una.`;
+    motivo = 'Distribución marcada en los dos mercados a la vez: se cubren 2 docenas y 2 columnas (4 fichas) hasta que salga, en cada una, la zona que quedó afuera.';
   } else if (coberturaDocActiva) {
     capa = 'COBERTURA_DOC';
     titulo = `◆ COBERTURA DOCENAS · ${coberturaZonasDoc.join('+').toUpperCase()}`;
