@@ -536,6 +536,25 @@ export function CopilotOrder({
           <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 55 : 25, fontWeight: 900, color: '#ffffff', letterSpacing: '0.01em', textShadow: `0 0 ${hero ? 34 : 18}px ${glow}`, lineHeight: hero ? 1.05 : 1 }}>
             {d.titulo}
           </span>
+          {/* PRIORIZA <mercado> — oct 2026, pedido en vivo de Gunner: el
+              aviso de cuál mercado tiene mejor rendimiento en COBERTURA
+              DOBLE estaba metido adentro del párrafo de motivo y "no servía,
+              no se nota" en plena mesa. Pasa a ser su propia línea, grande,
+              en un color (ámbar) que no usa ningún otro estado de nivel
+              (ok=verde, precaución=blanco, alto=rojo) — así no se confunde
+              con el semáforo y salta a la vista de un vistazo. Solo aparece
+              con COBERTURA_DOBLE, que es el único caso con dos mercados
+              jugándose a la vez y por lo tanto el único que necesita decir
+              cuál priorizar. */}
+          {d.capa === 'COBERTURA_DOBLE' && d.principal && (
+            <span style={{
+              fontFamily: FONT_HEAD, fontSize: hero ? 26 : 16, fontWeight: 900,
+              color: '#ffb300', letterSpacing: '0.04em',
+              textShadow: '0 0 16px rgba(255,179,0,0.75)',
+            }}>
+              ▲ PRIORIZA {d.principal === 'doc' ? 'DOCENAS' : 'COLUMNAS'}
+            </span>
+          )}
           {/* texto secundario — siempre gris mate, sin glow (pedido
               explícito de Gunner, exactamente este texto fue su ejemplo:
               "Ni DOCENAS ni COLUMNAS..."). */}
