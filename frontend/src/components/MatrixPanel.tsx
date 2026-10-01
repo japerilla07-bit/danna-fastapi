@@ -1,26 +1,41 @@
 // ════════════════════════════════════════════════════════════════════════
-// D.A.N.N.A. — MatrixPanel: centro de mando (v4 · piezas sueltas para Quantum)
+// D.A.N.N.A. — MatrixPanel: centro de mando (v6 · instrument panel + micropaneles)
 // ════════════════════════════════════════════════════════════════════════
 //
-// v4: el antiguo monolito `Copilot()` (header + orden + marcador, todo junto)
-// se partió en dos piezas exportadas por separado — `CopilotOrder` y
-// `CopilotScoreboard` — para que QuantumPilot las pueda ubicar donde quiera
-// en el rediseño del cockpit (la orden pegada a TARGET LOCK, el marcador
-// pegado a ERRORES) sin duplicar el cálculo. `MatrixPanel()` (el export
-// original) se dejó funcionando EXACTAMENTE igual que antes, solo que ahora
-// por dentro arma las dos piezas — así cualquier lugar que todavía lo use
-// no se entera del cambio.
+// v5 (sep 2026) — REDISEÑO COMPLETO DEL LENGUAJE VISUAL. Crítica externa que
+// Gunner trajo, resumida: dejar de pensar en "cards" (caja con borde+fondo+
+// sombra+radio alrededor de cada dato) y pasar a un "instrument panel" —
+// trading terminal / consola, no dashboard de SaaS. v5 interpretó eso como
+// CERO contenedores — y Gunner lo probó en vivo y lo rechazó: "los textos
+// son pequeños no es facil leer, no hay separacion clara, no hay cian flash
+// no hay micropaneles".
 //
-// También se agrega `ZoneDetailGrid` — el par de `MarketColumn` (doc/col)
-// que antes vivía pegado adentro de `MatrixPanel()`, ahora exportado suelto
-// para que Quantum lo pueda meter en un acordeón colapsable. Es el MISMO
-// componente, sin tocar su lógica.
+// v6 (sep 2026) — CORRECCIÓN. La idea correcta no es "cero cajas", es UNA
+// sola capa de contenedor por bloque lógico — un micropanel (borde cian/
+// color-de-estado + fondo sutil + radio chico), nunca anidado dentro de
+// otro micropanel. Reglas de v6:
+//   - Cada bloque que el operador necesita leer como unidad (CopilotOrder,
+//     CopilotScoreboard, cada celda DOCENAS/COLUMNAS) va en UN micropanel.
+//     Un acento lateral (borderLeft) adentro de ese micropanel para marcar
+//     un sub-bloque sigue estando bien — eso no es "caja dentro de caja",
+//     es una línea, no un segundo contenedor con su propio fondo.
+//   - Tamaños de fuente subidos en todo dato que se lee para operar — nada
+//     de letra de 8-10px en datos accionables; eso queda solo para los
+//     micro-labels de encabezado (ej. "HISTÓRICO DE ESTA CASILLA").
+//   - El glow cian/color vuelve a estar presente en títulos y bordes de
+//     micropanel, no solo en la decisión activa — es la identidad visual
+//     de la app ("cian flash"), no un lujo a recortar.
+//   - El color sigue indicando EVENTOS, no categorías: verde = favorable/
+//     activo, ámbar = esperar, rojo = error/peligro, gris = neutro.
+//   - Ninguna lógica de datos cambió: mismos hooks, mismas fórmulas, mismas
+//     fuentes (telemetryStore, zoneMatrix, copilot). Esto sigue siendo una
+//     reescritura de PRESENTACIÓN únicamente.
 //
-// Dos preguntas, dos lugares:
-//   • SESIÓN (arriba, grande) = cómo venís HOY en total por mercado.
-//   • CELDA (MAPA) = reputación histórica de la casilla donde estás.
-// Se quitó el "HOY por celda" (casi siempre 0/0, no aportaba).
-// Celdas visitadas escritas en palabras (estado con nombre + rango + conteo).
+// (Histórico v4): el monolito `Copilot()` se partió en `CopilotOrder` y
+// `CopilotScoreboard` para que QuantumPilot las ubique donde quiera sin
+// duplicar el cálculo. `ZoneDetailGrid` expone el par de columnas de
+// mercado (doc/col) — completo (`MarketColumn`) o compacto
+// (`MarketEfficiencyCell`, para la columna angosta del Quantum Pilot).
 //
 // Lectura pura del store + la matriz. No decide ni bloquea al motor.
 // ════════════════════════════════════════════════════════════════════════
@@ -47,18 +62,23 @@ import {
 // pura de lectura — es la que manda en la ORDEN en vivo.
 import { decidirPiloto, decidirConEstado, type MarketRead } from '@/domain/copilot';
 
-const MONO = "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
-const DISPLAY = "'Rajdhani', 'Inter', system-ui, sans-serif";
+const FONT_HEAD = "'Rajdhani', sans-serif";
+const FONT_MONO = "'JetBrains Mono', monospace";
 
 // ── PALETA "GEASS / SHIKON" DIRECTA EN EL COMPONENTE ──
-// (rediseño trading: mismo mapa de colores por zona, glow reducido)
+// v7 (oct 2026) — rediseño cockpit: Gunner pidió sacar el naranja/ámbar como
+// acento en toda la app ("preferiría meter un blanco neón en vez de un
+// naranja"). PROBE pasa de ámbar (#ffdf60) a blanco neón — mismo criterio
+// que el nivel "precaución" de CopilotOrder, que usa esta misma semántica
+// (esperar/no hay entrada sólida todavía). SANTUARIO/VERDE/TÓXICA/AGUJERO/
+// NEUTRA quedan igual — no hubo pedido de tocarlos.
 const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: string }> = {
-  SANTUARIO: { label: 'SANTUARIO', color: '#10b981', glow: 'rgba(16,185,129,0.55)', dim: 'rgba(16,185,129,0.10)' },
-  VERDE:     { label: 'VERDE',     color: '#22c55e', glow: 'rgba(34,197,94,0.45)',  dim: 'rgba(34,197,94,0.08)'  },
-  PROBE:     { label: 'PROBE',     color: '#f59e0b', glow: 'rgba(245,158,11,0.45)', dim: 'rgba(245,158,11,0.08)' },
-  TOXICA:    { label: 'TÓXICA',    color: '#ef4444', glow: 'rgba(239,68,68,0.55)',  dim: 'rgba(239,68,68,0.10)'  },
-  AGUJERO:   { label: 'AGUJERO',   color: '#dc2626', glow: 'rgba(220,38,38,0.65)',  dim: 'rgba(220,38,38,0.14)'  },
-  NEUTRA:    { label: 'SIN DATOS', color: '#64748b', glow: 'rgba(100,116,139,0.30)', dim: 'rgba(100,116,139,0.06)'},
+  SANTUARIO: { label: 'SANTUARIO', color: '#00ff9d', glow: 'rgba(0,255,157,0.85)', dim: 'rgba(0,255,157,0.15)' },
+  VERDE:     { label: 'VERDE',     color: '#10e57b', glow: 'rgba(16,229,123,0.70)', dim: 'rgba(16,229,123,0.12)' },
+  PROBE:     { label: 'PROBE',     color: '#f4f8ff', glow: 'rgba(244,248,255,0.55)', dim: 'rgba(244,248,255,0.12)' },
+  TOXICA:    { label: 'TÓXICA',    color: '#ff1e38', glow: 'rgba(255,30,56,0.75)',  dim: 'rgba(255,30,56,0.15)' },
+  AGUJERO:   { label: 'AGUJERO',   color: '#d90b2c', glow: 'rgba(217,11,44,0.90)',  dim: 'rgba(217,11,44,0.25)' },
+  NEUTRA:    { label: 'SIN DATOS', color: '#5c687a', glow: 'rgba(92,104,122,0.40)', dim: 'rgba(92,104,122,0.10)' },
 };
 
 const INSTRUCCION: Record<Zone, string> = {
@@ -73,39 +93,65 @@ const INSTRUCCION: Record<Zone, string> = {
 // "HUD 50-54 · ENT 25-29" a partir de la clave
 const rangeText = (key: string) => labelByKey(key);
 
+// Fondo de micropanel a partir de un color de acento — una sola capa,
+// usado en todos los bloques de este archivo (CopilotOrder, Scoreboard,
+// celdas de zona). `glow` opcional sube la intensidad del halo para el
+// bloque que de verdad está "pasando ahora".
+//
+// v7 (oct 2026) — rediseño cockpit: se agrega backdrop-filter (blur real)
+// para que el fondo semitransparente sea GLASSMORPHISM de verdad y no solo
+// una capa oscura plana — pedido explícito de Gunner sobre el prototipo
+// ("Profundidad con Paneles y Glassmorphism"). Cero cambio de lógica, es
+// una propiedad CSS más en el mismo objeto de siempre.
+function microPanel(accent: string, glowStrength = 0.14): React.CSSProperties {
+  return {
+    border: `1px solid ${accent}66`,
+    background: 'rgba(10, 16, 28, 0.55)',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    borderRadius: 8,
+    boxShadow: `0 0 16px ${accent}${Math.round(glowStrength * 255).toString(16).padStart(2, '0')}, inset 0 1px 0 ${accent}14`,
+  };
+}
+
+// Versión "desnuda" del mismo bloque — sin borde/fondo/glow propio, solo el
+// padding/estructura. Se usa cuando VARIOS bloques se agrupan dentro de UNA
+// sola tarjeta exterior (p. ej. ZONA o MARCADOR en el cockpit de
+// Quantumpilot.tsx) — así se evita anidar micropaneles ("caja dentro de
+// caja"), que es justo lo que v6 corrigió. `tint` opcional pinta un lavado
+// de fondo muy sutil para marcar el sub-bloque por tono en vez de con una
+// línea divisoria.
+function bareBlock(tint?: string): React.CSSProperties {
+  return tint ? { background: tint } : {};
+}
+
 // ────────────────────────────────────────────────────────────────────────
-// Celda visitada — en palabras
+// Celda visitada — fila simple con separador fino (vive DENTRO del
+// micropanel de MarketColumn, así que se queda sin su propio contenedor).
 // ────────────────────────────────────────────────────────────────────────
 
 function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: CellRec }) {
   const estado = fusedZoneByKey(cKey, mkt, rec);
   const st = STYLE[estado];
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 2,
-      padding: '5px 10px',
-      background: 'rgba(13,18,25,0.7)',
-      borderLeft: `2px solid ${st.color}`,
-      borderRadius: 2,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 800, color: st.color, letterSpacing: '0.10em' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: st.color, boxShadow: `0 0 6px ${st.color}`, flexShrink: 0 }} />
+        <span style={{ fontFamily: FONT_HEAD, fontSize: 12.5, fontWeight: 800, color: st.color, letterSpacing: '0.06em' }}>
           {st.label}
         </span>
-        <span style={{ fontSize: 9, color: '#64748b', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ fontSize: 10.5, color: '#7c8aa0', fontFamily: FONT_MONO }}>
           {rangeText(cKey)}
         </span>
-      </div>
-      <span style={{ fontSize: 9.5, color: '#cbd5e1', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-        <span style={{ color: '#10b981' }}>{rec.hits}✓</span>
+      </span>
+      <span style={{ fontSize: 11.5, color: '#cbd5e1', fontFamily: FONT_MONO }}>
+        <span style={{ color: '#00ff9d' }}>{rec.hits}✓</span>
         {' · '}
-        <span style={{ color: '#ef4444' }}>{rec.misses}✗</span>
+        <span style={{ color: '#ff1e38' }}>{rec.misses}✗</span>
         {' · '}
-        <span style={{ color: '#64748b' }}>
-          racha <b style={{ color: rec.streak >= 3 ? '#ef4444' : rec.streak >= 1 ? '#f59e0b' : '#10b981' }}>{rec.streak}</b>
-          {' / '}
-          <b style={{ color: rec.maxStreak >= 4 ? '#ef4444' : '#cbd5e1' }}>{rec.maxStreak}</b>
-        </span>
+        racha <b style={{ color: rec.streak >= 3 ? '#ff1e38' : rec.streak >= 1 ? '#ffdf60' : '#00ff9d' }}>{rec.streak}</b>
+        {' / '}
+        <b style={{ color: rec.maxStreak >= 4 ? '#ff1e38' : '#cbd5e1' }}>{rec.maxStreak}</b>
       </span>
     </div>
   );
@@ -113,7 +159,10 @@ function VisitedRowImpl({ mkt, cKey, rec }: { mkt: Market; cKey: string; rec: Ce
 const VisitedRow = memo(VisitedRowImpl);
 
 // ────────────────────────────────────────────────────────────────────────
-// Columna de mercado
+// Columna de mercado — versión COMPLETA (uso: MatrixPanel() legacy).
+// v6: UN micropanel para toda la celda (borde del color de zona + fondo +
+// glow); adentro, acentos laterales siguen marcando "histórico" y "qué
+// hacer" como sub-bloques — eso es una línea, no una segunda caja.
 // ────────────────────────────────────────────────────────────────────────
 
 function MarketColumnImpl({ mkt }: { mkt: Market }) {
@@ -141,212 +190,105 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
     .sort((a, b) => b[1].maxStreak - a[1].maxStreak || b[1].misses - a[1].misses)
     .slice(0, 3);
 
-  const cellBase: React.CSSProperties = {
-    padding: '8px 10px',
-    background: 'rgba(6,9,17,0.6)',
-    border: '1px solid rgba(148,163,184,0.08)',
-    borderRadius: 3,
-  };
+  const ratio = termoTotal > 0 ? termoHits / termoTotal : 0;
+  const luz = termoTotal < 3 ? '#5c687a' : ratio >= 0.7 ? '#00ff9d' : ratio >= 0.5 ? '#ffdf60' : '#ff1e38';
+  const termoTxt = termoTotal < 3 ? 'juntando datos…'
+    : ratio >= 0.7 ? 'VENÍS BIEN — aprovechá'
+    : ratio >= 0.5 ? 'PAREJO'
+    : 'MESA DURA — aflojá o rotá';
+
+  const cur = live?.streak ?? 0;
+  const techo = map?.maxRun ?? 0;
+  const anomalo = techo > 0 && cur >= techo;
 
   return (
-    <div style={{
-      flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6,
-      padding: '10px 12px',
-      background: 'linear-gradient(180deg, rgba(13,18,25,0.95) 0%, rgba(6,9,17,0.98) 100%)',
-      border: `1px solid ${st.color}55`,
-      borderRadius: 4,
-      boxShadow: `inset 0 1px 0 ${st.color}20, 0 4px 12px rgba(0,0,0,0.4)`,
-    }}>
-      <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: '0.22em', color: st.color }}>
-        {title}
-      </span>
-
-      {/* Fila superior: termómetro + cómo venís hoy, lado a lado */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'stretch' }}>
-
-      {/* 0 · TERMÓMETRO EN VIVO — cómo venís en los últimos 10 giros */}
-      {(() => {
-        const hits = termoHits, total = termoTotal, liveStreak = termoStreak;
-        // semáforo: verde 7+/10, amarillo 5-6, rojo <=4 (sobre giros resueltos)
-        const ratio = total > 0 ? hits / total : 0;
-        const luz = total < 3 ? '#64748b' : ratio >= 0.7 ? '#10b981' : ratio >= 0.5 ? '#f59e0b' : '#ef4444';
-        const txt = total < 3 ? 'juntando datos…'
-          : ratio >= 0.7 ? 'VENÍS BIEN — aprovechá'
-          : ratio >= 0.5 ? 'PAREJO'
-          : 'MESA DURA — aflojá o rotá';
-        return (
-          <div style={{
-            ...cellBase,
-            border: `1px solid ${luz}40`,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: luz, boxShadow: `0 0 5px ${luz}`, flexShrink: 0 }} />
-              <span style={{ fontFamily: MONO, fontSize: 8, color: '#64748b', letterSpacing: '0.14em', fontWeight: 700 }}>ÚLTIMOS {total} GIROS</span>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
-              <span style={{ fontSize: 16, fontWeight: 800, color: luz, fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                {total > 0 ? `${hits}/${total}` : '—'}
-              </span>
-              <span style={{ fontSize: 9.5, fontWeight: 700, color: '#cbd5e1', lineHeight: 1.1 }}>{txt}</span>
-              {liveStreak >= 2 && (
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', fontFamily: MONO, marginLeft: 'auto' }}>
-                  {liveStreak} ✗
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* 1 · SESIÓN — marcador de la partida */}
-      <div style={{
-        ...cellBase,
-        border: '1px solid rgba(34,211,238,0.20)',
-      }}>
-        <span style={{ fontFamily: MONO, fontSize: 8, color: '#22d3ee', letterSpacing: '0.14em', fontWeight: 700 }}>
-          CÓMO VENÍS HOY
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 9, padding: '12px 13px', ...microPanel(st.color) }}>
+      {/* título + estado actual */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', borderBottom: `1px solid ${st.color}40`, paddingBottom: 6 }}>
+        <span style={{ fontFamily: FONT_HEAD, fontSize: 15, fontWeight: 800, letterSpacing: '0.2em', color: st.color, textShadow: `0 0 10px ${st.glow}` }}>
+          {title}
         </span>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', fontFamily: MONO, marginTop: 4 }}>
-          <div style={{ display: 'flex', gap: 10, fontVariantNumeric: 'tabular-nums' }}>
-            <span style={{ fontSize: 20, fontWeight: 800, color: '#10b981', lineHeight: 1 }}>✓{gHits}</span>
-            <span style={{ fontSize: 20, fontWeight: 800, color: '#ef4444', lineHeight: 1 }}>✗{gMiss}</span>
-          </div>
-          <span style={{ fontSize: 14, color: '#94a3b8', fontFamily: MONO, fontWeight: 800 }}>
-            {gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}
-          </span>
-        </div>
-        <span style={{
-          fontFamily: MONO, fontSize: 9,
-          color: gMax >= 6 ? '#ef4444' : gMax >= 4 ? '#f59e0b' : '#64748b',
-          marginTop: 6, lineHeight: 1.3, display: 'block'
-        }}>
-          peor racha de errores hoy: <b style={{ color: gMax >= 4 ? undefined : '#cbd5e1' }}>{gMax}</b>
-          {gCur > 0 && <span style={{ color: '#f59e0b', display: 'block', marginTop: 2 }}>⚠ venís perdiendo {gCur} seguidas</span>}
+        <span style={{ fontFamily: FONT_HEAD, fontSize: 13, fontWeight: 800, letterSpacing: '0.1em', color: st.color, textShadow: `0 0 8px ${st.glow}` }}>
+          {st.label}{deviation === 'peor' ? ' ▼' : deviation === 'mejor' ? ' ▲' : ''}
         </span>
       </div>
-      </div>{/* cierre grilla superior */}
 
-      {/* 2 · ESTÁS AQUÍ — celda actual + su reputación (MAPA) */}
-      <div style={{
-        padding: '10px 12px',
-        background: `radial-gradient(circle at top left, ${st.dim} 0%, rgba(6,9,17,0.9) 80%)`,
-        border: `1px solid ${st.color}60`,
-        borderRadius: 3,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontFamily: MONO, fontSize: 9, color: st.color, letterSpacing: '0.16em', fontWeight: 700 }}>▸ ESTÁS AQUÍ</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {deviation && (
-              <span style={{
-                fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: '0.05em',
-                color: deviation === 'peor' ? '#ef4444' : '#10b981',
-              }}>
-                {deviation === 'peor' ? '▼ hoy peor' : '▲ hoy mejor'}
-              </span>
-            )}
-            <AnimatePresence mode="wait">
-              <motion.span key={estado}
-                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                style={{
-                  fontFamily: MONO, fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', color: st.color,
-                  padding: '3px 10px',
-                  borderRadius: 2,
-                  border: `1px solid ${st.color}80`,
-                  background: 'rgba(0,0,0,0.4)',
-                }}>
-                {st.label}
-              </motion.span>
-            </AnimatePresence>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', lineHeight: 1 }}>HUD {hud ?? '—'}</span>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', lineHeight: 1 }}>ENT {ent ?? '—'}</span>
-        </div>
-
-        {/* MAPA — reputación histórica de la celda, en palabras */}
-        <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${st.color}30`, position: 'relative' }}>
-          <span style={{ fontFamily: MONO, fontSize: 8, color: '#64748b', letterSpacing: '0.14em', fontWeight: 700 }}>
-            HISTÓRICO DE ESTA CASILLA
-          </span>
-          {map ? (
-            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 3, fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-              acierto <b style={{ color: '#ffffff' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
-              {'  ·  aguanta hasta '}
-              <b style={{ color: map.maxRun >= 5 ? '#ef4444' : '#ffffff' }}>{map.maxRun}</b>
-              {' errores'}
-              <span style={{ color: '#64748b' }}>{'  '}({map.n} giros)</span>
-            </div>
-          ) : (
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, fontFamily: MONO }}>
-              sin datos en esta casilla
-            </div>
-          )}
-
-          {/* HOY EN ESTA CASILLA — siempre visible: lo que llevás hoy en esta celda */}
-          <div style={{ marginTop: 6 }}>
-            <span style={{ fontFamily: MONO, fontSize: 8, color: '#64748b', letterSpacing: '0.14em', fontWeight: 700 }}>HOY EN ESTA CASILLA</span>
-            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 3, fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-              <span style={{ color: '#10b981' }}>{live?.hits ?? 0} ✓</span>
-              {'  '}
-              <span style={{ color: '#ef4444' }}>{live?.misses ?? 0} ✗</span>
-              <span style={{ color: '#64748b' }}>{'  ·  racha ahora '}</span>
-              <b style={{ color: (live?.streak ?? 0) >= 3 ? '#ef4444' : (live?.streak ?? 0) >= 1 ? '#f59e0b' : '#10b981' }}>
-                {live?.streak ?? 0}
-              </b>
-            </div>
-          </div>
-
-          {/* EN VIVO — racha de errores actual en esta celda vs el techo histórico */}
-          {(() => {
-            const cur = live?.streak ?? 0;
-            const techo = map?.maxRun ?? 0;
-            const anomalo = techo > 0 && cur >= techo;
-            const cerca = techo > 0 && cur === techo - 1;
-            const color = anomalo ? '#ef4444' : cerca ? '#f59e0b' : cur > 0 ? '#f59e0b' : '#10b981';
-            return (
-              <div style={{
-                marginTop: 6, padding: '6px 10px',
-                background: anomalo ? 'rgba(220,38,38,0.10)' : 'rgba(0,0,0,0.4)',
-                border: `1px solid ${anomalo ? 'rgba(220,38,38,0.55)' : 'rgba(148,163,184,0.08)'}`,
-                borderRadius: 2,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: MONO, fontSize: 8, color: '#64748b', letterSpacing: '0.14em', fontWeight: 700 }}>EN VIVO</span>
-                  <div style={{ fontSize: 12, fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                    racha de errores ahora: <b style={{ color }}>{cur}</b>
-                    {techo > 0 && <span style={{ color: '#64748b', fontSize: 10.5 }}>{'  '}/ techo {techo}</span>}
-                  </div>
-                </div>
-                {anomalo && (
-                  <div style={{ fontFamily: MONO, fontSize: 9, color: '#ef4444', fontWeight: 800, marginTop: 4 }}>
-                    ⚠ igualaste/superaste el techo histórico — anómalo, considerá salir
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 15, color: '#ffffff' }}>
+        HUD {hud ?? '—'} <span style={{ color: '#5c687a' }}>·</span> ENT {ent ?? '—'}
       </div>
 
-      {/* 3 · INSTRUCCIÓN */}
-      <div style={{
-        padding: '8px 12px',
-        background: `linear-gradient(90deg, ${st.dim} 0%, rgba(6,10,20,0.05) 100%)`,
-        borderLeft: `3px solid ${st.color}`,
-        borderRadius: '0 2px 2px 0',
-      }}>
-        <span style={{ fontFamily: MONO, fontSize: 8, color: '#94a3b8', letterSpacing: '0.14em', fontWeight: 700 }}>QUÉ HACER</span>
-        <div style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, color: st.color, marginTop: 3 }}>{INSTRUCCION[estado]}</div>
+      {/* últimos 10 giros */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: FONT_MONO, fontSize: 12.5 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: luz, boxShadow: `0 0 7px ${luz}`, flexShrink: 0 }} />
+        <span style={{ color: '#8092b5' }}>ÚLT. {termoTotal || 10}:</span>
+        <b style={{ color: luz }}>{termoTotal > 0 ? `${termoHits}/${termoTotal}` : '—'}</b>
+        <span style={{ color: '#cbd5e1', fontSize: 11.5 }}>{termoTxt}</span>
+        {termoStreak >= 2 && <span style={{ color: '#ff1e38', marginLeft: 'auto', fontWeight: 800 }}>{termoStreak} ✗</span>}
       </div>
 
-      {/* 4 · CELDAS VISITADAS — en palabras */}
+      {/* cómo venís hoy (sesión completa) */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', fontFamily: FONT_MONO, fontSize: 13.5 }}>
+        <span>
+          <span style={{ color: '#00ff9d' }}>✓{gHits}</span>{' '}
+          <span style={{ color: '#ff1e38' }}>✗{gMiss}</span>
+          <span style={{ color: '#5c687a' }}> hoy</span>
+        </span>
+        <span style={{ color: '#8092b5', fontWeight: 800 }}>{gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}</span>
+      </div>
+      {gMax >= 4 && (
+        <div style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#ffdf60', marginTop: -4 }}>
+          peor racha hoy: <b>{gMax}</b>
+          {gCur > 0 && <span> · ⚠ venís perdiendo {gCur} seguidas</span>}
+        </div>
+      )}
+
+      {/* histórico de la celda — sub-bloque con acento lateral (línea, no
+          una segunda caja) dentro del micropanel */}
+      <div style={{ borderLeft: `3px solid ${st.color}`, paddingLeft: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.15em', fontWeight: 700 }}>
+          HISTÓRICO DE ESTA CASILLA
+        </span>
+        {map ? (
+          <div style={{ fontSize: 13.5, color: '#cbd5e1', fontFamily: FONT_MONO }}>
+            acierto <b style={{ color: '#ffffff' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
+            {'  ·  aguanta hasta '}
+            <b style={{ color: map.maxRun >= 5 ? '#ff1e38' : '#ffffff' }}>{map.maxRun}</b>
+            {' errores'}
+            <span style={{ color: '#5c687a' }}>{'  '}({map.n} giros)</span>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13.5, color: '#5c687a', fontFamily: FONT_MONO }}>sin datos en esta casilla</div>
+        )}
+
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.15em', fontWeight: 700, marginTop: 5 }}>
+          HOY EN ESTA CASILLA
+        </span>
+        <div style={{ fontSize: 13.5, color: '#cbd5e1', fontFamily: FONT_MONO }}>
+          <span style={{ color: '#00ff9d' }}>{live?.hits ?? 0} ✓</span>
+          {'  '}
+          <span style={{ color: '#ff1e38' }}>{live?.misses ?? 0} ✗</span>
+          <span style={{ color: '#5c687a' }}>{'  ·  racha ahora '}</span>
+          <b style={{ color: cur >= 3 ? '#ff1e38' : cur >= 1 ? '#ffdf60' : '#00ff9d' }}>{cur}</b>
+          {techo > 0 && <span style={{ color: '#5c687a', fontSize: 12.5 }}>{'  '}/ techo {techo}</span>}
+        </div>
+
+        {anomalo && (
+          <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#ff1e38', fontWeight: 800, marginTop: 2 }}>
+            ⚠ igualaste/superaste el techo histórico — anómalo, considerá salir
+          </div>
+        )}
+      </div>
+
+      {/* qué hacer — sub-bloque con acento lateral */}
+      <div style={{ borderLeft: `3px solid ${st.color}`, paddingLeft: 10 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.15em', fontWeight: 700 }}>QUÉ HACER</span>
+        <div style={{ fontFamily: FONT_HEAD, fontSize: 16, fontWeight: 800, color: st.color, textShadow: `0 0 8px ${st.glow}` }}>{INSTRUCCION[estado]}</div>
+      </div>
+
+      {/* casillas visitadas */}
       {visited.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontFamily: MONO, fontSize: 8, color: '#64748b', letterSpacing: '0.14em', paddingLeft: 2, fontWeight: 700 }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.15em', fontWeight: 700, marginBottom: 2 }}>
             CASILLAS QUE PASASTE HOY · {Object.keys(reg).length}
           </span>
           {visited.map(([k, rec]) => <VisitedRow key={k} mkt={mkt} cKey={k} rec={rec} />)}
@@ -359,20 +301,12 @@ const MarketColumn = memo(MarketColumnImpl);
 
 // ────────────────────────────────────────────────────────────────────────
 // MarketEfficiencyCell — versión COMPACTA de MarketColumn, para la columna
-// ZONA del Quantum Pilot (320px de ancho, apiladas doc/col). MarketColumn
-// (arriba) trae termómetro + "cómo venís hoy" + celda actual con histórico
-// + caja "EN VIVO" duplicada + lista de casillas visitadas — de punta a
-// punta es alta, y apiladas las dos (doc y col) la segunda queda fuera de
-// vista, justo la queja de Gunner: "la celda de columnas debe estar por
-// debajo de la de docenas mostrando su eficiencia si no no sirve". Esta
-// versión deja SOLO lo que hace falta para operar en vivo: zona actual,
-// HUD/ENT, cómo venís en los últimos 10 giros, eficiencia histórica de la
-// celda (acierto % + techo de errores) y qué hacer. Se sacan del todo la
-// lista "casillas que pasaste hoy" y la caja "EN VIVO" repetida — ese
-// detalle completo sigue disponible en MatrixPanel() (uso no-compacto).
+// ZONA del Quantum Pilot (320px de ancho, apiladas doc/col). v6: también en
+// UN micropanel propio (antes solo tenía el acento lateral, sin separación
+// real del resto de la columna).
 // ────────────────────────────────────────────────────────────────────────
 
-function MarketEfficiencyCellImpl({ mkt }: { mkt: Market }) {
+function MarketEfficiencyCellImpl({ mkt, bare = false }: { mkt: Market; bare?: boolean }) {
   const hud = useLastHud();
   const ent = useLastEnt();
   const key = cellKeyOf(hud, ent);
@@ -385,89 +319,73 @@ function MarketEfficiencyCellImpl({ mkt }: { mkt: Market }) {
   const termoHits = useTermoHits(mkt, 10);
   const termoTotal = useTermoTotal(mkt, 10);
   const ratio = termoTotal > 0 ? termoHits / termoTotal : 0;
-  const luz = termoTotal < 3 ? '#64748b' : ratio >= 0.7 ? '#10b981' : ratio >= 0.5 ? '#f59e0b' : '#ef4444';
-  // Contador general de la mesa (sesión completa) — el que traía la card
-  // grande ("CÓMO VENÍS HOY") y que se había caído en la versión compacta.
-  // Gunner: "me eliminaste el contador general de docenas y columnas que
-  // tenian esas card y es necesario visualizar rendimiento".
+  const luz = termoTotal < 3 ? '#5c687a' : ratio >= 0.7 ? '#00ff9d' : ratio >= 0.5 ? '#ffdf60' : '#ff1e38';
+  // Contador general de la mesa (sesión completa) — Gunner: "me eliminaste
+  // el contador general de docenas y columnas que tenian esas card y es
+  // necesario visualizar rendimiento".
   const gHits = useMarketHits(mkt);
   const gMiss = useMarketMisses(mkt);
   const gMax = useMarketMaxStreak(mkt);
   const gTotal = gHits + gMiss;
 
+  // v7 (oct 2026) — jerarquía tipográfica pedida por Gunner sobre el
+  // prototipo: títulos/valores principales (HUD, ENT) en blanco bold, texto
+  // secundario (labels "HUD"/"ENT", "últ. 10") en gris regular, y line-height
+  // 1.4-1.5 en "QUÉ HACER" para que no se sienta aplastado en la columna
+  // angosta. El color de estado (st.color) se mantiene en título/badge/
+  // instrucción — es la señal de zona de toda la app, no algo a aplanar.
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 5,
-      padding: '9px 11px',
-      background: 'linear-gradient(180deg, rgba(13,18,25,0.95) 0%, rgba(6,9,17,0.98) 100%)',
-      border: `1px solid ${st.color}55`,
-      borderRadius: 4,
-      boxShadow: `inset 0 1px 0 ${st.color}20, 0 4px 12px rgba(0,0,0,0.4)`,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, letterSpacing: '0.18em', color: st.color }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '11px 12px', ...(bare ? bareBlock() : microPanel(st.color)) }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: `1px solid ${st.color}35`, paddingBottom: 5 }}>
+        <span style={{ fontFamily: FONT_HEAD, fontSize: 14, fontWeight: 800, letterSpacing: '0.2em', color: '#ffffff', textShadow: `0 0 9px ${st.glow}` }}>
           {title}
         </span>
-        <span style={{
-          fontFamily: MONO, fontSize: 9, fontWeight: 800, letterSpacing: '0.10em', color: st.color,
-          padding: '2px 7px',
-          border: `1px solid ${st.color}80`,
-          background: 'rgba(0,0,0,0.4)',
-          borderRadius: 2,
-          whiteSpace: 'nowrap',
-        }}>
+        <span style={{ fontFamily: FONT_HEAD, fontSize: 12.5, fontWeight: 800, letterSpacing: '0.06em', color: st.color, whiteSpace: 'nowrap', textShadow: `0 0 7px ${st.glow}` }}>
           {st.label}{deviation === 'peor' ? ' ▼' : deviation === 'mejor' ? ' ▲' : ''}
         </span>
       </div>
 
-      <div style={{ fontFamily: MONO, fontSize: 10.5, color: '#cbd5e1', fontVariantNumeric: 'tabular-nums' }}>
-        HUD <b style={{ color: '#ffffff' }}>{hud ?? '—'}</b>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 12.5, color: '#8392a8', fontWeight: 400 }}>
+        HUD <b style={{ color: '#ffffff', fontWeight: 700 }}>{hud ?? '—'}</b>
         {'  ·  '}
-        ENT <b style={{ color: '#ffffff' }}>{ent ?? '—'}</b>
+        ENT <b style={{ color: '#ffffff', fontWeight: 700 }}>{ent ?? '—'}</b>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: MONO, fontSize: 10.5, fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: FONT_MONO, fontSize: 12.5 }}>
         <span>
-          <span style={{ color: '#10b981' }}>✓{gHits}</span>
+          <span style={{ color: '#00ff9d' }}>✓{gHits}</span>
           {' '}
-          <span style={{ color: '#ef4444' }}>✗{gMiss}</span>
+          <span style={{ color: '#ff1e38' }}>✗{gMiss}</span>
         </span>
-        <span style={{ color: '#94a3b8', fontWeight: 800 }}>{gTotal ? `${Math.round((gHits / gTotal) * 100)}%` : '—'}</span>
+        <span style={{ color: '#8092b5', fontWeight: 800 }}>{gTotal ? `${Math.round((gHits / gTotal) * 100)}%` : '—'}</span>
       </div>
       {gMax >= 4 && (
-        <div style={{ fontFamily: MONO, fontSize: 9.5, color: '#f59e0b', marginTop: -2 }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#f4f8ff', marginTop: -2 }}>
           peor racha hoy: <b>{gMax}</b>
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: MONO, fontSize: 10 }}>
-        <span style={{ width: 5, height: 5, borderRadius: '50%', background: luz, boxShadow: `0 0 4px ${luz}`, flexShrink: 0 }} />
-        <span style={{ color: '#94a3b8' }}>ÚLT. 10:</span>
-        <b style={{ color: luz, fontVariantNumeric: 'tabular-nums' }}>{termoTotal > 0 ? `${termoHits}/${termoTotal}` : '—'}</b>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT_MONO, fontSize: 12 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: luz, boxShadow: `0 0 6px ${luz}`, flexShrink: 0 }} />
+        <span style={{ color: '#8092b5', fontWeight: 400 }}>últ. 10:</span>
+        <b style={{ color: luz }}>{termoTotal > 0 ? `${termoHits}/${termoTotal}` : '—'}</b>
       </div>
 
-      <div style={{ fontFamily: MONO, fontSize: 10, color: '#cbd5e1', fontVariantNumeric: 'tabular-nums' }}>
-        {'eficiencia: '}
+      <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#8392a8', fontWeight: 400 }}>
+        {'eficiencia '}
         {map ? (
           <>
-            <b style={{ color: '#ffffff' }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
+            <b style={{ color: '#ffffff', fontWeight: 700 }}>{map.n ? Math.round((map.hits / map.n) * 100) : 0}%</b>
             {' · techo '}
-            <b style={{ color: map.maxRun >= 5 ? '#ef4444' : '#ffffff' }}>{map.maxRun}</b>
-            <span style={{ color: '#64748b' }}>{' '}({map.n}g)</span>
+            <b style={{ color: map.maxRun >= 5 ? '#ff1e38' : '#ffffff', fontWeight: 700 }}>{map.maxRun}</b>
+            <span style={{ color: '#5c687a' }}>{' '}({map.n}g)</span>
           </>
         ) : (
-          <span style={{ color: '#64748b' }}>sin datos en esta casilla</span>
+          <span style={{ color: '#5c687a' }}>sin datos en esta casilla</span>
         )}
       </div>
 
-      <div style={{
-        marginTop: 1, padding: '5px 8px',
-        borderLeft: `3px solid ${st.color}`,
-        background: `${st.color}10`,
-        fontFamily: MONO, fontSize: 11, fontWeight: 700, color: st.color,
-        lineHeight: 1.25,
-        borderRadius: '0 2px 2px 0',
-      }}>
+      <div style={{ fontFamily: FONT_HEAD, fontSize: 13.5, fontWeight: 600, color: st.color, marginTop: 1, lineHeight: 1.5, textShadow: `0 0 5px ${st.glow}` }}>
         {INSTRUCCION[estado]}
       </div>
     </div>
@@ -477,16 +395,44 @@ const MarketEfficiencyCell = memo(MarketEfficiencyCellImpl);
 
 // ────────────────────────────────────────────────────────────────────────
 // ZoneDetailGrid — el par DOCENAS/COLUMNAS suelto. `compact` cambia entre
-// la tarjeta completa (MarketColumn, uso original de MatrixPanel()) y la
-// tarjeta chica (MarketEfficiencyCell, uso del Quantum Pilot) — mismo dato,
+// la versión completa (MarketColumn, uso original de MatrixPanel()) y la
+// compacta (MarketEfficiencyCell, uso del Quantum Pilot) — mismo dato,
 // cero cambios de lógica, solo dos presentaciones según el espacio real
 // disponible.
 // ────────────────────────────────────────────────────────────────────────
 
-export function ZoneDetailGrid({ direction = 'row', compact = false }: { direction?: 'row' | 'column'; compact?: boolean }) {
+export function ZoneDetailGrid({
+  direction = 'row',
+  compact = false,
+  grouped = false,
+}: {
+  direction?: 'row' | 'column';
+  compact?: boolean;
+  /** v7 (oct 2026): true → DOCENAS y COLUMNAS comparten UNA sola tarjeta
+   *  glass (en vez de dos micropaneles separados), divididas por un lavado
+   *  de fondo tonal — pedido explícito de Gunner sobre el prototipo
+   *  ("envuelve ZONA en su propio contenedor"). Solo tiene efecto con
+   *  compact=true; con la versión completa (MarketColumn, uso de
+   *  MatrixPanel() standalone) se ignora — esas celdas son demasiado
+   *  grandes para compartir tarjeta sin verse apretadas. */
+  grouped?: boolean;
+}) {
+  if (compact && grouped) {
+    return (
+      <div style={{ display: 'flex', flexDirection: direction, ...microPanel('#5c687a', 0.06), padding: 0, overflow: 'hidden' }}>
+        <div style={{ flex: 1 }}>
+          <MarketEfficiencyCell mkt="doc" bare />
+        </div>
+        <div style={{ width: direction === 'row' ? 1 : '100%', height: direction === 'row' ? '100%' : 1, background: 'rgba(255,255,255,0.05)' }} />
+        <div style={{ flex: 1, background: 'rgba(255,255,255,0.02)' }}>
+          <MarketEfficiencyCell mkt="col" bare />
+        </div>
+      </div>
+    );
+  }
   const Cell = compact ? MarketEfficiencyCell : MarketColumn;
   return (
-    <div style={{ display: 'flex', flexDirection: direction, gap: compact ? 8 : 10 }}>
+    <div style={{ display: 'flex', flexDirection: direction, gap: compact ? 12 : 16 }}>
       <Cell mkt="doc" />
       <Cell mkt="col" />
     </div>
@@ -500,8 +446,7 @@ export function ZoneDetailGrid({ direction = 'row', compact = false }: { directi
 // dueño de avisarle al store qué sugiere el piloto) y CopilotScoreboard
 // (el marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA, réplica de toda la
 // sesión vía decidirConEstado() Capa 1, con memoria propia). Cada una es
-// independiente — se pueden
-// ubicar en cualquier lugar del layout.
+// independiente — se pueden ubicar en cualquier lugar del layout.
 // ────────────────────────────────────────────────────────────────────────
 
 function useMarketRead(mkt: Market): MarketRead {
@@ -525,8 +470,25 @@ function useMarketRead(mkt: Market): MarketRead {
  *  avisa al store qué mercado sugiere el piloto ahora mismo — si en algún
  *  momento se usa CopilotScoreboard sin esta pieza en el mismo árbol, el
  *  store deja de recibir la sugerencia en vivo. Quantum las usa siempre
- *  juntas, así que no pasa. */
-export function CopilotOrder() {
+ *  juntas, así que no pasa.
+ *
+ *  v6: UN micropanel (borde + fondo + glow del color de nivel) para todo el
+ *  bloque — v5 lo había dejado solo con acento lateral y perdió separación
+ *  del resto de la columna. El glow grande en el título sigue siendo el
+ *  más fuerte del panel: es la decisión jugándose ahora. */
+export function CopilotOrder({
+  hero = false,
+  bare = false,
+}: {
+  /** v7 (oct 2026): true → tratamiento "héroe" (título grande, el elemento
+   *  dominante del cockpit) — pedido explícito de Gunner sobre el
+   *  prototipo ("el panel central de ESPERÁ"). false = tamaño de siempre,
+   *  usado por MatrixPanel() standalone, sin tocar ese layout. */
+  hero?: boolean;
+  /** true → sin micropanel propio (lo pone el contenedor padre, para que
+   *  DECISIÓN sea UNA sola tarjeta en vez de anidar cajas) */
+  bare?: boolean;
+}) {
   const doc = useMarketRead('doc');
   const col = useMarketRead('col');
   const d = decidirPiloto(doc, col);
@@ -534,37 +496,29 @@ export function CopilotOrder() {
   const setCopSug = useSetCopSug();
   setCopSug(d.mercado);
 
-  const color = d.nivel === 'ok' ? '#10b981' : d.nivel === 'precaucion' ? '#f59e0b' : '#ef4444';
+  // v7: "precaución" pasa de ámbar a blanco neón — Gunner: "preferiría
+  // meter un blanco neón en vez de un naranja". ok/peligro quedan iguales.
+  const color = d.nivel === 'ok' ? '#00ff9d' : d.nivel === 'precaucion' ? '#f4f8ff' : '#ff1e38';
+  const glow = d.nivel === 'ok' ? 'rgba(0,255,157,0.6)' : d.nivel === 'precaucion' ? 'rgba(244,248,255,0.55)' : 'rgba(255,30,56,0.6)';
 
   return (
-    <div style={{
-      padding: '12px 14px', position: 'relative', overflow: 'hidden',
-      background: `linear-gradient(180deg, ${color}10 0%, rgba(6,9,17,0.95) 100%)`,
-      border: `1px solid ${color}80`,
-      borderRadius: 4,
-      boxShadow: `inset 0 1px 0 ${color}40`,
-    }}>
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.008) 0px, rgba(255,255,255,0.008) 1px, transparent 1px, transparent 8px)',
-        pointerEvents: 'none'
-      }} />
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, position: 'relative' }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" />
-        </svg>
-        <span style={{ fontFamily: MONO, fontSize: 9, color, letterSpacing: '0.22em', fontWeight: 800 }}>ESCUDO (CAPA 1+2) · ENTRADA SEGURA</span>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 10.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 8px ${glow}` }}>
+        ● ESCUDO (CAPA 1+2) · ENTRADA SEGURA
+      </span>
 
       <AnimatePresence mode="wait">
         <motion.div key={d.titulo}
           initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.25 }} style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontFamily: MONO, fontSize: 19, fontWeight: 900, color: '#ffffff', letterSpacing: '0.02em', lineHeight: 1.05 }}>
+          transition={{ duration: 0.25 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: hero ? 7 : 4 }}>
+          <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 52 : 25, fontWeight: 900, color: '#ffffff', letterSpacing: '0.01em', textShadow: `0 0 ${hero ? 34 : 18}px ${glow}`, lineHeight: 1 }}>
             {d.titulo}
-          </div>
-          <div style={{ fontFamily: MONO, fontSize: 9.5, color: '#94a3b8', maxWidth: '50%', textAlign: 'right', fontWeight: 600, lineHeight: 1.3 }}>{d.motivo}</div>
+          </span>
+          {/* texto secundario — siempre gris mate, sin glow (pedido
+              explícito de Gunner, exactamente este texto fue su ejemplo:
+              "Ni DOCENAS ni COLUMNAS..."). */}
+          <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 14.5 : 12.5, color: '#8a97ab', maxWidth: hero ? 460 : undefined, lineHeight: 1.5 }}>{d.motivo}</span>
         </motion.div>
       </AnimatePresence>
     </div>
@@ -574,6 +528,12 @@ export function CopilotOrder() {
 /** Marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA del escudo — réplica de toda
  *  la sesión vía decidirConEstado() (Capa 1 sola, estado puro, no se
  *  corrompe al recalcularse). Independiente de CopilotOrder.
+ *
+ *  v6: vuelve a tener UN micropanel (borde cian + fondo + glow) — v5 lo
+ *  había dejado como fila suelta y Gunner la reclamó sin separación del
+ *  resto. Los divisores internos (borderRight finos entre cada stat) se
+ *  mantienen — siguen siendo la forma correcta de separar los 5 números
+ *  SIN meter una caja por número.
  *
  *  FIX (sep 2026) — bug real reportado por Gunner: "un acierto lo cuenta
  *  como error y cuando tiene un error lo marca como dos". Antes este loop
@@ -593,7 +553,7 @@ export function CopilotOrder() {
  *  cada recálculo — nunca toca ni depende de la memoria de la decisión en
  *  vivo, así que da el mismo resultado sin importar cuántas veces se corra
  *  ni en qué orden rendericen los componentes. */
-export function CopilotScoreboard() {
+export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   const history = useHistory();
   const { copHits, copMisses, copStreak, copLive } = useMemo(() => {
     const termo: Record<Market, number[]> = { doc: [], col: [] };
@@ -649,38 +609,39 @@ export function CopilotScoreboard() {
 
   const copWr = (copHits + copMisses) > 0 ? (copHits / (copHits + copMisses)) * 100 : null;
 
+  // v7 (oct 2026): glow reservado para lo crítico/accionable (ACIERTOS,
+  // ERRORES, RACHA AHORA — lo que está pasando ahora mismo), apagado en lo
+  // descriptivo/histórico (EFECTIVIDAD es un cálculo, PEOR RACHA es un
+  // récord pasado) — pedido explícito de Gunner sobre el prototipo.
+  const STATS = [
+    { k: 'ACIERTOS', v: copHits, c: '#00ff9d', glow: true },
+    { k: 'ERRORES', v: copMisses, c: '#ff1e38', glow: true },
+    { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#ffffff', glow: false },
+    { k: 'RACHA AHORA', v: copLive, c: copLive >= 3 ? '#ff1e38' : copLive >= 1 ? '#f4f8ff' : '#00ff9d', glow: true },
+    { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ff1e38' : '#cbd5e1', glow: false },
+  ];
+
   return (
-    <div style={{
-      display: 'flex', position: 'relative', flexWrap: 'nowrap',
-      background: 'rgba(6,9,17,0.7)',
-      border: '1px solid rgba(34,211,238,0.20)',
-      borderRadius: 4,
-      overflow: 'hidden',
-    }}>
-      {[
-        { k: 'ACIERTOS', v: copHits, c: '#10b981' },
-        { k: 'ERRORES', v: copMisses, c: '#ef4444' },
-        { k: 'EFECTIVIDAD', v: copWr !== null ? `${copWr.toFixed(0)}%` : '—', c: '#ffffff' },
-        { k: 'RACHA AHORA', v: copLive, c: copLive >= 3 ? '#ef4444' : copLive >= 1 ? '#f59e0b' : '#10b981' },
-        { k: 'PEOR RACHA', v: copStreak, c: copStreak >= 4 ? '#ef4444' : '#f59e0b' },
-      ].map((s, i, arr) => (
+    <div style={{ display: 'flex', flexWrap: 'nowrap', padding: '10px 4px', ...(bare ? bareBlock() : microPanel('#22d3ee', 0.1)) }}>
+      {STATS.map((s, i, arr) => (
         <div key={s.k} style={{
-          flex: '1', padding: '8px 10px',
-          borderRight: i < arr.length - 1 ? '1px solid rgba(148,163,184,0.08)' : 'none',
+          flex: '1', padding: '0 12px',
+          borderRight: i < arr.length - 1 ? '1px solid rgba(34,211,238,0.18)' : 'none',
         }}>
-          <div style={{ fontFamily: MONO, fontSize: 7.5, color: '#64748b', letterSpacing: '0.14em', fontWeight: 700 }}>{s.k}</div>
-          <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 900, color: s.c, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{s.v}</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700 }}>{s.k}</div>
+          <div style={{ fontFamily: FONT_HEAD, fontSize: 21, fontWeight: 900, color: s.c, marginTop: 3, textShadow: s.glow ? `0 0 8px ${s.c}80` : 'none' }}>{s.v}</div>
         </div>
       ))}
     </div>
   );
 }
 
-/** Par de chips compactos con la zona ACTUAL de cada mercado (doc/col) —
- *  mismo useMarketRead()/fusedZone() que usa CopilotOrder, así nunca puede
+/** Par de chips con la zona ACTUAL de cada mercado (doc/col) — mismo
+ *  useMarketRead()/fusedZone() que usa CopilotOrder, así nunca puede
  *  mostrar algo distinto de lo que el escudo está viendo en este momento.
- *  Pensado para el header de un acordeón colapsado (LECTURA DE ZONA en
- *  Quantum): así "las dos celdas actuales" se ven sin tener que abrir nada. */
+ *  v6: vuelven a ser micro-chips con borde + fondo (pedido explícito de
+ *  Gunner: "no hay micropaneles") — livianos, una sola capa, sin el pill
+ *  pesado de las versiones viejas. */
 export function ZoneQuickBadges() {
   const doc = useMarketRead('doc');
   const col = useMarketRead('col');
@@ -691,19 +652,22 @@ export function ZoneQuickBadges() {
       <span
         key={label}
         style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          fontFamily: MONO, fontSize: 9.5, fontWeight: 700,
-          padding: '2px 7px', borderRadius: 2,
-          color: st.color, border: `1px solid ${st.color}55`, background: `${st.color}10`,
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          fontFamily: FONT_MONO, fontSize: 10.5, fontWeight: 700, color: st.color,
+          padding: '3px 8px',
+          border: `1px solid ${st.color}55`,
+          borderRadius: 5,
+          background: `${st.color}14`,
         }}
       >
-        {label}: {st.label}
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: st.color, boxShadow: `0 0 5px ${st.color}`, flexShrink: 0 }} />
+        {label} {st.label}
       </span>
     );
   };
 
   return (
-    <span style={{ display: 'inline-flex', gap: 6 }}>
+    <span style={{ display: 'inline-flex', gap: 8 }}>
       {chip('DOC', doc)}
       {chip('COL', col)}
     </span>
@@ -720,43 +684,38 @@ export function MatrixPanel() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 4 }}>
-        <span style={{ fontFamily: MONO, fontSize: 10, color: '#22d3ee', letterSpacing: '0.22em', fontWeight: 800 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 4, borderBottom: '1px solid rgba(34,211,238,0.25)', paddingBottom: 7 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#22d3ee', letterSpacing: '0.25em', fontWeight: 700, textShadow: '0 0 12px rgba(34,211,238,0.7)' }}>
           CENTRO DE MANDO · MATRIZ HUD × ENTROPÍA
         </span>
         <button
           onClick={handleReset}
           style={{
-            fontFamily: MONO,
-            fontSize: 9.5, fontWeight: 800, letterSpacing: '0.14em',
-            color: '#94a3b8', cursor: 'pointer',
-            background: 'rgba(13,18,25,0.9)',
-            border: '1px solid rgba(148,163,184,0.30)',
-            borderRadius: 2,
-            padding: '5px 12px',
+            fontFamily: FONT_MONO,
+            fontSize: 10.5, fontWeight: 800, letterSpacing: '0.15em',
+            color: '#64748b', cursor: 'pointer',
+            background: 'none', border: 'none', borderBottom: '1px solid transparent',
+            padding: '2px 0',
             transition: 'all 0.2s ease',
-            textTransform: 'uppercase',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#ef4444';
-            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.6)';
+            e.currentTarget.style.color = '#ff1e38';
+            e.currentTarget.style.borderBottomColor = 'rgba(255,30,56,0.6)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = '#94a3b8';
-            e.currentTarget.style.borderColor = 'rgba(148,163,184,0.30)';
+            e.currentTarget.style.color = '#64748b';
+            e.currentTarget.style.borderBottomColor = 'transparent';
           }}
         >
-          ⟲ reset mapa
+          ⟲ RESET MAPA
         </button>
       </div>
 
       {/* COPILOTO — la decisión de entrada segura, arriba de todo */}
-      <div style={{ marginBottom: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <CopilotOrder />
-        <div style={{ marginTop: 10 }}>
-          <CopilotScoreboard />
-        </div>
+        <CopilotScoreboard />
       </div>
 
       <ZoneDetailGrid />
