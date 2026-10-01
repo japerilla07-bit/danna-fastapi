@@ -54,16 +54,15 @@ import {
   fusedZone, fusedZoneByKey, liveDeviation, currentCellWr, currentCellMaxRun,
   type Zone, type Market,
 } from '@/domain/zoneMatrix';
-// decidirPiloto() = Capa 1 + Capa 2 (el escudo), función pura de lectura.
+// decidirPiloto() = Capa 1, función pura de lectura.
 //
 // Historial de bugs reales encontrados en este cálculo (dejar las notas,
 // ayudan a no repetir el mismo error dos veces):
 //
 // FIX #1 (oct 2026) — Gunner: "los errores tampoco salen en el contador del
-// copiloto... ni normal ni con escudo". CopilotScoreboard reconstruía el
-// historial a mano con decidirConEstado() (Capa 1 SOLA) — cuando el escudo
-// (Capa 2) estaba activo, el marcador contaba una decisión hipotética
-// distinta a la real. Se corrigió leyendo `copScore` directo del store.
+// copiloto". CopilotScoreboard reconstruía el historial a mano con
+// decidirConEstado() en vez de leer el marcador real. Se corrigió leyendo
+// `copScore` directo del store.
 //
 // FIX #2 (oct 2026) — Gunner, con reproducción en vivo: "no está siguiendo
 // la sugerencia principal". decidirPiloto() ya NO se llama desde acá
@@ -72,6 +71,11 @@ import {
 // render de este componente quedaba un giro desalineada del pick que de
 // verdad se mandaba a puntuar. CopilotOrder ahora LEE la decisión ya
 // calculada con `useLiveDecision()` — no la recalcula.
+//
+// REMOVIDO (oct 2026) — existió una Capa 2 ("escudo", reactiva, zonas de
+// los últimos 7 giros) encima de esto. Gunner la probó en vivo y la dio de
+// baja: "el escudo numero 2... no sirve". Se sacó por completo de
+// copilot.ts — decidirPiloto() hoy es 1:1 con la Capa 1.
 import type { MarketRead } from '@/domain/copilot';
 
 const FONT_HEAD = "'Rajdhani', sans-serif";
@@ -458,10 +462,9 @@ export function ZoneDetailGrid({
 // dueño de avisarle al store qué sugiere el piloto) y CopilotScoreboard
 // (el marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA). Cada una es
 // independiente — se pueden ubicar en cualquier lugar del layout.
-// v7 (oct 2026): CopilotScoreboard dejó de recalcular el marcador a mano
-// (solo Capa 1, ignoraba el escudo) — ahora lee copScore directo del store,
-// que ya lo mantiene correcto en vivo con Capa1+2. Ver su propio comentario
-// más abajo para el detalle del bug.
+// v7 (oct 2026): CopilotScoreboard dejó de recalcular el marcador a mano —
+// ahora lee copScore directo del store, que ya lo mantiene correcto en
+// vivo. Ver su propio comentario más abajo para el detalle del bug.
 // ────────────────────────────────────────────────────────────────────────
 
 function useMarketRead(mkt: Market): MarketRead {
@@ -481,7 +484,7 @@ function useMarketRead(mkt: Market): MarketRead {
   };
 }
 
-/** Header + orden del escudo ("ENTRADA SEGURA").
+/** Header + orden del copiloto ("ENTRADA SEGURA").
  *
  *  FIX (oct 2026) — BUG REAL reportado por Gunner y reproducido en vivo:
  *  "el copiloto sugiere algo pero sus contadores están mal... no está
@@ -522,7 +525,7 @@ export function CopilotOrder({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 12 : 10.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 8px ${glow}` }}>
-        ● ESCUDO (CAPA 1+2) · ENTRADA SEGURA
+        ● D.A.N.N.A. · ENTRADA SEGURA
       </span>
 
       <AnimatePresence mode="wait">
@@ -543,27 +546,19 @@ export function CopilotOrder({
   );
 }
 
-/** Marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA del escudo.
+/** Marcador ACIERTOS/ERRORES/EFECTIVIDAD/RACHA del copiloto.
  *
  *  v6: UN micropanel (borde cian + fondo + glow) — v5 lo había dejado como
  *  fila suelta y Gunner la reclamó sin separación del resto.
  *
  *  FIX (oct 2026) — bug real reportado por Gunner: "los errores tampoco
- *  salen en el contador del copiloto... ni normal ni con escudo". Esto NO
- *  es el mismo bug de sep 2026 (ya corregido, ver historial de copilot.ts) —
- *  es uno distinto, más profundo: este componente recalculaba TODO el
- *  historial llamando a decidirConEstado(), que es **Capa 1 sola**. Cuando
- *  el escudo (Capa 2, en copilot.ts) estaba o había estado activo, la
- *  decisión que de verdad se jugó (decidirPiloto, Capa1+2, la que ve el
- *  operador en CopilotOrder) nunca entraba en este cálculo — el marcador
- *  contaba aciertos/errores de una decisión hipotética distinta a la real.
- *  El store (telemetryStore.ts) YA lleva el contador correcto en vivo:
- *  `copScore`, incrementado una vez por giro resuelto a partir de
- *  `pend.copSug` — que desde el FIX siguiente (oct 2026, ver nota junto a
- *  computeMarketRead() en telemetryStore.ts) se calcula DENTRO de ingest(),
- *  ya no desde el render de CopilotOrder, así que incluye Capa1+2 y nunca
- *  queda un giro desalineado del pick que se puntúa. Esta pieza solo lee
- *  `copScore` — cero lógica nueva, cero replay. */
+ *  salen en el contador del copiloto". Causa: este componente recalculaba
+ *  TODO el historial a mano llamando a decidirConEstado(), en vez de leer
+ *  el contador real. El store (telemetryStore.ts) YA lleva el contador
+ *  correcto en vivo: `copScore`, incrementado una vez por giro resuelto
+ *  dentro de ingest() (ver su nota junto a computeMarketRead()), así que
+ *  nunca queda un giro desalineado del pick que se puntúa. Esta pieza solo
+ *  lee `copScore` — cero lógica nueva, cero replay. */
 export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   const copHits = useCopHits();
   const copMisses = useCopMisses();
@@ -606,7 +601,7 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
  *  useMarketRead()/fusedZone() que usa internamente ingest() en
  *  telemetryStore.ts (vía computeMarketRead(), misma fórmula exacta) para
  *  calcular la decisión del piloto, así nunca puede mostrar algo distinto
- *  de lo que el escudo está viendo en este momento.
+ *  de lo que el copiloto está viendo en este momento.
  *  v6: vuelven a ser micro-chips con borde + fondo (pedido explícito de
  *  Gunner: "no hay micropaneles") — livianos, una sola capa, sin el pill
  *  pesado de las versiones viejas. */
