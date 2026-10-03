@@ -48,6 +48,10 @@ import {
   useCellReg, useCellRec, useResetTelemetry,
   useTermoHits, useTermoTotal, useTermoStreak, useLiveDecision, type CellRec,
   useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak,
+  // SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) — ver nota en CopilotOrder abajo.
+  useLiveCapa1, useLiveEscudo,
+  useCapa1Hits, useCapa1Misses, useCapa1Wr, useCapa1LiveStreak, useCapa1Streak,
+  useEscudoHits, useEscudoMisses, useEscudoWr, useEscudoLiveStreak, useEscudoStreak,
 } from '@/store/telemetryStore';
 import {
   cellKeyOf, cellStats, labelByKey,
@@ -528,10 +532,49 @@ export function CopilotOrder({
 }) {
   const d = useLiveDecision();
 
+  // ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) ────────────────────────────────
+  // Pedido de Gunner: ver la sugerencia y la efectividad de cada capa por su
+  // cuenta, en la MISMA card, sin que una tape a la otra cuando COBERTURA
+  // está activa. Lo de arriba (d.titulo/d.motivo/d.nivel) sigue siendo la
+  // decisión REAL combinada — lo que de verdad se juega — sin tocar. Esto
+  // es solo lectura extra, debajo, en dos sub-bloques con acento lateral
+  // (no son micropaneles nuevos, es la regla v6 de "una línea adentro del
+  // mismo contenedor").
+  const capa1 = useLiveCapa1();
+  const escudo = useLiveEscudo();
+  const capa1Hits = useCapa1Hits(), capa1Misses = useCapa1Misses(), capa1Wr = useCapa1Wr();
+  const capa1Live = useCapa1LiveStreak(), capa1Peor = useCapa1Streak();
+  const escudoHits = useEscudoHits(), escudoMisses = useEscudoMisses(), escudoWr = useEscudoWr();
+  const escudoLive = useEscudoLiveStreak(), escudoPeor = useEscudoStreak();
+
   // v7: "precaución" pasa de ámbar a blanco neón — Gunner: "preferiría
   // meter un blanco neón en vez de un naranja". ok/peligro quedan iguales.
   const color = d.nivel === 'ok' ? '#00ff9d' : d.nivel === 'precaucion' ? '#f4f8ff' : '#ff1e38';
   const glow = d.nivel === 'ok' ? 'rgba(0,255,157,0.6)' : d.nivel === 'precaucion' ? 'rgba(244,248,255,0.55)' : 'rgba(255,30,56,0.6)';
+  const colorCapa1 = capa1.nivel === 'ok' ? '#00ff9d' : capa1.nivel === 'precaucion' ? '#f4f8ff' : '#ff1e38';
+  const colorEscudo = escudo.activo ? '#22d3ee' : '#5c687a';
+
+  // Fila compacta de 4 mini-stats — misma info que CopilotScoreboard, pero
+  // chica, para que los dos sub-bloques quepan en la misma card sin inflarla.
+  const miniStats = (hits: number, misses: number, wr: number | null, live: number, peor: number) => (
+    <div style={{ display: 'flex', gap: 14, marginTop: 3 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
+        ✓<b style={{ color: '#00ff9d' }}> {hits}</b>
+      </span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
+        ✕<b style={{ color: '#ff1e38' }}> {misses}</b>
+      </span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
+        efec. <b style={{ color: '#ffffff' }}>{wr !== null ? `${wr.toFixed(0)}%` : '—'}</b>
+      </span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
+        racha <b style={{ color: live >= 3 ? '#ff1e38' : live >= 1 ? '#f4f8ff' : '#00ff9d' }}>{live}</b>
+      </span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
+        peor <b style={{ color: peor >= 4 ? '#ff1e38' : '#cbd5e1' }}>{peor}</b>
+      </span>
+    </div>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
@@ -572,6 +615,37 @@ export function CopilotOrder({
           <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 15.5 : 12.5, color: '#8a97ab', maxWidth: hero ? 460 : undefined, lineHeight: 1.5 }}>{d.motivo}</span>
         </motion.div>
       </AnimatePresence>
+
+      {/* ── CAPA 1 / ESCUDO 1 por separado — pedido de Gunner: "separar el
+          copiloto y el escudo 1... ahí caben los dos separados así vemos
+          efectividad individual y sugerencias individual". Acento lateral
+          (borderLeft) por sub-bloque, sin micropanel nuevo adentro — v6. ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ borderLeft: `2px solid ${colorCapa1}`, paddingLeft: 9 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: colorCapa1, letterSpacing: '0.18em', fontWeight: 800 }}>
+            CAPA 1 · COPILOTO
+          </span>
+          <div style={{ fontFamily: FONT_HEAD, fontSize: 15, fontWeight: 800, color: '#ffffff', marginTop: 2 }}>
+            {capa1.titulo}
+          </div>
+          {miniStats(capa1Hits, capa1Misses, capa1Wr, capa1Live, capa1Peor)}
+        </div>
+
+        <div style={{ borderLeft: `2px solid ${colorEscudo}`, paddingLeft: 9 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: colorEscudo, letterSpacing: '0.18em', fontWeight: 800 }}>
+            ESCUDO 1 · COBERTURA
+          </span>
+          <div style={{ fontFamily: FONT_HEAD, fontSize: 15, fontWeight: 800, color: '#ffffff', marginTop: 2 }}>
+            {!escudo.activo
+              ? 'Sin activar'
+              : [
+                  escudo.doc ? `DOC ${escudo.doc.zonas.join('+').toUpperCase()}` : null,
+                  escudo.col ? `COL ${escudo.col.zonas.join('+').toUpperCase()}` : null,
+                ].filter(Boolean).join(' / ')}
+          </div>
+          {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
+        </div>
+      </div>
     </div>
   );
 }
