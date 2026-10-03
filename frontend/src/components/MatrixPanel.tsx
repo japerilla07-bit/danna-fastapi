@@ -576,75 +576,68 @@ export function CopilotOrder({
     </div>
   );
 
+  // Frase corta de Escudo 1 — no tiene "motivo" propio (EscudoInfo es solo
+  // datos), se arma acá, igual de simple que el motivo de Capa 1.
+  const escudoMotivo = !escudo.activo
+    ? 'Sin distribución marcada en la ventana de 7 giros.'
+    : 'Cubre 2 de 3 zonas, en cada mercado activo, hasta que salga la que quedó afuera.';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 12 : 10.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 8px ${glow}` }}>
         ● D.A.N.N.A. · ENTRADA SEGURA
       </span>
 
-      <AnimatePresence mode="wait">
-        <motion.div key={d.titulo}
-          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.25 }}
-          style={{ display: 'flex', flexDirection: 'column', gap: hero ? 7 : 4 }}>
-          <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 55 : 25, fontWeight: 900, color: '#ffffff', letterSpacing: '0.01em', textShadow: `0 0 ${hero ? 34 : 18}px ${glow}`, lineHeight: hero ? 1.05 : 1 }}>
-            {d.titulo}
-          </span>
-          {/* PRIORIZA <mercado> — oct 2026, pedido en vivo de Gunner: el
-              aviso de cuál mercado tiene mejor rendimiento en COBERTURA
-              DOBLE estaba metido adentro del párrafo de motivo y "no servía,
-              no se nota" en plena mesa. Pasa a ser su propia línea, grande,
-              en un color (ámbar) que no usa ningún otro estado de nivel
-              (ok=verde, precaución=blanco, alto=rojo) — así no se confunde
-              con el semáforo y salta a la vista de un vistazo. Solo aparece
-              con COBERTURA_DOBLE, que es el único caso con dos mercados
-              jugándose a la vez y por lo tanto el único que necesita decir
-              cuál priorizar. */}
-          {d.capa === 'COBERTURA_DOBLE' && d.principal && (
-            <span style={{
-              fontFamily: FONT_HEAD, fontSize: hero ? 26 : 16, fontWeight: 900,
-              color: '#ffb300', letterSpacing: '0.04em',
-              textShadow: '0 0 16px rgba(255,179,0,0.75)',
-            }}>
-              ▲ PRIORIZA {d.principal === 'doc' ? 'DOCENAS' : 'COLUMNAS'}
+      {/* ── CAPA 1 / ESCUDO 1 por separado — pedido de Gunner: sacar el
+          título combinado ("COBERTURA DOBLE...") de arriba, que quedaba
+          redundante con los dos bloques de abajo ("siento que sobra").
+          Ahora la card muestra DIRECTO la sugerencia de cada capa, sin un
+          tercer resumen fusionado encima. Acento lateral (borderLeft) por
+          sub-bloque, sin micropanel nuevo adentro — regla v6. La decisión
+          REAL (d.titulo/d.motivo/d.capa/d.principal, arriba) sigue
+          existiendo y sigue siendo la que manda en telemetryStore.ts para
+          puntuar/apostar — esto es solo cómo se MUESTRA. ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 14 : 10 }}>
+        <AnimatePresence mode="wait">
+          <motion.div key={capa1.titulo}
+            initial={{ opacity: 0, y: -3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ borderLeft: `2px solid ${colorCapa1}`, paddingLeft: 10 }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 9.5, color: colorCapa1, letterSpacing: '0.18em', fontWeight: 800 }}>
+              CAPA 1 · COPILOTO
             </span>
-          )}
-          {/* texto secundario — siempre gris mate, sin glow (pedido
-              explícito de Gunner, exactamente este texto fue su ejemplo:
-              "Ni DOCENAS ni COLUMNAS..."). */}
-          <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 15.5 : 12.5, color: '#8a97ab', maxWidth: hero ? 460 : undefined, lineHeight: 1.5 }}>{d.motivo}</span>
-        </motion.div>
-      </AnimatePresence>
+            <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 32 : 19, fontWeight: 900, color: '#ffffff', marginTop: 2, lineHeight: 1.1, textShadow: `0 0 14px ${colorCapa1}55` }}>
+              {capa1.titulo}
+            </div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: hero ? 13 : 11.5, color: '#8a97ab', marginTop: 2, lineHeight: 1.4 }}>
+              {capa1.motivo}
+            </div>
+            {miniStats(capa1Hits, capa1Misses, capa1Wr, capa1Live, capa1Peor)}
+          </motion.div>
+        </AnimatePresence>
 
-      {/* ── CAPA 1 / ESCUDO 1 por separado — pedido de Gunner: "separar el
-          copiloto y el escudo 1... ahí caben los dos separados así vemos
-          efectividad individual y sugerencias individual". Acento lateral
-          (borderLeft) por sub-bloque, sin micropanel nuevo adentro — v6. ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ borderLeft: `2px solid ${colorCapa1}`, paddingLeft: 9 }}>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: colorCapa1, letterSpacing: '0.18em', fontWeight: 800 }}>
-            CAPA 1 · COPILOTO
-          </span>
-          <div style={{ fontFamily: FONT_HEAD, fontSize: 15, fontWeight: 800, color: '#ffffff', marginTop: 2 }}>
-            {capa1.titulo}
-          </div>
-          {miniStats(capa1Hits, capa1Misses, capa1Wr, capa1Live, capa1Peor)}
-        </div>
-
-        <div style={{ borderLeft: `2px solid ${colorEscudo}`, paddingLeft: 9 }}>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: colorEscudo, letterSpacing: '0.18em', fontWeight: 800 }}>
-            ESCUDO 1 · COBERTURA
-          </span>
-          <div style={{ fontFamily: FONT_HEAD, fontSize: 15, fontWeight: 800, color: '#ffffff', marginTop: 2 }}>
-            {!escudo.activo
-              ? 'Sin activar'
-              : [
-                  escudo.doc ? `DOC ${escudo.doc.zonas.join('+').toUpperCase()}` : null,
-                  escudo.col ? `COL ${escudo.col.zonas.join('+').toUpperCase()}` : null,
-                ].filter(Boolean).join(' / ')}
-          </div>
-          {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
-        </div>
+        <AnimatePresence mode="wait">
+          <motion.div key={`${escudo.activo}-${escudo.doc?.zonas.join()}-${escudo.col?.zonas.join()}`}
+            initial={{ opacity: 0, y: -3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ borderLeft: `2px solid ${colorEscudo}`, paddingLeft: 10 }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 9.5, color: colorEscudo, letterSpacing: '0.18em', fontWeight: 800 }}>
+              ESCUDO 1 · COBERTURA
+            </span>
+            <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 32 : 19, fontWeight: 900, color: '#ffffff', marginTop: 2, lineHeight: 1.1, textShadow: `0 0 14px ${colorEscudo}55` }}>
+              {!escudo.activo
+                ? 'Sin activar'
+                : [
+                    escudo.doc ? `DOC ${escudo.doc.zonas.join('+').toUpperCase()}` : null,
+                    escudo.col ? `COL ${escudo.col.zonas.join('+').toUpperCase()}` : null,
+                  ].filter(Boolean).join(' / ')}
+            </div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: hero ? 13 : 11.5, color: '#8a97ab', marginTop: 2, lineHeight: 1.4 }}>
+              {escudoMotivo}
+            </div>
+            {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
