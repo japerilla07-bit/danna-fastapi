@@ -269,6 +269,29 @@ export interface DecisionPiloto extends Decision {
   // Gunner en vivo ("marcar la de mejor rendimiento entre docenas y
   // columnas"), para saber cuál priorizar si solo puede entrar a una.
   principal?: Market;
+  // ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) ──────────────────────────────
+  // Pedido de Gunner: ver la sugerencia y la efectividad de cada capa por
+  // su cuenta, sin que una tape a la otra cuando COBERTURA está activa.
+  // Esto NO cambia qué se juega ni cómo se puntúa la plata real — sigue
+  // siendo exactamente lo de siempre (mercado/accion/exposicion/capa/
+  // pickDoc/pickCol/principal, arriba). Son dos campos de SOLO LECTURA,
+  // agregados encima, con datos que esta función ya calculaba por dentro
+  // (capa1 se calcula siempre, aunque después la tape COBERTURA) o que ya
+  // vivían en el estado del módulo de COBERTURA (coberturaDocActiva, etc.)
+  // y no se exponían hacia afuera.
+  //
+  // capa1Decision: lo que la Capa 1 SOLA habría sugerido este giro, exista
+  // o no COBERTURA activa encima.
+  capa1Decision: Decision;
+  // escudo: estado de COBERTURA (Escudo 1) por su cuenta — activo o no, y
+  // en cuáles mercados/zonas, exista o no algo jugable en la Capa 1.
+  escudo: EscudoInfo;
+}
+
+export interface EscudoInfo {
+  activo: boolean;
+  doc: { zonas: string[]; excluida: string } | null;
+  col: { zonas: string[]; excluida: string } | null;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -462,9 +485,25 @@ export function resetCobertura(): void {
   coberturaColExcluida = null;
 }
 
+// Estado de Escudo 1 (COBERTURA), leído tal cual está en este instante —
+// no decide nada, solo expone lo que ya vive en las variables de módulo de
+// arriba para que decidirPiloto() lo pueda mostrar por separado de la Capa 1.
+function leerEscudo(): EscudoInfo {
+  return {
+    activo: coberturaDocActiva || coberturaColActiva,
+    doc: coberturaDocActiva
+      ? { zonas: coberturaZonasDoc.map((z) => ZONA_DOC_TXT[z]), excluida: ZONA_DOC_TXT[coberturaDocExcluida!] }
+      : null,
+    col: coberturaColActiva
+      ? { zonas: coberturaZonasCol.map((z) => ZONA_COL_TXT[z]), excluida: ZONA_COL_TXT[coberturaColExcluida!] }
+      : null,
+  };
+}
+
 export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto {
   const capa1 = decidir(doc, col);
-  if (!coberturaDocActiva && !coberturaColActiva) return { ...capa1, capa: 'CAPA1' };
+  const escudo = leerEscudo();
+  if (!coberturaDocActiva && !coberturaColActiva) return { ...capa1, capa: 'CAPA1', capa1Decision: capa1, escudo };
 
   const docTxt = coberturaDocActiva ? coberturaZonasDoc.map((z) => ZONA_DOC_TXT[z]).join(' / ') : undefined;
   const colTxt = coberturaColActiva ? coberturaZonasCol.map((z) => ZONA_COL_TXT[z]).join(' / ') : undefined;
@@ -509,5 +548,7 @@ export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto 
     pickDoc: docTxt,
     pickCol: colTxt,
     principal,
+    capa1Decision: capa1,
+    escudo,
   };
 }
