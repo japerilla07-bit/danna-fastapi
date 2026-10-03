@@ -251,12 +251,18 @@ function MarketColumnImpl({ mkt }: { mkt: Market }) {
         </span>
         <span style={{ color: '#8092b5', fontWeight: 800 }}>{gTotal ? `${((gHits / gTotal) * 100).toFixed(0)}%` : '—'}</span>
       </div>
-      {gMax >= 4 && (
-        <div style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#ffdf60', marginTop: -4 }}>
-          peor racha hoy: <b>{gMax}</b>
-          {gCur > 0 && <span> · ⚠ venís perdiendo {gCur} seguidas</span>}
-        </div>
-      )}
+      {/* racha actual / peor racha del MERCADO (sesión completa) — SIEMPRE
+          visibles, no condicionadas a ningún umbral. Gunner, oct 2026:
+          "eso lo omitiste y eso no lo podemos quitar de ahí" — antes estaban
+          las dos metidas dentro de un `gMax >= 4`, así que por debajo de 4
+          no se veía ninguna. No confundir con "racha ahora" de la CASILLA
+          puntual (HOY EN ESTA CASILLA, más abajo) — esto es del mercado
+          entero (doc o col) en toda la sesión. */}
+      <div style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#cbd5e1', marginTop: -4 }}>
+        racha actual: <b style={{ color: gCur >= 3 ? '#ff1e38' : gCur >= 1 ? '#ffdf60' : '#00ff9d' }}>{gCur}</b>
+        {'  ·  '}
+        peor racha hoy: <b style={{ color: gMax >= 4 ? '#ff1e38' : '#cbd5e1' }}>{gMax}</b>
+      </div>
 
       {/* histórico de la celda — sub-bloque con acento lateral (línea, no
           una segunda caja) dentro del micropanel */}
@@ -342,6 +348,7 @@ function MarketEfficiencyCellImpl({ mkt, bare = false }: { mkt: Market; bare?: b
   const gHits = useMarketHits(mkt);
   const gMiss = useMarketMisses(mkt);
   const gMax = useMarketMaxStreak(mkt);
+  const gCur = useMarketStreak(mkt);
   const gTotal = gHits + gMiss;
 
   // v7 (oct 2026) — jerarquía tipográfica pedida por Gunner sobre el
@@ -375,11 +382,15 @@ function MarketEfficiencyCellImpl({ mkt, bare = false }: { mkt: Market; bare?: b
         </span>
         <span style={{ color: '#8092b5', fontWeight: 800 }}>{gTotal ? `${Math.round((gHits / gTotal) * 100)}%` : '—'}</span>
       </div>
-      {gMax >= 4 && (
-        <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#f4f8ff', marginTop: -2 }}>
-          peor racha hoy: <b>{gMax}</b>
-        </div>
-      )}
+      {/* racha actual / peor racha del MERCADO — SIEMPRE visibles (Gunner,
+          oct 2026: "eso lo omitiste y eso no lo podemos quitar de ahí").
+          Antes esta versión compacta no tenía "racha actual" en ningún
+          lado, y "peor racha" solo aparecía con gMax >= 4. */}
+      <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#8392a8', marginTop: -2 }}>
+        racha actual <b style={{ color: gCur >= 3 ? '#ff1e38' : gCur >= 1 ? '#f4f8ff' : '#00ff9d' }}>{gCur}</b>
+        {'  ·  '}
+        peor racha <b style={{ color: gMax >= 4 ? '#ff1e38' : '#f4f8ff' }}>{gMax}</b>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT_MONO, fontSize: 13 }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: luz, boxShadow: `0 0 6px ${luz}`, flexShrink: 0 }} />
