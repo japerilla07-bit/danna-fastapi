@@ -25,7 +25,7 @@
 
 import { create } from 'zustand';
 import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, type Zone, type Market } from '@/domain/zoneMatrix';
-import { decidirPiloto, registrarGiroCobertura, resetCobertura, type MarketRead, type DecisionPiloto } from '@/domain/copilot';
+import { decidirPiloto, registrarGiroCobertura, resetCobertura, type MarketRead, type DecisionPiloto, type Decision, type EscudoInfo } from '@/domain/copilot';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -89,6 +89,14 @@ interface Pending {
   // del backend. null en cualquier otro caso (Capa 1 normal).
   copPickDocOverride: string | null;
   copPickColOverride: string | null;
+  // ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) — ver nota junto a capa1Score/
+  //    escudoScore más abajo. Guardan lo que CADA capa sugirió este giro
+  //    por su cuenta, para puntuarlas por separado cuando llegue el spin
+  //    siguiente — exactamente el mismo patrón que copSug/copPick*Override,
+  //    pero sin mezclar una capa con la otra.
+  capa1Sug: 'doc' | 'col' | null;
+  escudoPickDoc: string | null;
+  escudoPickCol: string | null;
 }
 
 export interface CellRec {
@@ -117,6 +125,15 @@ interface TelemetryState {
   counters: Counters;
   cellReg: CellReg;
   copScore: CopScore;
+  // ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) ──────────────────────────────
+  // Pedido de Gunner: ver la efectividad de la Capa 1 sola y de Escudo 1
+  // (COBERTURA) solo, cada uno contra lo que DE VERDAD habría apostado,
+  // sin que uno tape al otro cuando los dos coinciden en el mismo giro.
+  // copScore (arriba) sigue siendo el marcador real — lo que D.A.N.N.A.
+  // efectivamente jugó y que ya alimenta el freno de racha — SIN TOCAR.
+  // Estos dos son marcadores PARALELOS, de solo lectura, para comparar.
+  capa1Score: CopScore;
+  escudoScore: CopScore;
   // FIX (oct 2026) — ver nota completa junto a computeMarketRead() más abajo.
   // La decisión del piloto (Capa1+2) que se usa TANTO para puntuar como para
   // mostrar en pantalla (CopilotOrder la lee de acá en vez de recalcularla).
@@ -222,6 +239,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   counters: { ...EMPTY_COUNTERS },
   cellReg: { doc: {}, col: {} },
   copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+  capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+  escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   liveDecision: decisionInicial(),
 
   ingest: (p) => {
@@ -232,6 +251,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     let counters = st.counters;
     let cellReg = st.cellReg;
     let copScore = st.copScore;
+    let capa1Score = st.capa1Score;
+    let escudoScore = st.escudoScore;
     let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
 
     // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
@@ -282,6 +303,33 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         if (copHit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         copScore = cs;
+      }
+
+      // ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) — dos marcadores PARALELOS,
+      //    cada uno puntuado contra lo que ESA capa sola habría sugerido,
+      //    sin mezclarse con la otra ni con el marcador real de arriba. ──
+      //
+      // Capa 1 sola: un solo mercado, igual que copSug de siempre.
+      const capa1Hit: boolean | null =
+        pend.capa1Sug === 'doc' ? docHit : pend.capa1Sug === 'col' ? colHit : null;
+      if (capa1Hit !== null) {
+        const cs = { ...st.capa1Score };
+        if (capa1Hit) { cs.hits += 1; cs.streak = 0; }
+        else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
+        capa1Score = cs;
+      }
+      // Escudo 1 solo: puede cubrir doc y/o col a la vez — mismo criterio
+      // "un giro = un evento, acierto si ganó al menos un lado" que ya usa
+      // el marcador real de arriba para COBERTURA DOBLE.
+      const escudoHitDoc: boolean | null = pend.escudoPickDoc ? resolvePick(pend.escudoPickDoc, spin) : null;
+      const escudoHitCol: boolean | null = pend.escudoPickCol ? resolvePick(pend.escudoPickCol, spin) : null;
+      const escudoHit: boolean | null =
+        escudoHitDoc !== null && escudoHitCol !== null ? (escudoHitDoc || escudoHitCol) : (escudoHitDoc ?? escudoHitCol);
+      if (escudoHit !== null) {
+        const cs = { ...st.escudoScore };
+        if (escudoHit) { cs.hits += 1; cs.streak = 0; }
+        else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
+        escudoScore = cs;
       }
 
       // ── Alimentar la ventana de COBERTURA DOBLE con el número real de
@@ -351,9 +399,16 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       copSug: liveDecision.mercado,
       copPickDocOverride: suprimirDoc ? null : (liveDecision.pickDoc ?? null),
       copPickColOverride: suprimirCol ? null : (liveDecision.pickCol ?? null),
+      // SEPARACIÓN CAPA1/ESCUDO1: lo que CADA capa sugiere por su cuenta,
+      // leído de los campos nuevos que ya trae liveDecision (ver copilot.ts)
+      // — sin el "principal" ni las supresiones de arriba, que son solo
+      // para el marcador REAL combinado.
+      capa1Sug: liveDecision.capa1Decision.mercado,
+      escudoPickDoc: liveDecision.escudo.doc ? liveDecision.escudo.doc.zonas.join(' / ') : null,
+      escudoPickCol: liveDecision.escudo.col ? liveDecision.escudo.col.zonas.join(' / ') : null,
     };
 
-    set({ history, lastN: p.n, pending, counters, cellReg, copScore, liveDecision });
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore, capa1Score, escudoScore, liveDecision });
   },
 
   reset: () => {
@@ -364,6 +419,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       counters: { ...EMPTY_COUNTERS },
       cellReg: { doc: {}, col: {} },
       copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+      capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+      escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       liveDecision: decisionInicial(),
     });
   },
@@ -433,6 +490,35 @@ export const useCopWr = (): number | null => useTelemetryStore((s) => {
   const t = s.copScore.hits + s.copScore.misses;
   return t > 0 ? (s.copScore.hits / t) * 100 : null;
 });
+
+// ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) ──────────────────────────────────
+// Dos marcadores paralelos al de arriba, cada uno contra lo que ESA capa
+// sola habría jugado — para comparar efectividad individual sin que una
+// tape a la otra. No reemplazan copScore (el marcador real) en ningún lado.
+
+// Capa 1 (el copiloto solo, sin COBERTURA encima)
+export const useCapa1Hits = (): number => useTelemetryStore((s) => s.capa1Score.hits);
+export const useCapa1Misses = (): number => useTelemetryStore((s) => s.capa1Score.misses);
+export const useCapa1Streak = (): number => useTelemetryStore((s) => s.capa1Score.maxStreak);
+export const useCapa1LiveStreak = (): number => useTelemetryStore((s) => s.capa1Score.streak);
+export const useCapa1Wr = (): number | null => useTelemetryStore((s) => {
+  const t = s.capa1Score.hits + s.capa1Score.misses;
+  return t > 0 ? (s.capa1Score.hits / t) * 100 : null;
+});
+// Sugerencia de la Capa 1 sola, exista o no COBERTURA activa encima.
+export const useLiveCapa1 = (): Decision => useTelemetryStore((s) => s.liveDecision.capa1Decision);
+
+// Escudo 1 (COBERTURA solo)
+export const useEscudoHits = (): number => useTelemetryStore((s) => s.escudoScore.hits);
+export const useEscudoMisses = (): number => useTelemetryStore((s) => s.escudoScore.misses);
+export const useEscudoStreak = (): number => useTelemetryStore((s) => s.escudoScore.maxStreak);
+export const useEscudoLiveStreak = (): number => useTelemetryStore((s) => s.escudoScore.streak);
+export const useEscudoWr = (): number | null => useTelemetryStore((s) => {
+  const t = s.escudoScore.hits + s.escudoScore.misses;
+  return t > 0 ? (s.escudoScore.hits / t) * 100 : null;
+});
+// Estado de Escudo 1 solo: activo o no, y en qué zonas.
+export const useLiveEscudo = (): EscudoInfo => useTelemetryStore((s) => s.liveDecision.escudo);
 
 // ── Termómetro en vivo: cómo venís en los últimos N giros de un mercado ──
 // IMPORTANTE: cada selector devuelve un NÚMERO (primitiva), no un objeto.
