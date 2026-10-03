@@ -551,8 +551,12 @@ export function CopilotOrder({
   // meter un blanco neón en vez de un naranja". ok/peligro quedan iguales.
   const color = d.nivel === 'ok' ? '#00ff9d' : d.nivel === 'precaucion' ? '#f4f8ff' : '#ff1e38';
   const glow = d.nivel === 'ok' ? 'rgba(0,255,157,0.6)' : d.nivel === 'precaucion' ? 'rgba(244,248,255,0.55)' : 'rgba(255,30,56,0.6)';
-  const colorCapa1 = capa1.nivel === 'ok' ? '#00ff9d' : capa1.nivel === 'precaucion' ? '#f4f8ff' : '#ff1e38';
-  const colorEscudo = escudo.activo ? '#22d3ee' : '#5c687a';
+  // CAPA 1 / ESCUDO 1 (oct 2026) — Gunner: "que los hiciera diferenciar más
+  // fácil, podrían ser un azul neón y un violeta neón". Color de IDENTIDAD
+  // fijo por bloque (no por estado/nivel) — así siempre se reconoce cuál es
+  // cuál de un vistazo, sea lo que sea que estén diciendo en ese momento.
+  const colorCapa1 = '#2f8cff';   // azul neón — Capa 1 · Copiloto
+  const colorEscudo = escudo.activo ? '#b026ff' : '#5e3380'; // violeta neón — Escudo 1 · Cobertura (apagado si no hay nada activo)
 
   // Fila compacta de 4 mini-stats — misma info que CopilotScoreboard, pero
   // chica, para que los dos sub-bloques quepan en la misma card sin inflarla.
@@ -624,15 +628,30 @@ export function CopilotOrder({
             <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 9.5, color: colorEscudo, letterSpacing: '0.18em', fontWeight: 800 }}>
               ESCUDO 1 · COBERTURA
             </span>
-            <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 32 : 19, fontWeight: 900, color: '#ffffff', marginTop: 2, lineHeight: 1.1, textShadow: `0 0 14px ${colorEscudo}55` }}>
-              {!escudo.activo
-                ? 'Sin activar'
-                : [
-                    escudo.doc ? `DOC ${escudo.doc.zonas.join('+').toUpperCase()}` : null,
-                    escudo.col ? `COL ${escudo.col.zonas.join('+').toUpperCase()}` : null,
-                  ].filter(Boolean).join(' / ')}
+            {/* DOCENAS / COLUMNAS como dos filas — mismo layout que ya usa
+                DocColQuickPick en Quantumpilot.tsx (bullet + label a la
+                izquierda, pick grande a la derecha), pedido explícito de
+                Gunner, pero SIN el badge de estado (PRB/BET/WT) — Escudo 1
+                no tiene esos estados, solo cubre o no cubre. */}
+            <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
+              {(['doc', 'col'] as const).map((mkt, i) => {
+                const info = mkt === 'doc' ? escudo.doc : escudo.col;
+                return (
+                  <div key={mkt} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: i === 0 ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: info ? colorEscudo : '#3a4150', boxShadow: info ? `0 0 6px ${colorEscudo}` : 'none' }} />
+                      <span style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#8092b5', letterSpacing: '0.1em' }}>
+                        {mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS'}
+                      </span>
+                    </span>
+                    <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 22 : 17, fontWeight: 900, color: info ? '#ffffff' : '#5c687a', textAlign: 'right', lineHeight: 1.2 }}>
+                      {info ? info.zonas.join(' / ') : '—'}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ fontFamily: FONT_MONO, fontSize: hero ? 13 : 11.5, color: '#8a97ab', marginTop: 2, lineHeight: 1.4 }}>
+            <div style={{ fontFamily: FONT_MONO, fontSize: hero ? 13 : 11.5, color: '#8a97ab', marginTop: 4, lineHeight: 1.4 }}>
               {escudoMotivo}
             </div>
             {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
