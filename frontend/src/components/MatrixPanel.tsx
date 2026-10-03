@@ -580,12 +580,6 @@ export function CopilotOrder({
     </div>
   );
 
-  // Frase corta de Escudo 1 — no tiene "motivo" propio (EscudoInfo es solo
-  // datos), se arma acá, igual de simple que el motivo de Capa 1.
-  const escudoMotivo = !escudo.activo
-    ? 'Sin distribución marcada en la ventana de 7 giros.'
-    : 'Cubre 2 de 3 zonas, en cada mercado activo, hasta que salga la que quedó afuera.';
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 12 : 10.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 8px ${glow}` }}>
@@ -610,7 +604,7 @@ export function CopilotOrder({
             <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 9.5, color: colorCapa1, letterSpacing: '0.18em', fontWeight: 800 }}>
               CAPA 1 · COPILOTO
             </span>
-            <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 32 : 19, fontWeight: 900, color: '#ffffff', marginTop: 2, lineHeight: 1.1, textShadow: `0 0 14px ${colorCapa1}55` }}>
+            <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 32 : 19, fontWeight: 900, color: colorCapa1, marginTop: 2, lineHeight: 1.1, textShadow: `0 0 14px ${colorCapa1}55` }}>
               {capa1.titulo}
             </div>
             <div style={{ fontFamily: FONT_MONO, fontSize: hero ? 13 : 11.5, color: '#8a97ab', marginTop: 2, lineHeight: 1.4 }}>
@@ -632,10 +626,16 @@ export function CopilotOrder({
                 DocColQuickPick en Quantumpilot.tsx (bullet + label a la
                 izquierda, pick grande a la derecha), pedido explícito de
                 Gunner, pero SIN el badge de estado (PRB/BET/WT) — Escudo 1
-                no tiene esos estados, solo cubre o no cubre. */}
+                no tiene esos estados, solo cubre o no cubre.
+                PRIORIZA — vuelve acá (antes vivía en el título combinado de
+                arriba, que se sacó): cuando las dos están cubiertas a la vez
+                (COBERTURA DOBLE), se marca con una etiqueta la fila del
+                mercado de mejor rendimiento ahora (mismo dato de siempre,
+                d.principal, que decidirPiloto ya calculaba). */}
             <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
               {(['doc', 'col'] as const).map((mkt, i) => {
                 const info = mkt === 'doc' ? escudo.doc : escudo.col;
+                const esPrioridad = d.capa === 'COBERTURA_DOBLE' && d.principal === mkt;
                 return (
                   <div key={mkt} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: i === 0 ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
@@ -643,16 +643,18 @@ export function CopilotOrder({
                       <span style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#8092b5', letterSpacing: '0.1em' }}>
                         {mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS'}
                       </span>
+                      {esPrioridad && (
+                        <span style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 800, color: '#ffb300', letterSpacing: '0.08em', textShadow: '0 0 8px rgba(255,179,0,0.7)' }}>
+                          ▲ PRIORIDAD
+                        </span>
+                      )}
                     </span>
-                    <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 22 : 17, fontWeight: 900, color: info ? '#ffffff' : '#5c687a', textAlign: 'right', lineHeight: 1.2 }}>
+                    <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 22 : 17, fontWeight: 900, color: info ? colorEscudo : '#5c687a', textAlign: 'right', lineHeight: 1.2 }}>
                       {info ? info.zonas.join(' / ') : '—'}
                     </span>
                   </div>
                 );
               })}
-            </div>
-            <div style={{ fontFamily: FONT_MONO, fontSize: hero ? 13 : 11.5, color: '#8a97ab', marginTop: 4, lineHeight: 1.4 }}>
-              {escudoMotivo}
             </div>
             {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
           </motion.div>
