@@ -518,12 +518,12 @@ function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; sco
     .filter((x) => x.len > 0 && x.c > 0);
   return (
     <div style={{ marginTop: 5 }}>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#b4c0da', letterSpacing: '0.1em', fontWeight: 800 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#b4c0da', letterSpacing: '0.1em', fontWeight: 800 }}>
         {titulo}
       </span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 4 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 2 }}>
         {items.length === 0 ? (
-          <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: '#7d8aa0' }}>— sin rachas todavía</span>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#7d8aa0' }}>— sin rachas todavía</span>
         ) : items.map(({ len, c }) => {
           const cada = Math.max(1, Math.round(scored / c));
           // "Normal" = cada cuántos giros pasa esa racha en tus 56 sesiones guardadas
@@ -536,7 +536,7 @@ function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; sco
           const color = len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#b4c0d4';
           const colorCada = masSeguido ? '#ff9f1a' : masEspaciado ? '#00ff9d' : (len >= 4 ? '#ff1e38' : '#ffffff');
           return (
-            <span key={len} style={{ fontFamily: FONT_MONO, fontSize: 13, color, whiteSpace: 'nowrap' }}>
+            <span key={len} style={{ fontFamily: FONT_MONO, fontSize: 12, color, whiteSpace: 'nowrap' }}>
               {len === 9 ? '9+ seguidos' : len === 1 ? '1 error' : `${len} seguidos`}
               <span style={{ opacity: 0.6 }}> · cada </span>
               <b style={{ color: colorCada }}>{cada}</b>
@@ -686,11 +686,11 @@ export function CopilotOrder({
 
   // Tamaños ÚNICOS para los dos bloques (Capa 1 y Escudo 1) — antes cada uno
   // tenía su propio tamaño y no se leían parejos. Todo sale de acá.
-  const FS_LABEL = hero ? 13 : 12;   // título del bloque
-  const FS_FILA = hero ? 13 : 12;    // DOCENAS / COLUMNAS
-  const FS_PICK = hero ? 22 : 17;    // zonas a jugar
-  const FS_TXT = hero ? 13 : 12;     // motivo
-  const FS_STAT = hero ? 14 : 13;    // aciertos / errores / efectividad / rachas
+  const FS_LABEL = hero ? 12 : 11.5;   // título del bloque
+  const FS_FILA = hero ? 12 : 11.5;    // DOCENAS / COLUMNAS
+  const FS_PICK = hero ? 18 : 16;    // zonas a jugar
+  const FS_TXT = hero ? 12 : 11.5;     // motivo
+  const FS_STAT = hero ? 12.5 : 12;    // aciertos / errores / efectividad / rachas
   const COL_ETQ = '#b4c0da';         // etiquetas (antes #8092b5, muy tenue)
 
   // Zonas que el motor trae para cada mercado (las mismas que ya se puntúan
@@ -699,7 +699,7 @@ export function CopilotOrder({
 
   // Fila de estadísticas — con las palabras completas (efectividad, errores…).
   const miniStats = (hits: number, misses: number, wr: number | null, live: number, peor: number) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 8 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 14px', marginTop: 5 }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: FS_STAT, color: COL_ETQ }}>
         aciertos <b style={{ color: '#00ff9d' }}>{hits}</b>
       </span>
@@ -720,7 +720,7 @@ export function CopilotOrder({
 
   // Fila DOCENAS / COLUMNAS — idéntica en Capa 1 y en Escudo 1.
   const filaZona = (label: string, zonas: string | null, acento: string, borde: boolean, prioridad = false) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: borde ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '3px 0', borderBottom: borde ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: zonas ? acento : '#3a4150', boxShadow: zonas ? `0 0 6px ${acento}` : 'none' }} />
         <span style={{ fontFamily: FONT_MONO, fontSize: FS_FILA, color: COL_ETQ, letterSpacing: '0.08em' }}>{label}</span>
@@ -755,55 +755,17 @@ export function CopilotOrder({
   const capa1Estado = capa1.accion === 'ENTRAR' ? 'ENTRA' : capa1.accion === 'SUAVE' ? 'ENTRA SUAVE' : capa1.accion === 'ESPERAR' ? 'ESPERA' : 'PARA';
   const capa1EstadoColor = capa1Entra ? colorCapa1 : capa1.accion === 'PARAR' ? '#ff5d73' : '#aab4c6';
 
-  // ── LO QUE SE JUEGA (real): Escudo si está jugando; si no, Capa 1 ──
-  const juegaEscudo = d.capa !== 'CAPA1';
-  const juegaCapa1 = !juegaEscudo && d.mercado !== null && (d.accion === 'ENTRAR' || d.accion === 'SUAVE');
-  const colorJuega = juegaEscudo ? '#b026ff' : juegaCapa1 ? colorCapa1 : '#cbd5e1';
-  const nombreJuega = juegaEscudo ? 'ESCUDO' : juegaCapa1 ? 'CAPA 1' : null;
-  let textoJuega = 'NO APUESTES · ESPERA';
-  if (juegaEscudo) {
-    const partes: { t: string; pri: boolean }[] = [];
-    if (d.pickDoc) partes.push({ t: `DOCENAS ${d.pickDoc}`, pri: d.capa === 'COBERTURA_DOBLE' && d.principal === 'doc' });
-    if (d.pickCol) partes.push({ t: `COLUMNAS ${d.pickCol}`, pri: d.capa === 'COBERTURA_DOBLE' && d.principal === 'col' });
-    partes.sort((x, y) => Number(y.pri) - Number(x.pri));
-    textoJuega = partes.map((x) => (x.pri ? `▲ ${x.t}` : x.t)).join('   ·   ');
-  } else if (juegaCapa1) {
-    const z = d.mercado === 'doc' ? pend?.docPick : pend?.colPick;
-    textoJuega = `${d.mercado === 'doc' ? 'DOCENAS' : 'COLUMNAS'}${z ? ` ${z}` : ''}`;
-  }
-  const exposicionJuega = d.exposicion === 'REDUCIDA' ? 'progresión suave' : d.exposicion === 'MÍNIMA' ? 'ficha mínima' : '';
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 12 : 10.5, color, letterSpacing: '0.25em', fontWeight: 800, textShadow: `0 0 8px ${glow}` }}>
         ● D.A.N.N.A. · ENTRADA SEGURA
       </span>
 
-      {/* ── JUEGA ESTO — una sola línea que dice qué se juega de verdad:
-          ESCUDO si está cubriendo, si no CAPA 1, o nada si hay que esperar.
-          Es la misma decisión real (d) que ya puntúa el marcador; acá solo
-          se muestra clara, con las zonas. ── */}
-      <div style={{ border: `1px solid ${colorJuega}88`, background: `${colorJuega}14`, borderRadius: 8, padding: hero ? '10px 12px' : '8px 10px', boxShadow: `0 0 14px ${colorJuega}22` }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: FONT_MONO, fontSize: FS_LABEL, color: '#e2e8f0', letterSpacing: '0.16em', fontWeight: 800 }}>
-            JUEGA ESTO{nombreJuega ? ' →' : ''}
-          </span>
-          {nombreJuega && (
-            <span style={{ fontFamily: FONT_MONO, fontSize: FS_LABEL, color: colorJuega, letterSpacing: '0.14em', fontWeight: 900 }}>
-              {nombreJuega}{exposicionJuega ? ` · ${exposicionJuega}` : ''}
-            </span>
-          )}
-        </div>
-        <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 26 : 20, fontWeight: 900, color: colorJuega, marginTop: 3, lineHeight: 1.15, textShadow: `0 0 12px ${colorJuega}55` }}>
-          {textoJuega}
-        </div>
-      </div>
-
       {/* ── CAPA 1 y ESCUDO 1: dos bloques con EXACTAMENTE el mismo formato
           (encabezado + DOCENAS/COLUMNAS + motivo + estadísticas + errores
           seguidos), mismos tamaños. Lo de arriba es lo que se juega; esto es
           lo que sugiere cada capa por su cuenta. ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 16 : 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 12 : 9 }}>
         <AnimatePresence mode="wait">
           <motion.div key={`${capa1.titulo}-${capa1Doc}-${capa1Col}`}
             initial={{ opacity: 0, y: -3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -814,8 +776,8 @@ export function CopilotOrder({
               {filaZona('DOCENAS', capa1Doc, colorCapa1, true)}
               {filaZona('COLUMNAS', capa1Col, colorCapa1, false)}
             </div>
-            <div style={{ fontFamily: FONT_MONO, fontSize: FS_TXT, color: '#aab4c6', marginTop: 4, lineHeight: 1.4 }}>
-              {capa1.titulo} · {capa1.motivo}
+            <div style={{ fontFamily: FONT_MONO, fontSize: FS_TXT, color: '#aab4c6', marginTop: 3, lineHeight: 1.35 }}>
+              {capa1.motivo}
             </div>
             {miniStats(capa1Hits, capa1Misses, capa1Wr, capa1Live, capa1Peor)}
             <RachasFrecuencia rachas={capa1Rachas} scored={capa1Hits + capa1Misses} titulo="ERRORES SEGUIDOS · CAPA 1" q={ERR_NORMAL.capa1} />
@@ -839,13 +801,50 @@ export function CopilotOrder({
                 );
               })}
             </div>
-            <div style={{ fontFamily: FONT_MONO, fontSize: FS_TXT, color: '#aab4c6', marginTop: 4, lineHeight: 1.4 }}>
-              {escudo.activo && d.capa !== 'CAPA1' ? d.motivo : 'Sin distribución marcada: no hay cobertura ahora.'}
-            </div>
+            {escudo.activo && d.capa !== 'CAPA1' && (
+              <div style={{ fontFamily: FONT_MONO, fontSize: FS_TXT, color: '#aab4c6', marginTop: 3, lineHeight: 1.35 }}>
+                {d.motivo}
+              </div>
+            )}
             {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
             <RachasFrecuencia rachas={escudoRachas} scored={escudoHits + escudoMisses} titulo="ERRORES SEGUIDOS · ESCUDO" q={ERR_NORMAL.escudo} />
           </motion.div>
         </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+/** JUEGA ESTO — una sola línea, chica, arriba del marcador (tercera columna):
+ *  qué se juega de verdad ahora. ESCUDO si está cubriendo; si no, CAPA 1; o
+ *  nada si hay que esperar. Es la misma decisión real (liveDecision) que ya
+ *  puntúa el marcador — acá solo se muestra, con las zonas. Solo lectura. */
+function JuegaEsto() {
+  const d = useLiveDecision();
+  const pend = useTelemetryStore((st) => st.pending);
+  const juegaEscudo = d.capa !== 'CAPA1';
+  const juegaCapa1 = !juegaEscudo && d.mercado !== null && (d.accion === 'ENTRAR' || d.accion === 'SUAVE');
+  const colorJuega = juegaEscudo ? '#b026ff' : juegaCapa1 ? '#2f8cff' : '#cbd5e1';
+  const nombre = juegaEscudo ? 'ESCUDO' : juegaCapa1 ? 'CAPA 1' : null;
+  let texto = 'NO APUESTES · ESPERA';
+  if (juegaEscudo) {
+    const partes: { t: string; pri: boolean }[] = [];
+    if (d.pickDoc) partes.push({ t: `DOCENAS ${d.pickDoc}`, pri: d.capa === 'COBERTURA_DOBLE' && d.principal === 'doc' });
+    if (d.pickCol) partes.push({ t: `COLUMNAS ${d.pickCol}`, pri: d.capa === 'COBERTURA_DOBLE' && d.principal === 'col' });
+    partes.sort((x, y) => Number(y.pri) - Number(x.pri));
+    texto = partes.map((x) => (x.pri ? `▲ ${x.t}` : x.t)).join('  ·  ');
+  } else if (juegaCapa1) {
+    const z = d.mercado === 'doc' ? pend?.docPick : pend?.colPick;
+    texto = `${d.mercado === 'doc' ? 'DOCENAS' : 'COLUMNAS'}${z ? ` ${z}` : ''}`;
+  }
+  const expo = d.exposicion === 'REDUCIDA' ? 'progresión suave' : d.exposicion === 'MÍNIMA' ? 'ficha mínima' : '';
+  return (
+    <div style={{ border: `1px solid ${colorJuega}77`, background: `${colorJuega}12`, borderRadius: 6, padding: '5px 8px' }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: '0.12em', fontWeight: 800, color: '#cbd5e1' }}>
+        JUEGA ESTO{nombre ? <span style={{ color: colorJuega }}> · {nombre}{expo ? ` · ${expo}` : ''}</span> : null}
+      </div>
+      <div style={{ fontFamily: FONT_HEAD, fontSize: 14, fontWeight: 900, color: colorJuega, lineHeight: 1.2, marginTop: 1 }}>
+        {texto}
       </div>
     </div>
   );
@@ -893,6 +892,9 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   // no alcanza, sin tocar ningún dato ni cálculo.
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(68px, 1fr))', gap: '10px 4px', padding: '10px 8px', ...(bare ? bareBlock() : microPanel('#22d3ee', 0.1)) }}>
+      <div style={{ gridColumn: '1 / -1', padding: '0 6px' }}>
+        <JuegaEsto />
+      </div>
       {STATS.map((s) => (
         <div key={s.k} style={{ padding: '0 6px', minWidth: 0 }}>
           <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#b4c0da', letterSpacing: '0.08em', fontWeight: 800, whiteSpace: 'nowrap' }}>{s.k}</div>
