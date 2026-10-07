@@ -47,7 +47,7 @@ import {
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
   useTermoHits, useTermoTotal, useTermoStreak, useLiveDecision, type CellRec,
-  useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak, useCopRachas, useCapa1Rachas, useEscudoRachas, useCalor,
+  useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak, useCopRachas, useCapa1Rachas, useEscudoRachas, useCalor, useTelemetryStore,
   // SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) — ver nota en CopilotOrder abajo.
   useLiveCapa1, useLiveEscudo,
   useCapa1Hits, useCapa1Misses, useCapa1Wr, useCapa1LiveStreak, useCapa1Streak,
@@ -518,12 +518,12 @@ function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; sco
     .filter((x) => x.len > 0 && x.c > 0);
   return (
     <div style={{ marginTop: 5 }}>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.12em', fontWeight: 700 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#b4c0da', letterSpacing: '0.1em', fontWeight: 800 }}>
         {titulo}
       </span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 2 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 4 }}>
         {items.length === 0 ? (
-          <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#5c687a' }}>— sin rachas todavía</span>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: '#7d8aa0' }}>— sin rachas todavía</span>
         ) : items.map(({ len, c }) => {
           const cada = Math.max(1, Math.round(scored / c));
           // "Normal" = cada cuántos giros pasa esa racha en tus 56 sesiones guardadas
@@ -533,14 +533,14 @@ function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; sco
           const confiable = scored >= 80 && c >= 2;
           const masSeguido = normal !== null && confiable && cada < normal * 0.7;
           const masEspaciado = normal !== null && confiable && cada > normal * 1.5;
-          const color = len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#8a97ab';
+          const color = len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#b4c0d4';
           const colorCada = masSeguido ? '#ff9f1a' : masEspaciado ? '#00ff9d' : (len >= 4 ? '#ff1e38' : '#ffffff');
           return (
-            <span key={len} style={{ fontFamily: FONT_MONO, fontSize: 11, color, whiteSpace: 'nowrap' }}>
+            <span key={len} style={{ fontFamily: FONT_MONO, fontSize: 13, color, whiteSpace: 'nowrap' }}>
               {len === 9 ? '9+ seguidos' : len === 1 ? '1 error' : `${len} seguidos`}
               <span style={{ opacity: 0.6 }}> · cada </span>
               <b style={{ color: colorCada }}>{cada}</b>
-              {normal !== null && <span style={{ opacity: 0.55, fontWeight: 400 }}> (normal {normal})</span>}
+              {normal !== null && <span style={{ opacity: 0.75, fontWeight: 400 }}> (normal {normal})</span>}
               {masSeguido && <span style={{ color: '#ff9f1a' }}> ▲</span>}
               {masEspaciado && <span style={{ color: '#00ff9d' }}> ▼</span>}
             </span>
@@ -684,27 +684,94 @@ export function CopilotOrder({
   const colorCapa1 = '#2f8cff';   // azul neón — Capa 1 · Copiloto
   const colorEscudo = escudo.activo ? '#b026ff' : '#5e3380'; // violeta neón — Escudo 1 · Cobertura (apagado si no hay nada activo)
 
-  // Fila compacta de 4 mini-stats — misma info que CopilotScoreboard, pero
-  // chica, para que los dos sub-bloques quepan en la misma card sin inflarla.
+  // Tamaños ÚNICOS para los dos bloques (Capa 1 y Escudo 1) — antes cada uno
+  // tenía su propio tamaño y no se leían parejos. Todo sale de acá.
+  const FS_LABEL = hero ? 13 : 12;   // título del bloque
+  const FS_FILA = hero ? 13 : 12;    // DOCENAS / COLUMNAS
+  const FS_PICK = hero ? 22 : 17;    // zonas a jugar
+  const FS_TXT = hero ? 13 : 12;     // motivo
+  const FS_STAT = hero ? 14 : 13;    // aciertos / errores / efectividad / rachas
+  const COL_ETQ = '#b4c0da';         // etiquetas (antes #8092b5, muy tenue)
+
+  // Zonas que el motor trae para cada mercado (las mismas que ya se puntúan
+  // contra Capa 1: pending.docPick / colPick). Solo lectura.
+  const pend = useTelemetryStore((st) => st.pending);
+
+  // Fila de estadísticas — con las palabras completas (efectividad, errores…).
   const miniStats = (hits: number, misses: number, wr: number | null, live: number, peor: number) => (
-    <div style={{ display: 'flex', gap: 14, marginTop: 3 }}>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
-        ✓<b style={{ color: '#00ff9d' }}> {hits}</b>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 8 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: FS_STAT, color: COL_ETQ }}>
+        aciertos <b style={{ color: '#00ff9d' }}>{hits}</b>
       </span>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
-        ✕<b style={{ color: '#ff1e38' }}> {misses}</b>
+      <span style={{ fontFamily: FONT_MONO, fontSize: FS_STAT, color: COL_ETQ }}>
+        errores <b style={{ color: '#ff5d73' }}>{misses}</b>
       </span>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
-        efec. <b style={{ color: '#ffffff' }}>{wr !== null ? `${wr.toFixed(0)}%` : '—'}</b>
+      <span style={{ fontFamily: FONT_MONO, fontSize: FS_STAT, color: COL_ETQ }}>
+        efectividad <b style={{ color: '#ffffff' }}>{wr !== null ? `${wr.toFixed(0)}%` : '—'}</b>
       </span>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
-        racha <b style={{ color: live >= 3 ? '#ff1e38' : live >= 1 ? '#f4f8ff' : '#00ff9d' }}>{live}</b>
+      <span style={{ fontFamily: FONT_MONO, fontSize: FS_STAT, color: COL_ETQ }}>
+        racha <b style={{ color: live >= 3 ? '#ff5d73' : live >= 1 ? '#f4f8ff' : '#00ff9d' }}>{live}</b>
       </span>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5' }}>
-        peor <b style={{ color: peor >= 4 ? '#ff1e38' : '#cbd5e1' }}>{peor}</b>
+      <span style={{ fontFamily: FONT_MONO, fontSize: FS_STAT, color: COL_ETQ }}>
+        peor racha <b style={{ color: peor >= 4 ? '#ff5d73' : '#e2e8f0' }}>{peor}</b>
       </span>
     </div>
   );
+
+  // Fila DOCENAS / COLUMNAS — idéntica en Capa 1 y en Escudo 1.
+  const filaZona = (label: string, zonas: string | null, acento: string, borde: boolean, prioridad = false) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: borde ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: zonas ? acento : '#3a4150', boxShadow: zonas ? `0 0 6px ${acento}` : 'none' }} />
+        <span style={{ fontFamily: FONT_MONO, fontSize: FS_FILA, color: COL_ETQ, letterSpacing: '0.08em' }}>{label}</span>
+        {prioridad && (
+          <span style={{ fontFamily: FONT_MONO, fontSize: 10.5, fontWeight: 800, color: '#ffb300', letterSpacing: '0.08em', textShadow: '0 0 8px rgba(255,179,0,0.7)' }}>
+            ▲ PRIORIDAD
+          </span>
+        )}
+      </span>
+      <span style={{ fontFamily: FONT_HEAD, fontSize: FS_PICK, fontWeight: 900, color: zonas ? acento : '#6b778c', textAlign: 'right', lineHeight: 1.2 }}>
+        {zonas ?? '—'}
+      </span>
+    </div>
+  );
+
+  // Encabezado de bloque: nombre a la izquierda, estado a la derecha.
+  const encabezado = (nombre: string, acento: string, estado: string, estadoColor: string) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: FS_LABEL, color: acento, letterSpacing: '0.16em', fontWeight: 800 }}>
+        {nombre}
+      </span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: FS_LABEL - 1, fontWeight: 800, color: estadoColor, letterSpacing: '0.08em', border: `1px solid ${estadoColor}66`, borderRadius: 4, padding: '1px 7px' }}>
+        {estado}
+      </span>
+    </div>
+  );
+
+  // ── Capa 1: qué sugiere (mercado + zonas) ──
+  const capa1Entra = capa1.mercado !== null && (capa1.accion === 'ENTRAR' || capa1.accion === 'SUAVE');
+  const capa1Doc = capa1Entra && capa1.mercado === 'doc' ? (pend?.docPick || null) : null;
+  const capa1Col = capa1Entra && capa1.mercado === 'col' ? (pend?.colPick || null) : null;
+  const capa1Estado = capa1.accion === 'ENTRAR' ? 'ENTRA' : capa1.accion === 'SUAVE' ? 'ENTRA SUAVE' : capa1.accion === 'ESPERAR' ? 'ESPERA' : 'PARA';
+  const capa1EstadoColor = capa1Entra ? colorCapa1 : capa1.accion === 'PARAR' ? '#ff5d73' : '#aab4c6';
+
+  // ── LO QUE SE JUEGA (real): Escudo si está jugando; si no, Capa 1 ──
+  const juegaEscudo = d.capa !== 'CAPA1';
+  const juegaCapa1 = !juegaEscudo && d.mercado !== null && (d.accion === 'ENTRAR' || d.accion === 'SUAVE');
+  const colorJuega = juegaEscudo ? '#b026ff' : juegaCapa1 ? colorCapa1 : '#cbd5e1';
+  const nombreJuega = juegaEscudo ? 'ESCUDO' : juegaCapa1 ? 'CAPA 1' : null;
+  let textoJuega = 'NO APUESTES · ESPERA';
+  if (juegaEscudo) {
+    const partes: { t: string; pri: boolean }[] = [];
+    if (d.pickDoc) partes.push({ t: `DOCENAS ${d.pickDoc}`, pri: d.capa === 'COBERTURA_DOBLE' && d.principal === 'doc' });
+    if (d.pickCol) partes.push({ t: `COLUMNAS ${d.pickCol}`, pri: d.capa === 'COBERTURA_DOBLE' && d.principal === 'col' });
+    partes.sort((x, y) => Number(y.pri) - Number(x.pri));
+    textoJuega = partes.map((x) => (x.pri ? `▲ ${x.t}` : x.t)).join('   ·   ');
+  } else if (juegaCapa1) {
+    const z = d.mercado === 'doc' ? pend?.docPick : pend?.colPick;
+    textoJuega = `${d.mercado === 'doc' ? 'DOCENAS' : 'COLUMNAS'}${z ? ` ${z}` : ''}`;
+  }
+  const exposicionJuega = d.exposicion === 'REDUCIDA' ? 'progresión suave' : d.exposicion === 'MÍNIMA' ? 'ficha mínima' : '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 9 : 6, padding: hero ? '4px 2px' : '12px 14px', ...(bare ? bareBlock() : microPanel(color, 0.18)) }}>
@@ -712,32 +779,46 @@ export function CopilotOrder({
         ● D.A.N.N.A. · ENTRADA SEGURA
       </span>
 
-      {/* ── CAPA 1 / ESCUDO 1 por separado — pedido de Gunner: sacar el
-          título combinado ("COBERTURA DOBLE...") de arriba, que quedaba
-          redundante con los dos bloques de abajo ("siento que sobra").
-          Ahora la card muestra DIRECTO la sugerencia de cada capa, sin un
-          tercer resumen fusionado encima. Acento lateral (borderLeft) por
-          sub-bloque, sin micropanel nuevo adentro — regla v6. La decisión
-          REAL (d.titulo/d.motivo/d.capa/d.principal, arriba) sigue
-          existiendo y sigue siendo la que manda en telemetryStore.ts para
-          puntuar/apostar — esto es solo cómo se MUESTRA. ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 14 : 10 }}>
+      {/* ── JUEGA ESTO — una sola línea que dice qué se juega de verdad:
+          ESCUDO si está cubriendo, si no CAPA 1, o nada si hay que esperar.
+          Es la misma decisión real (d) que ya puntúa el marcador; acá solo
+          se muestra clara, con las zonas. ── */}
+      <div style={{ border: `1px solid ${colorJuega}88`, background: `${colorJuega}14`, borderRadius: 8, padding: hero ? '10px 12px' : '8px 10px', boxShadow: `0 0 14px ${colorJuega}22` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: FS_LABEL, color: '#e2e8f0', letterSpacing: '0.16em', fontWeight: 800 }}>
+            JUEGA ESTO{nombreJuega ? ' →' : ''}
+          </span>
+          {nombreJuega && (
+            <span style={{ fontFamily: FONT_MONO, fontSize: FS_LABEL, color: colorJuega, letterSpacing: '0.14em', fontWeight: 900 }}>
+              {nombreJuega}{exposicionJuega ? ` · ${exposicionJuega}` : ''}
+            </span>
+          )}
+        </div>
+        <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 26 : 20, fontWeight: 900, color: colorJuega, marginTop: 3, lineHeight: 1.15, textShadow: `0 0 12px ${colorJuega}55` }}>
+          {textoJuega}
+        </div>
+      </div>
+
+      {/* ── CAPA 1 y ESCUDO 1: dos bloques con EXACTAMENTE el mismo formato
+          (encabezado + DOCENAS/COLUMNAS + motivo + estadísticas + errores
+          seguidos), mismos tamaños. Lo de arriba es lo que se juega; esto es
+          lo que sugiere cada capa por su cuenta. ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: hero ? 16 : 12 }}>
         <AnimatePresence mode="wait">
-          <motion.div key={capa1.titulo}
+          <motion.div key={`${capa1.titulo}-${capa1Doc}-${capa1Col}`}
             initial={{ opacity: 0, y: -3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             style={{ borderLeft: `2px solid ${colorCapa1}`, paddingLeft: 10 }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 9.5, color: colorCapa1, letterSpacing: '0.18em', fontWeight: 800 }}>
-              CAPA 1 · COPILOTO
-            </span>
-            <div style={{ fontFamily: FONT_HEAD, fontSize: hero ? 32 : 19, fontWeight: 900, color: colorCapa1, marginTop: 2, lineHeight: 1.1, textShadow: `0 0 14px ${colorCapa1}55` }}>
-              {capa1.titulo}
+            {encabezado('CAPA 1 · COPILOTO', colorCapa1, capa1Estado, capa1EstadoColor)}
+            <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
+              {filaZona('DOCENAS', capa1Doc, colorCapa1, true)}
+              {filaZona('COLUMNAS', capa1Col, colorCapa1, false)}
             </div>
-            <div style={{ fontFamily: FONT_MONO, fontSize: hero ? 13 : 11.5, color: '#8a97ab', marginTop: 2, lineHeight: 1.4 }}>
-              {capa1.motivo}
+            <div style={{ fontFamily: FONT_MONO, fontSize: FS_TXT, color: '#aab4c6', marginTop: 4, lineHeight: 1.4 }}>
+              {capa1.titulo} · {capa1.motivo}
             </div>
             {miniStats(capa1Hits, capa1Misses, capa1Wr, capa1Live, capa1Peor)}
-            <RachasFrecuencia rachas={capa1Rachas} scored={capa1Hits + capa1Misses} titulo="ERRORES SEGUIDOS · COPILOTO" q={ERR_NORMAL.capa1} />
+            <RachasFrecuencia rachas={capa1Rachas} scored={capa1Hits + capa1Misses} titulo="ERRORES SEGUIDOS · CAPA 1" q={ERR_NORMAL.capa1} />
           </motion.div>
         </AnimatePresence>
 
@@ -746,42 +827,20 @@ export function CopilotOrder({
             initial={{ opacity: 0, y: -3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             style={{ borderLeft: `2px solid ${colorEscudo}`, paddingLeft: 10 }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: hero ? 11 : 9.5, color: colorEscudo, letterSpacing: '0.18em', fontWeight: 800 }}>
-              ESCUDO 1 · COBERTURA
-            </span>
-            {/* DOCENAS / COLUMNAS como dos filas — mismo layout que ya usa
-                DocColQuickPick en Quantumpilot.tsx (bullet + label a la
-                izquierda, pick grande a la derecha), pedido explícito de
-                Gunner, pero SIN el badge de estado (PRB/BET/WT) — Escudo 1
-                no tiene esos estados, solo cubre o no cubre.
-                PRIORIZA — vuelve acá (antes vivía en el título combinado de
-                arriba, que se sacó): cuando las dos están cubiertas a la vez
-                (COBERTURA DOBLE), se marca con una etiqueta la fila del
-                mercado de mejor rendimiento ahora (mismo dato de siempre,
-                d.principal, que decidirPiloto ya calculaba). */}
+            {encabezado('ESCUDO 1 · COBERTURA', colorEscudo, escudo.activo ? 'CUBRE' : 'SIN COBERTURA', escudo.activo ? '#b026ff' : '#aab4c6')}
             <div style={{ display: 'flex', flexDirection: 'column', marginTop: 4 }}>
               {(['doc', 'col'] as const).map((mkt, i) => {
                 const info = mkt === 'doc' ? escudo.doc : escudo.col;
                 const esPrioridad = d.capa === 'COBERTURA_DOBLE' && d.principal === mkt;
                 return (
-                  <div key={mkt} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '6px 0', borderBottom: i === 0 ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: info ? colorEscudo : '#3a4150', boxShadow: info ? `0 0 6px ${colorEscudo}` : 'none' }} />
-                      <span style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#8092b5', letterSpacing: '0.1em' }}>
-                        {mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS'}
-                      </span>
-                      {esPrioridad && (
-                        <span style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 800, color: '#ffb300', letterSpacing: '0.08em', textShadow: '0 0 8px rgba(255,179,0,0.7)' }}>
-                          ▲ PRIORIDAD
-                        </span>
-                      )}
-                    </span>
-                    <span style={{ fontFamily: FONT_HEAD, fontSize: hero ? 22 : 17, fontWeight: 900, color: info ? colorEscudo : '#5c687a', textAlign: 'right', lineHeight: 1.2 }}>
-                      {info ? info.zonas.join(' / ') : '—'}
-                    </span>
+                  <div key={mkt}>
+                    {filaZona(mkt === 'doc' ? 'DOCENAS' : 'COLUMNAS', info ? info.zonas.join(' / ') : null, colorEscudo, i === 0, esPrioridad)}
                   </div>
                 );
               })}
+            </div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: FS_TXT, color: '#aab4c6', marginTop: 4, lineHeight: 1.4 }}>
+              {escudo.activo && d.capa !== 'CAPA1' ? d.motivo : 'Sin distribución marcada: no hay cobertura ahora.'}
             </div>
             {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
             <RachasFrecuencia rachas={escudoRachas} scored={escudoHits + escudoMisses} titulo="ERRORES SEGUIDOS · ESCUDO" q={ERR_NORMAL.escudo} />
@@ -836,7 +895,7 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(68px, 1fr))', gap: '10px 4px', padding: '10px 8px', ...(bare ? bareBlock() : microPanel('#22d3ee', 0.1)) }}>
       {STATS.map((s) => (
         <div key={s.k} style={{ padding: '0 6px', minWidth: 0 }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: '#8092b5', letterSpacing: '0.1em', fontWeight: 700, whiteSpace: 'nowrap' }}>{s.k}</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#b4c0da', letterSpacing: '0.08em', fontWeight: 800, whiteSpace: 'nowrap' }}>{s.k}</div>
           <div style={{ fontFamily: FONT_HEAD, fontSize: 23, fontWeight: 900, color: s.c, marginTop: 3, textShadow: s.glow ? `0 0 8px ${s.c}80` : 'none' }}>{s.v}</div>
         </div>
       ))}
