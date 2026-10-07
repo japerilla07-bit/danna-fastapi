@@ -47,7 +47,7 @@ import {
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
   useTermoHits, useTermoTotal, useTermoStreak, useLiveDecision, type CellRec,
-  useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak,
+  useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak, useCopRachas, useCapa1Rachas, useEscudoRachas, useCalor,
   // SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) — ver nota en CopilotOrder abajo.
   useLiveCapa1, useLiveEscudo,
   useCapa1Hits, useCapa1Misses, useCapa1Wr, useCapa1LiveStreak, useCapa1Streak,
@@ -81,6 +81,7 @@ import {
 // baja: "el escudo numero 2... no sirve". Se sacó por completo de
 // copilot.ts — decidirPiloto() hoy es 1:1 con la Capa 1.
 import type { MarketRead } from '@/domain/copilot';
+import { leerCalor, resumenVolvio, CALOR_VENTANA, CALOR_VUELTA, type LecturaCalor } from '@/domain/calor';
 
 const FONT_HEAD = "'Rajdhani', sans-serif";
 const FONT_MONO = "'JetBrains Mono', monospace";
@@ -499,6 +500,130 @@ function useMarketRead(mkt: Market): MarketRead {
   };
 }
 
+/** % de error NORMAL de cada marcador, medido en tus 56 sesiones guardadas
+ *  (D.A.N.N.A. real: 16.646 giros · Capa 1: 12.962 · Escudo: 15.532). De acá
+ *  sale el "normal" de cada "cada X giros": 1 / ((1-q)² · qᴸ) para una racha
+ *  de largo L. Se afina cuando entren sesiones nuevas. */
+const ERR_NORMAL = { real: 0.3425, capa1: 0.334, escudo: 0.22 };
+
+/** FRECUENCIA DE RACHAS EN VIVO (oct 2026) — pedido de Gunner: "que me diga
+ *  el copiloto, el motor, el escudo viene cometiendo un error cada X giros,
+ *  dos errores cada tanto". Para UN marcador (real, Capa 1 o Escudo 1) muestra,
+ *  por cada largo de racha que ya pasó (1 error, 2 seguidos, 3...), CADA CUÁNTOS
+ *  GIROS se repite: giros puntuados de ese marcador ÷ veces que pasó esa racha.
+ *  Solo lectura — no cambia ninguna decisión ni el freno. */
+function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; scored: number; titulo: string; q: number }) {
+  const items = rachas
+    .map((c, len) => ({ len, c }))
+    .filter((x) => x.len > 0 && x.c > 0);
+  return (
+    <div style={{ marginTop: 5 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.12em', fontWeight: 700 }}>
+        {titulo}
+      </span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 2 }}>
+        {items.length === 0 ? (
+          <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#5c687a' }}>— sin rachas todavía</span>
+        ) : items.map(({ len, c }) => {
+          const cada = Math.max(1, Math.round(scored / c));
+          // "Normal" = cada cuántos giros pasa esa racha en tus 56 sesiones guardadas
+          // (a partir del % de error de esta capa: ERR_NORMAL). Solo se marca
+          // más seguido / más espaciado con ≥80 giros puntuados y ≥2 veces (antes es ruido).
+          const normal = len >= 9 ? null : Math.round(1 / (Math.pow(1 - q, 2) * Math.pow(q, len)));
+          const confiable = scored >= 80 && c >= 2;
+          const masSeguido = normal !== null && confiable && cada < normal * 0.7;
+          const masEspaciado = normal !== null && confiable && cada > normal * 1.5;
+          const color = len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#8a97ab';
+          const colorCada = masSeguido ? '#ff9f1a' : masEspaciado ? '#00ff9d' : (len >= 4 ? '#ff1e38' : '#ffffff');
+          return (
+            <span key={len} style={{ fontFamily: FONT_MONO, fontSize: 11, color, whiteSpace: 'nowrap' }}>
+              {len === 9 ? '9+ seguidos' : len === 1 ? '1 error' : `${len} seguidos`}
+              <span style={{ opacity: 0.6 }}> · cada </span>
+              <b style={{ color: colorCada }}>{cada}</b>
+              {normal !== null && <span style={{ opacity: 0.55, fontWeight: 400 }}> (normal {normal})</span>}
+              {masSeguido && <span style={{ color: '#ff9f1a' }}> ▲</span>}
+              {masEspaciado && <span style={{ color: '#00ff9d' }}> ▼</span>}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** CALOR RECIENTE (oct 2026) — pedido de Gunner, operación en vivo: "hay
+ *  sesiones en las que se calentaron dos docenas, dos columnas, una docena,
+ *  una columna, un color... puede durar 5, 7, 10 giros". Lee SOLO los últimos
+ *  7 giros (domain/calor.ts) y muestra, por mercado, qué viene caliente, qué
+ *  se está enfriando y cuánto. Solo lectura: describe lo que viene saliendo,
+ *  no cambia ninguna decisión ni el freno. */
+function CalorReciente() {
+  const calor = useCalor();
+  const lecturas: LecturaCalor[] = leerCalor(calor);
+  const volvio = resumenVolvio(calor);
+  const COLOR_CALIENTE = '#ff9f1a';   // ámbar vivo
+  const COLOR_ENFRIA = '#7fb3d5';     // azul hielo
+  const COLOR_FIN = '#ff5d73';        // rosa rojizo — el sesgo terminó
+  return (
+    <div style={{ marginTop: 6 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.12em', fontWeight: 700 }}>
+        CALOR RECIENTE · lo que viene saliendo (últimos {CALOR_VENTANA}-9)
+      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
+        {lecturas.map((l, i) => {
+          const caliente = l.estado === 'CALIENTE';
+          const enfria = l.estado === 'ENFRIANDO';
+          const termino = l.estado === 'TERMINO';
+          const c = caliente ? COLOR_CALIENTE : enfria ? COLOR_ENFRIA : termino ? COLOR_FIN : '#5c687a';
+          return (
+            <div key={l.mercado} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '4px 0', borderBottom: i < lecturas.length - 1 ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, boxShadow: caliente ? `0 0 6px ${c}` : 'none' }} />
+                <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8092b5', letterSpacing: '0.1em' }}>{l.mercado}</span>
+              </span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 11.5, fontWeight: 700, color: c, textAlign: 'right' }}>
+                {l.estado === 'JUNTANDO' ? `juntando giros ${l.detalle}`
+                  : l.estado === 'NORMAL' ? '—'
+                  : <>
+                      {caliente ? '🔥 ' : enfria ? '❄ ' : '✖ '}{l.zonas.join(' + ')}
+                      <span style={{ opacity: 0.8, fontWeight: 400 }}>
+                        {' · '}{termino ? 'TERMINÓ' : enfria ? 'enfriando' : ''}{termino || enfria ? ' · ' : ''}{l.detalle}
+                      </span>
+                    </>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {/* ¿VOLVIÓ EL CALOR? — pedido de Gunner: "si sale 2 o 3 giros después
+          (máximo 3) y cuántas veces sucede eso en la sesión". Cada vez que
+          nace un calor se miran los siguientes 3 giros; si la zona caliente
+          (o alguna de las dos) salió al menos una vez, "volvió". Tanteador de
+          LA SESIÓN, por mercado (1 zona / 2 zonas). Referencia de azar al lado
+          para leerlo bien: una zona suelta sale en ≤3 giros ~7 de cada 10 aunque
+          no pase nada raro; con 2 zonas, casi siempre. */}
+      <div style={{ marginTop: 5 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.12em', fontWeight: 700 }}>
+          ¿VOLVIÓ EN ≤{CALOR_VUELTA} GIROS? hoy · por azar vuelven ~7 de 10 (docena/col.) y ~8-9 de 10 (color/rango/paridad)
+        </span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 2 }}>
+          {volvio.every((v) => v.uno.n === 0 && v.dos.n === 0) ? (
+            <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#5c687a' }}>— todavía sin calores resueltos</span>
+          ) : volvio.map((v) => (
+            <span key={v.mercado} style={{ fontFamily: FONT_MONO, fontSize: 11, color: '#8a97ab', whiteSpace: 'nowrap' }}>
+              {v.mercado}{' '}
+              <b style={{ color: '#ffffff' }}>{v.uno.n ? `${v.uno.vol}/${v.uno.n}` : '—'}</b>
+              {(v.mercado === 'DOCENAS' || v.mercado === 'COLUMNAS') && (
+                <span style={{ opacity: 0.8 }}> · 2 zonas <b style={{ color: '#ffffff' }}>{v.dos.n ? `${v.dos.vol}/${v.dos.n}` : '—'}</b></span>
+              )}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Header + orden del copiloto ("ENTRADA SEGURA").
  *
  *  FIX (oct 2026) — BUG REAL reportado por Gunner y reproducido en vivo:
@@ -546,6 +671,7 @@ export function CopilotOrder({
   const capa1Live = useCapa1LiveStreak(), capa1Peor = useCapa1Streak();
   const escudoHits = useEscudoHits(), escudoMisses = useEscudoMisses(), escudoWr = useEscudoWr();
   const escudoLive = useEscudoLiveStreak(), escudoPeor = useEscudoStreak();
+  const capa1Rachas = useCapa1Rachas(), escudoRachas = useEscudoRachas();
 
   // v7: "precaución" pasa de ámbar a blanco neón — Gunner: "preferiría
   // meter un blanco neón en vez de un naranja". ok/peligro quedan iguales.
@@ -611,6 +737,7 @@ export function CopilotOrder({
               {capa1.motivo}
             </div>
             {miniStats(capa1Hits, capa1Misses, capa1Wr, capa1Live, capa1Peor)}
+            <RachasFrecuencia rachas={capa1Rachas} scored={capa1Hits + capa1Misses} titulo="ERRORES SEGUIDOS · COPILOTO" q={ERR_NORMAL.capa1} />
           </motion.div>
         </AnimatePresence>
 
@@ -657,6 +784,7 @@ export function CopilotOrder({
               })}
             </div>
             {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
+            <RachasFrecuencia rachas={escudoRachas} scored={escudoHits + escudoMisses} titulo="ERRORES SEGUIDOS · ESCUDO" q={ERR_NORMAL.escudo} />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -683,6 +811,7 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   const copWr = useCopWr();
   const copLive = useCopLiveStreak();
   const copStreak = useCopStreak(); // peor racha de la sesión (maxStreak)
+  const copRachas = useCopRachas(); // frecuencia de rachas cerradas hoy (idx = largo, 9 = 9+)
 
   // v7 (oct 2026): glow reservado para lo crítico/accionable (ACIERTOS,
   // ERRORES, RACHA AHORA — lo que está pasando ahora mismo), apagado en lo
@@ -711,6 +840,14 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
           <div style={{ fontFamily: FONT_HEAD, fontSize: 23, fontWeight: 900, color: s.c, marginTop: 3, textShadow: s.glow ? `0 0 8px ${s.c}80` : 'none' }}>{s.v}</div>
         </div>
       ))}
+      {/* FRECUENCIA DE RACHAS del marcador REAL (lo que D.A.N.N.A. de verdad
+          jugó) — mismo formato que en CAPA 1 y ESCUDO 1, ver RachasFrecuencia. */}
+      <div style={{ gridColumn: '1 / -1', padding: '2px 6px 0' }}>
+        <RachasFrecuencia rachas={copRachas} scored={copHits + copMisses} titulo="ERRORES SEGUIDOS · D.A.N.N.A." q={ERR_NORMAL.real} />
+      </div>
+      <div style={{ gridColumn: '1 / -1', padding: '2px 6px 0' }}>
+        <CalorReciente />
+      </div>
     </div>
   );
 }
