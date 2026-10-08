@@ -81,7 +81,7 @@ import {
 // baja: "el escudo numero 2... no sirve". Se sacó por completo de
 // copilot.ts — decidirPiloto() hoy es 1:1 con la Capa 1.
 import type { MarketRead } from '@/domain/copilot';
-import { leerCalor, resumenVolvio, CALOR_VENTANA, CALOR_VUELTA, type LecturaCalor } from '@/domain/calor';
+import { leerCalor, resumenVolvio, CALOR_VENTANA, CALOR_VENTANA_DOS, CALOR_VUELTA, type LecturaCalor } from '@/domain/calor';
 
 const FONT_HEAD = "'Rajdhani', sans-serif";
 const FONT_MONO = "'JetBrains Mono', monospace";
@@ -567,14 +567,15 @@ function CalorReciente() {
   return (
     <div style={{ marginTop: 6 }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.12em', fontWeight: 700 }}>
-        CALOR RECIENTE · lo que viene saliendo (últimos {CALOR_VENTANA}-9)
+        CALOR RECIENTE · lo que viene saliendo (últimos {CALOR_VENTANA}-{CALOR_VENTANA_DOS})
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', marginTop: 2 }}>
         {lecturas.map((l, i) => {
           const caliente = l.estado === 'CALIENTE';
           const enfria = l.estado === 'ENFRIANDO';
           const termino = l.estado === 'TERMINO';
-          const c = caliente ? COLOR_CALIENTE : enfria ? COLOR_ENFRIA : termino ? COLOR_FIN : '#5c687a';
+          const corto = l.estado === 'CORTO';   // terminó antes de 4 giros: no llegó a ser calor
+          const c = caliente ? COLOR_CALIENTE : enfria ? COLOR_ENFRIA : termino ? COLOR_FIN : corto ? '#6b7a90' : '#5c687a';
           return (
             <div key={l.mercado} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '4px 0', borderBottom: i < lecturas.length - 1 ? '1px solid rgba(255,255,255,0.055)' : 'none' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
@@ -585,7 +586,7 @@ function CalorReciente() {
                 {l.estado === 'JUNTANDO' ? `juntando giros ${l.detalle}`
                   : l.estado === 'NORMAL' ? '—'
                   : <>
-                      {caliente ? '🔥 ' : enfria ? '❄ ' : '✖ '}{l.zonas.join(' + ')}
+                      {caliente ? '🔥 ' : enfria ? '❄ ' : corto ? '○ ' : '✖ '}{l.zonas.join(' + ')}
                       <span style={{ opacity: 0.8, fontWeight: 400 }}>
                         {' · '}{termino ? 'TERMINÓ' : enfria ? 'enfriando' : ''}{termino || enfria ? ' · ' : ''}{l.detalle}
                       </span>
@@ -604,7 +605,7 @@ function CalorReciente() {
           no pase nada raro; con 2 zonas, casi siempre. */}
       <div style={{ marginTop: 5 }}>
         <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: '#8092b5', letterSpacing: '0.12em', fontWeight: 700 }}>
-          ¿VOLVIÓ EN ≤{CALOR_VUELTA} GIROS? hoy · por azar vuelven ~7 de 10 (docena/col.) y ~8-9 de 10 (color/rango/paridad)
+          ¿VOLVIÓ EN ≤{CALOR_VUELTA} GIROS? hoy · por azar vuelven ~7 de 10 (1 zona docena/col.), ~9 de 10 (2 zonas) y ~8-9 de 10 (color/rango/paridad)
         </span>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 2 }}>
           {volvio.every((v) => v.uno.n === 0 && v.dos.n === 0) ? (
