@@ -11,14 +11,19 @@
 // Describe lo que viene saliendo; no es una orden de entrada.
 //
 // CÓMO NACE un calor (el 0 ocupa lugar en la ventana pero no cuenta para
-// ninguna zona):
-//   · 1 zona caliente  — últimos 7 giros. Docena/columna: una zona con ≥5 de 7
-//                        (y sola arriba). Color, rango y paridad (apuestas de
-//                        2 opciones): una opción con ≥6 de 7.
-//   · 2 zonas calientes — últimos 9 giros (más largo a propósito: con 7 se
-//                        prendía casi la mitad del tiempo y la alerta perdía
-//                        sentido). Docena/columna: la tercera zona NO salió
-//                        en esos 9 — las otras dos se reparten todo.
+// ninguna zona). AUDITADO (oct 2026): con los umbrales anteriores (5 de 7,
+// 6 de 7, ausente 9) algún mercado estaba "caliente" en el 69% de los giros y
+// el azar puro lo prendía igual de seguido: la alerta no decía nada. Ahora:
+//   · 1 zona caliente  — Docena/columna: una zona con ≥6 de los últimos 7
+//                        (por azar solo ~1.8% del tiempo; antes 12%).
+//                        Color, rango y paridad (apuestas de 2 opciones): una
+//                        opción con 7 de los últimos 7 (~1.3%; antes 10.8%).
+//   · 2 zonas calientes — últimos 9 giros. Docena/columna: la tercera zona
+//                        NO salió en esos 9 — las otras dos se reparten todo
+//                        (~8.8% por azar, igual que antes).
+// Ventana 7 en todo lo que se puede (la 7 nunca perdió contra la 14 en las 56
+// sesiones: rachas largas, sesión por sesión, sin diferencia). Solo las 2 zonas
+// usan 9 porque con 7 se prenderían ~19% del tiempo por azar.
 //
 // CÓMO TERMINA (detección de punto de cambio, versión CUSUM — pedido de
 // Gunner: "saber cuándo termina el sesgo"): desde que nace el calor se sigue
@@ -29,7 +34,9 @@
 // con P_base = lo normal de esa zona y P_caliente = lo que debería seguir
 // acertando si el calor fuera real. Un fallo suelto no lo termina; dos fallos
 // juntos (o fallos que superan a los aciertos) sí. Se muestra ENFRIANDO cuando
-// el puntaje ya va por la mitad.
+// el puntaje ya va por la mitad. Si termina antes de CALOR_MIN_CONFIRMA (4)
+// giros desde que nació, no se llama TERMINÓ sino "se cortó (no cuenta)":
+// un calor de 1 o 2 giros no es calor.
 //
 // Es PURO y de SOLO LECTURA. Lleva su estado giro a giro con avanzarCalor() y
 // se lee con leerCalor() / resumenVolvio(); detectarCalor(giros) reproduce
@@ -37,13 +44,17 @@
 
 export const CALOR_VENTANA = 7;
 export const CALOR_VENTANA_DOS = 9;
+/** Un calor que termina antes de este número de giros (contados desde que nació)
+ *  NO se considera calor: se muestra como "se cortó" y no cuenta. Pedido de
+ *  Gunner: "no puede haber calor con uno o dos giros, por lo menos cuatro". */
+export const CALOR_MIN_CONFIRMA = 4;
 /** Umbral del puntaje de fin. Más alto = tarda más en declarar que terminó. */
 export const CALOR_FIN_H = 1.0;
 /** Cuántos giros se sigue mostrando "terminó" después de que terminó. */
 export const CALOR_TERMINO_VISIBLE = 3;
 
 export type MercadoCalor = 'DOCENAS' | 'COLUMNAS' | 'COLOR' | 'RANGO' | 'PARIDAD';
-export type EstadoCalor = 'CALIENTE' | 'ENFRIANDO' | 'TERMINO' | 'NORMAL' | 'JUNTANDO';
+export type EstadoCalor = 'CALIENTE' | 'ENFRIANDO' | 'TERMINO' | 'CORTO' | 'NORMAL' | 'JUNTANDO';
 
 export interface LecturaCalor {
   mercado: MercadoCalor;
@@ -95,7 +106,8 @@ interface Mercado {
   zonaDe: (n: number) => number | null;   // índice de zona, null si es 0
   nombres: string[];                       // texto por zona
   k: number;                               // cantidad de zonas
-  minUna: number;                          // mínimo de una zona para "1 zona caliente"
+  ventUna: number;                         // ventana (últimos N giros) para "1 zona caliente"
+  minUna: number;                          // mínimo de una zona dentro de esa ventana
   permiteDos: boolean;                     // ¿tiene sentido "2 zonas calientes"?
   pBase1: number; pCal1: number;           // 1 zona: lo normal / lo que seguiría acertando si el calor es real
   pBase2: number; pCal2: number;           // 2 zonas
@@ -106,35 +118,35 @@ const MERCADOS: Mercado[] = [
     nombre: 'DOCENAS',
     zonaDe: (n) => (n === 0 ? null : Math.floor((n - 1) / 12)),
     nombres: ['1-12', '13-24', '25-36'],
-    k: 3, minUna: 5, permiteDos: true,
+    k: 3, ventUna: 7, minUna: 6, permiteDos: true,
     pBase1: 12 / 37, pCal1: 0.55, pBase2: 24 / 37, pCal2: 0.85,
   },
   {
     nombre: 'COLUMNAS',
     zonaDe: (n) => (n === 0 ? null : (n - 1) % 3),
     nombres: ['Columna 1', 'Columna 2', 'Columna 3'],
-    k: 3, minUna: 5, permiteDos: true,
+    k: 3, ventUna: 7, minUna: 6, permiteDos: true,
     pBase1: 12 / 37, pCal1: 0.55, pBase2: 24 / 37, pCal2: 0.85,
   },
   {
     nombre: 'COLOR',
     zonaDe: (n) => (n === 0 ? null : ROJOS.has(n) ? 0 : 1),
     nombres: ['ROJO', 'NEGRO'],
-    k: 2, minUna: 6, permiteDos: false,
+    k: 2, ventUna: 7, minUna: 7, permiteDos: false,
     pBase1: 18 / 37, pCal1: 0.7, pBase2: 18 / 37, pCal2: 0.7,
   },
   {
     nombre: 'RANGO',
     zonaDe: (n) => (n === 0 ? null : n <= 18 ? 0 : 1),
     nombres: ['BAJO 1-18', 'ALTO 19-36'],
-    k: 2, minUna: 6, permiteDos: false,
+    k: 2, ventUna: 7, minUna: 7, permiteDos: false,
     pBase1: 18 / 37, pCal1: 0.7, pBase2: 18 / 37, pCal2: 0.7,
   },
   {
     nombre: 'PARIDAD',
     zonaDe: (n) => (n === 0 ? null : n % 2 === 1 ? 0 : 1),
     nombres: ['IMPAR', 'PAR'],
-    k: 2, minUna: 6, permiteDos: false,
+    k: 2, ventUna: 7, minUna: 7, permiteDos: false,
     pBase1: 18 / 37, pCal1: 0.7, pBase2: 18 / 37, pCal2: 0.7,
   },
 ];
@@ -150,14 +162,14 @@ function zonasCalientes(m: Mercado, giros: number[]): { zonas: number[]; vent: n
     }
     return cnt;
   };
-  // 1 zona caliente — ventana de 7
-  if (giros.length >= CALOR_VENTANA) {
-    const cnt = contar(giros.slice(-CALOR_VENTANA));
+  // 1 zona caliente — ventana propia de cada mercado (7 docena/columna, 9 el resto)
+  if (giros.length >= m.ventUna) {
+    const cnt = contar(giros.slice(-m.ventUna));
     const top = Math.max(...cnt);
     const tops = cnt.map((c, i) => (c === top ? i : -1)).filter((i) => i >= 0);
-    if (top >= m.minUna && tops.length === 1) return { zonas: [tops[0]], vent: CALOR_VENTANA, en: top };
+    if (top >= m.minUna && tops.length === 1) return { zonas: [tops[0]], vent: m.ventUna, en: top };
   }
-  // 2 zonas calientes — ventana de 9: la tercera zona no salió
+  // 2 zonas calientes — ventana de 10: la tercera zona no salió
   if (m.permiteDos && m.k === 3 && giros.length >= CALOR_VENTANA_DOS) {
     const ventana = giros.slice(-CALOR_VENTANA_DOS);
     const cnt = contar(ventana);
@@ -244,6 +256,17 @@ export function leerCalor(estado: CalorEstado): LecturaCalor[] {
       };
     }
     if (e.fin && e.total - e.fin.t < CALOR_TERMINO_VISIBLE) {
+      // Terminó antes de los 4 giros: no llegó a ser calor. Se avisa aparte
+      // ("se cortó") para que no se confunda con un calor que sí duró.
+      if (e.fin.dur < CALOR_MIN_CONFIRMA) {
+        return {
+          mercado: m.nombre,
+          estado: 'CORTO',
+          zonas: e.fin.zonas.map((z) => m.nombres[z]),
+          detalle: `se cortó a los ${e.fin.dur} · no cuenta`,
+          duracion: e.fin.dur, aciertos: e.fin.hits, haceGiros: e.total - e.fin.t,
+        };
+      }
       return {
         mercado: m.nombre,
         estado: 'TERMINO',
