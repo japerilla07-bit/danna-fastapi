@@ -353,9 +353,9 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
           capa1Rachas[Math.min(st.capa1Score.streak, 9)] += 1;
         }
       }
-      // Escudo 1 solo: puede cubrir doc y/o col a la vez — mismo criterio
-      // "un giro = un evento, acierto si ganó al menos un lado" que ya usa
-      // el marcador real de arriba para COBERTURA DOBLE.
+      // Escudo 1 solo: un giro = un evento. En COBERTURA DOBLE ya llega aquí
+      // SOLO el lado `principal` (ver pending, abajo), así que escudoHitDoc o
+      // escudoHitCol es null y el acierto es el de ese único mercado.
       const escudoHitDoc: boolean | null = pend.escudoPickDoc ? resolvePick(pend.escudoPickDoc, spin) : null;
       const escudoHitCol: boolean | null = pend.escudoPickCol ? resolvePick(pend.escudoPickCol, spin) : null;
       const escudoHit: boolean | null =
@@ -439,12 +439,22 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       copPickDocOverride: suprimirDoc ? null : (liveDecision.pickDoc ?? null),
       copPickColOverride: suprimirCol ? null : (liveDecision.pickCol ?? null),
       // SEPARACIÓN CAPA1/ESCUDO1: lo que CADA capa sugiere por su cuenta,
-      // leído de los campos nuevos que ya trae liveDecision (ver copilot.ts)
-      // — sin el "principal" ni las supresiones de arriba, que son solo
-      // para el marcador REAL combinado.
+      // leído de los campos nuevos que ya trae liveDecision (ver copilot.ts).
+      //
+      // FIX (oct 2026) — auditado con 56 sesiones: el marcador del Escudo
+      // contaba la COBERTURA_DOBLE como acierto si ganaba CUALQUIERA de los
+      // dos lados (docenas O columnas), o sea 4 zonas a la vez. Gunner juega
+      // UN solo mercado por giro (el de la ▲ PRIORIDAD), así que ese marcador
+      // no mostraba errores que él sí vivía: en cobertura doble, el 60% de los
+      // errores de las Unidas (1.898 de 3.140) salían como acierto del Escudo.
+      // Ahora, en COBERTURA_DOBLE, el Escudo puntúa SOLO el mercado `principal`
+      // — la misma condición suprimirDoc/suprimirCol del marcador real de
+      // arriba. En COBERTURA_DOC / COBERTURA_COL (un solo mercado) no cambia
+      // nada. Las zonas que se muestran en pantalla salen de liveDecision.escudo
+      // y tampoco cambian: esto solo decide qué lado se puntúa.
       capa1Sug: liveDecision.capa1Decision.mercado,
-      escudoPickDoc: liveDecision.escudo.doc ? liveDecision.escudo.doc.zonas.join(' / ') : null,
-      escudoPickCol: liveDecision.escudo.col ? liveDecision.escudo.col.zonas.join(' / ') : null,
+      escudoPickDoc: liveDecision.escudo.doc && !suprimirDoc ? liveDecision.escudo.doc.zonas.join(' / ') : null,
+      escudoPickCol: liveDecision.escudo.col && !suprimirCol ? liveDecision.escudo.col.zonas.join(' / ') : null,
     };
 
     set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, capa1Score, escudoScore, liveDecision });
