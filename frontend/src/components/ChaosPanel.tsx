@@ -73,7 +73,12 @@ function Row({ k, labels, counts }: { k: string; labels: string[]; counts?: numb
       <div className="cx-row-v">
         {labels.map((lb, i) => {
           const v = c[i] ?? 0;
-          const isTop = v === max && v > 0;
+          // AUDITADO (oct 2026): resaltar siempre la celda mayor no decía nada —
+          // con 14 giros la mayor docena llega a 6 o más el 89% de las veces por
+          // puro azar. Ahora solo se resalta si es calor de verdad: docena/columna
+          // con ≥8 de 14 (~15% por azar de que alguna lo logre) y color/paridad/
+          // rango con ≥10 de 14 (~15%).
+          const isTop = v === max && v >= (labels.length === 3 ? 8 : 10);
           
           // Asignación de colores especiales a las etiquetas
           let colorCls = '';
@@ -119,7 +124,12 @@ function Axis({ k, pct }: { k: string; pct: number }) {
 
 export function ChaosPanel({ chaosIndex }: Props) {
   const ci = chaosIndex ?? {};
-  const estado = String(ci.estado ?? 'CALIBRANDO').toUpperCase();
+  let estado = String(ci.estado ?? 'CALIBRANDO').toUpperCase();
+  // AUDITADO (oct 2026): el backend declara ORDEN con score ≥85, y como el score
+  // es el MAYOR de dos percentiles, ORDEN salía en 1 de cada 4 giros aun con una
+  // mesa justa (26.6% simulado). Con ≥95 sale ~10% por azar, que sí es "inusual".
+  // Solo cambia lo que se muestra aquí; el backend y el motor no se tocan.
+  if (estado === 'ORDEN' && Number(ci.score ?? 0) < 95) estado = 'MIXTO';
   const cls = ESTADO_CLS[estado] ?? 'cal';
   const n = Number(ci.n ?? 0);
 
