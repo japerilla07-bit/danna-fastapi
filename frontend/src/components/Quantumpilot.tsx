@@ -353,13 +353,6 @@ function ParticleCanvas({ active }: { active: boolean }) {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-const fmtPctClass = (pct: number): string => {
-  if (pct >= 70) return 'text-green-400';
-  if (pct >= 50) return 'text-yellow-400';
-  if (pct >= 30) return 'text-orange-400';
-  return 'text-red-400';
-};
-
 // Banda de sección: rótulo + línea fina debajo, reutilizada en todo el
 // cockpit para que cada bloque diga de dónde sale el número (evita el
 // "¿cuál marcador miro?") y marque el corte con la sección siguiente sin
@@ -479,7 +472,6 @@ export function QuantumPilot({
   const verdict = godBet.last_verdict;
   const pickBet = verdict?.pick_bet ?? null;
   const isGo = verdict?.verdict === 'GO';
-  const ccsPct = verdict?.ccs_pct ?? 0;
   const hudState = (godBet.cond_state || '').toUpperCase() || 'CALIBRANDO';
   const activeBets = godBet.active_bets || [];
 
@@ -756,30 +748,9 @@ export function QuantumPilot({
           </div>
         </div>
 
-        {/* ═══ Mesa CCS bar — micropanel propio, el gauge en sí se mantiene
-             como estaba (es un medidor real, no una card). ═══ */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', ...microPanel('#22d3ee', 0.08) }}>
-          <span className="text-[11.5px] text-gray-400" style={{ letterSpacing: '0.2em' }}>MESA</span>
-          <div
-            className="flex-1 h-2 rounded-full overflow-hidden"
-            style={{ background: 'rgba(15, 23, 42, 0.8)' }}
-          >
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${Math.min(100, ccsPct)}%`,
-                background:
-                  ccsPct >= 69
-                    ? 'linear-gradient(90deg, #22d3ee 0%, #4ade80 100%)'
-                    : ccsPct >= 50
-                    ? 'linear-gradient(90deg, #a8b7cc 0%, #f4f8ff 100%)'
-                    : 'linear-gradient(90deg, #475569 0%, #64748b 100%)',
-                boxShadow: ccsPct >= 50 ? '0 0 8px rgba(34,211,238,0.5)' : 'none',
-              }}
-            />
-          </div>
-          <span className={`text-[14px] font-bold ${fmtPctClass(ccsPct)}`}>{ccsPct}/100</span>
-        </div>
+        {/* oct 2026 — barra "MESA" (CCS 0/100) retirada a pedido de Gunner:
+             no le servía. Con ella se fue también fmtPctClass/ccsPct, que
+             solo existían para pintarla. */}
 
         {/* ═══════════════════════════════════════════════════════════════
              v7 (oct 2026) — REDISEÑO COCKPIT COMPLETO. Gunner: "olvida lo
