@@ -47,7 +47,7 @@ import {
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
   useCellReg, useCellRec, useResetTelemetry,
   useTermoHits, useTermoTotal, useTermoStreak, useLiveDecision, type CellRec,
-  useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak, useCopRachas, useCapa1Rachas, useEscudoRachas, useCalor, useTelemetryStore,
+  useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak, useCopRachas, useCapa1Rachas, useEscudoRachas, useCopRachasUlt, useCapa1RachasUlt, useEscudoRachasUlt, useCalor, useTelemetryStore,
   // SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) — ver nota en CopilotOrder abajo.
   useLiveCapa1, useLiveEscudo,
   useCapa1Hits, useCapa1Misses, useCapa1Wr, useCapa1LiveStreak, useCapa1Streak,
@@ -541,59 +541,86 @@ const ERR_NORMAL = { real: 0.3489, capa1: 0.3348, escudo: 0.349 };
 /** FRECUENCIA DE RACHAS EN VIVO (oct 2026) — pedido de Gunner: "que me diga
  *  el copiloto, el motor, el escudo viene cometiendo un error cada X giros,
  *  dos errores cada tanto". Para UN marcador (real, Capa 1 o Escudo 1) muestra,
- *  por cada largo de racha que ya pasó (1 error, 2 seguidos, 3...), CADA CUÁNTOS
- *  GIROS se repite: giros puntuados de ese marcador ÷ veces que pasó esa racha.
- *  Solo lectura — no cambia ninguna decisión ni el freno. */
-function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; scored: number; titulo: string; q: number }) {
-  const items = rachas
-    .map((c, len) => ({ len, c }))
-    .filter((x) => x.len > 0 && x.c > 0);
+ *  por cada largo de racha (1 error, 2 seguidos, 3 … 10), CADA CUÁNTOS GIROS se
+ *  repite: giros puntuados de ese marcador ÷ veces que pasó esa racha.
+ *  Solo lectura — no cambia ninguna decisión ni el freno.
+ *
+ *  FIX (oct 2026) — Gunner: "llegué a racha de 4 y no sale nada". La tabla solo
+ *  contaba rachas CERRADAS (una racha se cierra cuando llega un acierto), así
+ *  que una racha de 4 en curso no aparecía hasta terminar — justo la que más
+ *  importa. Ahora la racha en curso cuenta desde el momento en que ocurre (fila
+ *  marcada "ahora") y, si crece, pasa a la fila siguiente. Filas 1 a 4 siempre
+ *  visibles (4 es el tope que Gunner quiere no pasar); 5 a 10 aparecen cuando
+ *  ya pasaron o están pasando (10 = "10 o más").
+ *
+ *  "voy" = en qué giro va: cuántos giros puntuados de este marcador pasaron
+ *  desde la última vez que ocurrió esa racha (o desde que empezó la sesión, si
+ *  hoy no ha pasado). Informa; no predice — las rachas son independientes. */
+function RachasFrecuencia({ rachas, ult, live, scored, titulo, q }: {
+  rachas: number[]; ult: number[]; live: number; scored: number; titulo: string; q: number;
+}) {
+  const MAX_LEN = 10;
+  const liveLen = Math.min(live, MAX_LEN);
+  const filas: { len: number; c: number; enCurso: boolean }[] = [];
+  for (let len = 1; len <= MAX_LEN; len++) {
+    const enCurso = live > 0 && liveLen === len;
+    const c = (rachas[len] ?? 0) + (enCurso ? 1 : 0);   // cerradas + la que está en curso
+    if (len > 4 && c === 0) continue;
+    filas.push({ len, c, enCurso });
+  }
   // FIX (oct 2026) — Gunner: "los errores seguidos están cortados en la tercera
-  // columna". Cada racha era UN texto largo con nowrap ("3 seguidos · cada 62
-  // (normal 61) ▲", ~34 caracteres) en una columna de ~200px útiles: el
-  // contenedor del marcador recorta lo que se pasa, y se perdía el "normal" y
-  // la flecha. Ahora son TABLA de 4 columnas fijas (racha · cada · normal ·
-  // flecha) con encabezado, que entra en ~190px y se lee igual de ancho en la
-  // columna central. Mismos números, mismos colores, misma regla de ▲/▼.
+  // columna". Cada racha era UN texto largo con nowrap en una columna de ~200px
+  // útiles y el contenedor recortaba el "normal" y la flecha. Ahora es TABLA de
+  // columnas fijas (racha · cada · normal · voy), con encabezado.
+  const H: React.CSSProperties = { fontSize: 9.5, color: '#7d8aa0', textAlign: 'right' };
   return (
     <div style={{ marginTop: 5 }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#b4c0da', letterSpacing: '0.1em', fontWeight: 800 }}>
         {titulo}
       </span>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 40px 52px 12px', columnGap: 6, rowGap: 2, maxWidth: 290, marginTop: 3, fontFamily: FONT_MONO, fontSize: 12 }}>
-        {items.length === 0 ? (
-          <span style={{ gridColumn: '1 / -1', color: '#7d8aa0' }}>— sin rachas todavía</span>
-        ) : (
-          <>
-            <span style={{ fontSize: 10, color: '#7d8aa0' }}>racha</span>
-            <span style={{ fontSize: 10, color: '#7d8aa0', textAlign: 'right' }} title="cada cuántos giros pasa hoy">cada</span>
-            <span style={{ fontSize: 10, color: '#7d8aa0', textAlign: 'right' }} title="cada cuántos giros pasa en promedio en todas las sesiones guardadas">normal</span>
-            <span />
-          </>
-        )}
-        {items.length > 0 && items.map(({ len, c }) => {
-          const cada = Math.max(1, Math.round(scored / c));
-          // "Normal" = cada cuántos giros pasa esa racha en tus 56 sesiones guardadas
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 38px 38px 36px', columnGap: 5, rowGap: 1, maxWidth: 290, marginTop: 3, fontFamily: FONT_MONO, fontSize: 11.5 }}>
+        <span style={{ fontSize: 9.5, color: '#7d8aa0' }}>racha</span>
+        <span style={H} title="cada cuántos giros pasa hoy">cada</span>
+        <span style={H} title="cada cuántos giros pasa en promedio en todas las sesiones guardadas">normal</span>
+        <span style={H} title="giros que lleva desde la última vez que pasó (o desde que empezó la sesión si hoy no ha pasado)">voy</span>
+        {filas.map(({ len, c, enCurso }) => {
+          const cada = c > 0 ? Math.max(1, Math.round(scored / c)) : null;
+          // "Normal" = cada cuántos giros pasa esa racha en las sesiones guardadas
           // (a partir del % de error de esta capa: ERR_NORMAL). Solo se marca
           // más seguido / más espaciado con ≥80 giros puntuados y ≥2 veces (antes es ruido).
-          const normal = len >= 9 ? null : Math.round(1 / (Math.pow(1 - q, 2) * Math.pow(q, len)));
+          const normal = len >= MAX_LEN ? null : Math.round(1 / (Math.pow(1 - q, 2) * Math.pow(q, len)));
           const confiable = scored >= 80 && c >= 2;
-          const masSeguido = normal !== null && confiable && cada < normal * 0.7;
-          const masEspaciado = normal !== null && confiable && cada > normal * 1.5;
-          const color = len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#b4c0d4';
+          const masSeguido = cada !== null && normal !== null && confiable && cada < normal * 0.7;
+          const masEspaciado = cada !== null && normal !== null && confiable && cada > normal * 1.5;
+          const sinDatos = c === 0;
+          const color = sinDatos ? '#6b778c' : len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#b4c0d4';
           const colorCada = masSeguido ? '#ff9f1a' : masEspaciado ? '#00ff9d' : (len >= 4 ? '#ff1e38' : '#ffffff');
+          // voy: giros desde la última vez (o desde el inicio si no ha pasado hoy)
+          const voy = enCurso ? 0 : c > 0 ? Math.max(0, scored - (ult[len] ?? 0)) : scored;
+          const ref = cada ?? normal;
+          const voyColor = enCurso ? '#ff1e38' : ref !== null && voy >= ref ? '#ffdf60' : '#cbd5e1';
           return (
             <Fragment key={len}>
               <span style={{ color, whiteSpace: 'nowrap' }}>
-                {len === 9 ? '9+ seguidos' : len === 1 ? '1 error' : `${len} seguidos`}
+                {len === 1 ? '1 error' : len >= MAX_LEN ? '10+ seg.' : `${len} seguidos`}
               </span>
-              <b style={{ color: colorCada, textAlign: 'right' }}>{cada}</b>
+              <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                {cada !== null ? <b style={{ color: colorCada }}>{cada}</b> : <span style={{ color: '#6b778c' }}>—</span>}
+                {(masSeguido || masEspaciado) && (
+                  <span
+                    style={{ color: masSeguido ? '#ff9f1a' : '#00ff9d' }}
+                    title={masSeguido ? 'pasa más seguido de lo normal' : 'pasa más espaciado de lo normal'}
+                  >
+                    {masSeguido ? '▲' : '▼'}
+                  </span>
+                )}
+              </span>
               <span style={{ opacity: 0.75, textAlign: 'right' }}>{normal !== null ? normal : '—'}</span>
               <span
-                style={{ color: masSeguido ? '#ff9f1a' : '#00ff9d' }}
-                title={masSeguido ? 'pasa más seguido de lo normal' : masEspaciado ? 'pasa más espaciado de lo normal' : undefined}
+                style={{ textAlign: 'right', color: voyColor, fontWeight: enCurso ? 800 : 400, whiteSpace: 'nowrap' }}
+                title={enCurso ? 'racha en curso: todavía no cerró' : sinDatos ? 'giros desde que empezó la sesión sin que pase' : 'giros desde la última vez que pasó'}
               >
-                {masSeguido ? '▲' : masEspaciado ? '▼' : ''}
+                {enCurso ? 'ahora' : voy}
               </span>
             </Fragment>
           );
@@ -725,6 +752,7 @@ export function CopilotOrder({
   const escudoHits = useEscudoHits(), escudoMisses = useEscudoMisses(), escudoWr = useEscudoWr();
   const escudoLive = useEscudoLiveStreak(), escudoPeor = useEscudoStreak();
   const capa1Rachas = useCapa1Rachas(), escudoRachas = useEscudoRachas();
+  const capa1Ult = useCapa1RachasUlt(), escudoUlt = useEscudoRachasUlt();
 
   // v7: "precaución" pasa de ámbar a blanco neón — Gunner: "preferiría
   // meter un blanco neón en vez de un naranja". ok/peligro quedan iguales.
@@ -833,7 +861,7 @@ export function CopilotOrder({
               {capa1.motivo}
             </div>
             {miniStats(capa1Hits, capa1Misses, capa1Wr, capa1Live, capa1Peor)}
-            <RachasFrecuencia rachas={capa1Rachas} scored={capa1Hits + capa1Misses} titulo="ERRORES SEGUIDOS · CAPA 1" q={ERR_NORMAL.capa1} />
+            <RachasFrecuencia rachas={capa1Rachas} ult={capa1Ult} live={capa1Live} scored={capa1Hits + capa1Misses} titulo="ERRORES SEGUIDOS · CAPA 1" q={ERR_NORMAL.capa1} />
           </motion.div>
         </AnimatePresence>
 
@@ -857,7 +885,7 @@ export function CopilotOrder({
             {/* oct 2026 — se quitó el texto "Distribución marcada en …" (d.motivo)
                 de este bloque: Gunner, "no es útil". */}
             {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
-            <RachasFrecuencia rachas={escudoRachas} scored={escudoHits + escudoMisses} titulo="ERRORES SEGUIDOS · ESCUDO" q={ERR_NORMAL.escudo} />
+            <RachasFrecuencia rachas={escudoRachas} ult={escudoUlt} live={escudoLive} scored={escudoHits + escudoMisses} titulo="ERRORES SEGUIDOS · ESCUDO" q={ERR_NORMAL.escudo} />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -919,7 +947,8 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   const copWr = useCopWr();
   const copLive = useCopLiveStreak();
   const copStreak = useCopStreak(); // peor racha de la sesión (maxStreak)
-  const copRachas = useCopRachas(); // frecuencia de rachas cerradas hoy (idx = largo, 9 = 9+)
+  const copRachas = useCopRachas(); // frecuencia de rachas cerradas hoy (idx = largo, 10 = 10+)
+  const copUlt = useCopRachasUlt(); // giro en que pasó por última vez cada largo
 
   // v7 (oct 2026): glow reservado para lo crítico/accionable (ACIERTOS,
   // ERRORES, RACHA AHORA — lo que está pasando ahora mismo), apagado en lo
@@ -954,7 +983,7 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
       {/* FRECUENCIA DE RACHAS del marcador REAL (lo que D.A.N.N.A. de verdad
           jugó) — mismo formato que en CAPA 1 y ESCUDO 1, ver RachasFrecuencia. */}
       <div style={{ gridColumn: '1 / -1', padding: '2px 6px 0' }}>
-        <RachasFrecuencia rachas={copRachas} scored={copHits + copMisses} titulo="ERRORES SEGUIDOS · D.A.N.N.A." q={ERR_NORMAL.real} />
+        <RachasFrecuencia rachas={copRachas} ult={copUlt} live={copLive} scored={copHits + copMisses} titulo="ERRORES SEGUIDOS · D.A.N.N.A." q={ERR_NORMAL.real} />
       </div>
       <div style={{ gridColumn: '1 / -1', padding: '2px 6px 0' }}>
         <CalorReciente />
