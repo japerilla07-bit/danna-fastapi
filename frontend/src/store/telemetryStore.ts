@@ -130,7 +130,7 @@ interface TelemetryState {
   // el copiloto / el motor / el escudo viene cometiendo un error cada X giros,
   // dos errores seguidos cada tanto". Por cada marcador (real = copScore,
   // Capa 1 sola, Escudo 1 solo) se guardan las rachas de errores YA CERRADAS:
-  // índice = largo de la racha (1..8), el 9 junta 9 o más; el 0 no se usa.
+  // índice = largo de la racha (1..9), el 10 junta 10 o más; el 0 no se usa.
   // "Cada X giros" = giros puntuados de ese marcador ÷ veces que pasó esa
   // racha. Solo lectura: no alimenta ninguna decisión.
   // CALOR RECIENTE (domain/calor.ts): estado del detector de calor/fin de
@@ -140,6 +140,14 @@ interface TelemetryState {
   copRachas: number[];
   capa1Rachas: number[];
   escudoRachas: number[];
+  // "EN QUÉ GIRO VOY" (oct 2026) — pedido de Gunner: si dice "2 seguidos cada
+  // 19 giros", saber cuántos giros lleva desde la última vez. Misma forma que
+  // los de arriba (índice = largo de la racha, 10 = "10 o más"), pero guarda
+  // el N° de giro PUNTUADO de ese marcador en que ocurrió la última racha de
+  // ese largo (su último error). 0 = nunca hoy. Solo lectura.
+  copRachasUlt: number[];
+  capa1RachasUlt: number[];
+  escudoRachasUlt: number[];
   // ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) ──────────────────────────────
   // Pedido de Gunner: ver la efectividad de la Capa 1 sola y de Escudo 1
   // (COBERTURA) solo, cada uno contra lo que DE VERDAD habría apostado,
@@ -255,9 +263,12 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   cellReg: { doc: {}, col: {} },
   copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   calor: calorInicial(),
-  copRachas: new Array(10).fill(0),
-  capa1Rachas: new Array(10).fill(0),
-  escudoRachas: new Array(10).fill(0),
+  copRachas: new Array(11).fill(0),
+  capa1Rachas: new Array(11).fill(0),
+  escudoRachas: new Array(11).fill(0),
+  copRachasUlt: new Array(11).fill(0),
+  capa1RachasUlt: new Array(11).fill(0),
+  escudoRachasUlt: new Array(11).fill(0),
   capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   liveDecision: decisionInicial(),
@@ -276,6 +287,9 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       ? avanzarCalor(st.calor, Number(p.spin))
       : st.calor;
     let escudoRachas = st.escudoRachas;
+    let copRachasUlt = st.copRachasUlt;
+    let capa1RachasUlt = st.capa1RachasUlt;
+    let escudoRachasUlt = st.escudoRachasUlt;
     let capa1Score = st.capa1Score;
     let escudoScore = st.escudoScore;
     let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
@@ -332,7 +346,10 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         // su largo (la racha que venía viva en st.copScore, antes de este giro).
         if (copHit && st.copScore.streak > 0) {
           copRachas = [...copRachas];
-          copRachas[Math.min(st.copScore.streak, 9)] += 1;
+          copRachas[Math.min(st.copScore.streak, 10)] += 1;
+          // la racha terminó en el giro anterior (su último error): ese es el giro anotado
+          copRachasUlt = [...copRachasUlt];
+          copRachasUlt[Math.min(st.copScore.streak, 10)] = cs.hits + cs.misses - 1;
         }
       }
 
@@ -350,7 +367,9 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         capa1Score = cs;
         if (capa1Hit && st.capa1Score.streak > 0) {
           capa1Rachas = [...capa1Rachas];
-          capa1Rachas[Math.min(st.capa1Score.streak, 9)] += 1;
+          capa1Rachas[Math.min(st.capa1Score.streak, 10)] += 1;
+          capa1RachasUlt = [...capa1RachasUlt];
+          capa1RachasUlt[Math.min(st.capa1Score.streak, 10)] = cs.hits + cs.misses - 1;
         }
       }
       // Escudo 1 solo: un giro = un evento. En COBERTURA DOBLE ya llega aquí
@@ -367,7 +386,9 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         escudoScore = cs;
         if (escudoHit && st.escudoScore.streak > 0) {
           escudoRachas = [...escudoRachas];
-          escudoRachas[Math.min(st.escudoScore.streak, 9)] += 1;
+          escudoRachas[Math.min(st.escudoScore.streak, 10)] += 1;
+          escudoRachasUlt = [...escudoRachasUlt];
+          escudoRachasUlt[Math.min(st.escudoScore.streak, 10)] = cs.hits + cs.misses - 1;
         }
       }
 
@@ -457,7 +478,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       escudoPickCol: liveDecision.escudo.col && !suprimirCol ? liveDecision.escudo.col.zonas.join(' / ') : null,
     };
 
-    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, capa1Score, escudoScore, liveDecision });
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, liveDecision });
   },
 
   reset: () => {
@@ -469,9 +490,12 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       cellReg: { doc: {}, col: {} },
       copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       calor: calorInicial(),
-      copRachas: new Array(10).fill(0),
-      capa1Rachas: new Array(10).fill(0),
-      escudoRachas: new Array(10).fill(0),
+      copRachas: new Array(11).fill(0),
+      capa1Rachas: new Array(11).fill(0),
+      escudoRachas: new Array(11).fill(0),
+      copRachasUlt: new Array(11).fill(0),
+      capa1RachasUlt: new Array(11).fill(0),
+      escudoRachasUlt: new Array(11).fill(0),
       capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       liveDecision: decisionInicial(),
@@ -545,6 +569,10 @@ export const useCopRachas = (): number[] => useTelemetryStore((s) => s.copRachas
 export const useCalor = (): CalorEstado => useTelemetryStore((s) => s.calor);
 export const useCapa1Rachas = (): number[] => useTelemetryStore((s) => s.capa1Rachas);
 export const useEscudoRachas = (): number[] => useTelemetryStore((s) => s.escudoRachas);
+// Giro puntuado (de ese marcador) en que pasó por última vez cada largo de racha.
+export const useCopRachasUlt = (): number[] => useTelemetryStore((s) => s.copRachasUlt);
+export const useCapa1RachasUlt = (): number[] => useTelemetryStore((s) => s.capa1RachasUlt);
+export const useEscudoRachasUlt = (): number[] => useTelemetryStore((s) => s.escudoRachasUlt);
 export const useCopWr = (): number | null => useTelemetryStore((s) => {
   const t = s.copScore.hits + s.copScore.misses;
   return t > 0 ? (s.copScore.hits / t) * 100 : null;
