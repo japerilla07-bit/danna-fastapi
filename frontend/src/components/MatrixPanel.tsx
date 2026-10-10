@@ -40,7 +40,7 @@
 // Lectura pura del store + la matriz. No decide ni bloquea al motor.
 // ════════════════════════════════════════════════════════════════════════
 
-import { memo } from 'react';
+import { memo, Fragment } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   useLastHud, useLastEnt,
@@ -417,6 +417,28 @@ function MarketEfficiencyCellImpl({ mkt, bare = false }: { mkt: Market; bare?: b
         )}
       </div>
 
+      {/* FIX (oct 2026) — Gunner: "las celdas no están mostrando las rachas
+          actual de aciertos y errores de la celda al día de hoy". Esta versión
+          compacta (la de la columna ZONA) solo traía lo del MERCADO entero y lo
+          HISTÓRICO de la casilla; lo de HOY en la casilla puntual (aciertos,
+          errores, racha ahora y peor racha de esta HUD×ENT en la sesión) solo
+          existía en la versión completa (MarketColumn). Mismo dato (`live`,
+          que ya se leía arriba para el estado de zona) y mismo formato. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#8092b5', letterSpacing: '0.12em', fontWeight: 700 }}>
+          HOY EN ESTA CASILLA
+        </span>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 13, color: '#8392a8' }}>
+          <span style={{ color: '#00ff9d' }}>✓{live?.hits ?? 0}</span>
+          {' '}
+          <span style={{ color: '#ff1e38' }}>✗{live?.misses ?? 0}</span>
+          {'  ·  racha '}
+          <b style={{ color: (live?.streak ?? 0) >= 3 ? '#ff1e38' : (live?.streak ?? 0) >= 1 ? '#f4f8ff' : '#00ff9d' }}>{live?.streak ?? 0}</b>
+          {'  ·  peor '}
+          <b style={{ color: (live?.maxStreak ?? 0) >= 4 ? '#ff1e38' : '#f4f8ff' }}>{live?.maxStreak ?? 0}</b>
+        </div>
+      </div>
+
       <div style={{ fontFamily: FONT_HEAD, fontSize: 15, fontWeight: 600, color: st.color, marginTop: 1, lineHeight: 1.5, textShadow: `0 0 5px ${st.glow}` }}>
         {INSTRUCCION[estado]}
       </div>
@@ -500,11 +522,21 @@ function useMarketRead(mkt: Market): MarketRead {
   };
 }
 
-/** % de error NORMAL de cada marcador, medido en tus 56 sesiones guardadas
- *  (D.A.N.N.A. real: 16.646 giros · Capa 1: 12.962 · Escudo: 15.532). De acá
- *  sale el "normal" de cada "cada X giros": 1 / ((1-q)² · qᴸ) para una racha
- *  de largo L. Se afina cuando entren sesiones nuevas. */
-const ERR_NORMAL = { real: 0.3425, capa1: 0.334, escudo: 0.22 };
+/** % de error NORMAL de cada marcador, medido en TODAS las sesiones guardadas
+ *  (59 sesiones, 18.647 giros; pasadas giro a giro por este mismo store):
+ *    D.A.N.N.A. real: 34,89% de error en 18.122 giros puntuados
+ *    Capa 1:          33,48% de error en 14.079
+ *    Escudo:          34,90% de error en 16.909
+ *  De acá sale el "normal" de cada "cada X giros": 1 / ((1-q)² · qᴸ) para una
+ *  racha de largo L. AUDITADO (oct 2026): esa fórmula con estos q cae pegada a
+ *  lo que de verdad pasó en las 59 sesiones (1 error cada ~6,8 · 2 seguidos
+ *  cada ~19 · 3 cada ~55 · 4 cada ~170 giros), así que "normal" ya es dato real.
+ *  El Escudo traía 0,22 — era de cuando su marcador contaba la cobertura doble
+ *  como acierto si ganaba CUALQUIERA de los dos mercados (4 zonas). Desde que
+ *  puntúa solo el mercado de la ▲ PRIORIDAD su error real es 34,9%, y con 0,22
+ *  el "normal" salía absurdo (4 seguidos "normal 702", 7 seguidos "normal
+ *  65895"). Se afina cuando entren sesiones nuevas. */
+const ERR_NORMAL = { real: 0.3489, capa1: 0.3348, escudo: 0.349 };
 
 /** FRECUENCIA DE RACHAS EN VIVO (oct 2026) — pedido de Gunner: "que me diga
  *  el copiloto, el motor, el escudo viene cometiendo un error cada X giros,
@@ -516,15 +548,30 @@ function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; sco
   const items = rachas
     .map((c, len) => ({ len, c }))
     .filter((x) => x.len > 0 && x.c > 0);
+  // FIX (oct 2026) — Gunner: "los errores seguidos están cortados en la tercera
+  // columna". Cada racha era UN texto largo con nowrap ("3 seguidos · cada 62
+  // (normal 61) ▲", ~34 caracteres) en una columna de ~200px útiles: el
+  // contenedor del marcador recorta lo que se pasa, y se perdía el "normal" y
+  // la flecha. Ahora son TABLA de 4 columnas fijas (racha · cada · normal ·
+  // flecha) con encabezado, que entra en ~190px y se lee igual de ancho en la
+  // columna central. Mismos números, mismos colores, misma regla de ▲/▼.
   return (
     <div style={{ marginTop: 5 }}>
       <span style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: '#b4c0da', letterSpacing: '0.1em', fontWeight: 800 }}>
         {titulo}
       </span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', marginTop: 2 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 40px 52px 12px', columnGap: 6, rowGap: 2, maxWidth: 290, marginTop: 3, fontFamily: FONT_MONO, fontSize: 12 }}>
         {items.length === 0 ? (
-          <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: '#7d8aa0' }}>— sin rachas todavía</span>
-        ) : items.map(({ len, c }) => {
+          <span style={{ gridColumn: '1 / -1', color: '#7d8aa0' }}>— sin rachas todavía</span>
+        ) : (
+          <>
+            <span style={{ fontSize: 10, color: '#7d8aa0' }}>racha</span>
+            <span style={{ fontSize: 10, color: '#7d8aa0', textAlign: 'right' }} title="cada cuántos giros pasa hoy">cada</span>
+            <span style={{ fontSize: 10, color: '#7d8aa0', textAlign: 'right' }} title="cada cuántos giros pasa en promedio en todas las sesiones guardadas">normal</span>
+            <span />
+          </>
+        )}
+        {items.length > 0 && items.map(({ len, c }) => {
           const cada = Math.max(1, Math.round(scored / c));
           // "Normal" = cada cuántos giros pasa esa racha en tus 56 sesiones guardadas
           // (a partir del % de error de esta capa: ERR_NORMAL). Solo se marca
@@ -536,14 +583,19 @@ function RachasFrecuencia({ rachas, scored, titulo, q }: { rachas: number[]; sco
           const color = len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#b4c0d4';
           const colorCada = masSeguido ? '#ff9f1a' : masEspaciado ? '#00ff9d' : (len >= 4 ? '#ff1e38' : '#ffffff');
           return (
-            <span key={len} style={{ fontFamily: FONT_MONO, fontSize: 12, color, whiteSpace: 'nowrap' }}>
-              {len === 9 ? '9+ seguidos' : len === 1 ? '1 error' : `${len} seguidos`}
-              <span style={{ opacity: 0.6 }}> · cada </span>
-              <b style={{ color: colorCada }}>{cada}</b>
-              {normal !== null && <span style={{ opacity: 0.75, fontWeight: 400 }}> (normal {normal})</span>}
-              {masSeguido && <span style={{ color: '#ff9f1a' }}> ▲</span>}
-              {masEspaciado && <span style={{ color: '#00ff9d' }}> ▼</span>}
-            </span>
+            <Fragment key={len}>
+              <span style={{ color, whiteSpace: 'nowrap' }}>
+                {len === 9 ? '9+ seguidos' : len === 1 ? '1 error' : `${len} seguidos`}
+              </span>
+              <b style={{ color: colorCada, textAlign: 'right' }}>{cada}</b>
+              <span style={{ opacity: 0.75, textAlign: 'right' }}>{normal !== null ? normal : '—'}</span>
+              <span
+                style={{ color: masSeguido ? '#ff9f1a' : '#00ff9d' }}
+                title={masSeguido ? 'pasa más seguido de lo normal' : masEspaciado ? 'pasa más espaciado de lo normal' : undefined}
+              >
+                {masSeguido ? '▲' : masEspaciado ? '▼' : ''}
+              </span>
+            </Fragment>
           );
         })}
       </div>
@@ -802,11 +854,8 @@ export function CopilotOrder({
                 );
               })}
             </div>
-            {escudo.activo && d.capa !== 'CAPA1' && (
-              <div style={{ fontFamily: FONT_MONO, fontSize: FS_TXT, color: '#aab4c6', marginTop: 3, lineHeight: 1.35 }}>
-                {d.motivo}
-              </div>
-            )}
+            {/* oct 2026 — se quitó el texto "Distribución marcada en …" (d.motivo)
+                de este bloque: Gunner, "no es útil". */}
             {miniStats(escudoHits, escudoMisses, escudoWr, escudoLive, escudoPeor)}
             <RachasFrecuencia rachas={escudoRachas} scored={escudoHits + escudoMisses} titulo="ERRORES SEGUIDOS · ESCUDO" q={ERR_NORMAL.escudo} />
           </motion.div>
