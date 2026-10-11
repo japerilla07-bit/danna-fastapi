@@ -129,10 +129,12 @@ interface TelemetryState {
   // FRECUENCIA DE RACHAS EN VIVO (oct 2026) — pedido de Gunner: "que me diga
   // el copiloto / el motor / el escudo viene cometiendo un error cada X giros,
   // dos errores seguidos cada tanto". Por cada marcador (real = copScore,
-  // Capa 1 sola, Escudo 1 solo) se guardan las rachas de errores YA CERRADAS:
-  // índice = largo de la racha (1..9), el 10 junta 10 o más; el 0 no se usa.
-  // "Cada X giros" = giros puntuados de ese marcador ÷ veces que pasó esa
-  // racha. Solo lectura: no alimenta ninguna decisión.
+  // Capa 1 sola, Escudo 1 solo) se guarda cuántas veces la racha de errores
+  // LLEGÓ a N seguidos (oct 2026: "llega a N o más" — antes solo contaba las
+  // cerradas con largo exacto N e ignoraba el 57% de los errores, los que
+  // vienen dentro de rachas de 2 o más): índice = N (1..9), el 10 junta
+  // "10 o más"; el 0 no se usa. "Cada X giros" = giros puntuados de ese
+  // marcador ÷ veces que llegó a N. Solo lectura: no alimenta ninguna decisión.
   // CALOR RECIENTE (domain/calor.ts): estado del detector de calor/fin de
   // sesgo y del tanteador "¿volvió en ≤3 giros?". Solo lectura: ninguna
   // decisión lo usa.
@@ -142,9 +144,9 @@ interface TelemetryState {
   escudoRachas: number[];
   // "EN QUÉ GIRO VOY" (oct 2026) — pedido de Gunner: si dice "2 seguidos cada
   // 19 giros", saber cuántos giros lleva desde la última vez. Misma forma que
-  // los de arriba (índice = largo de la racha, 10 = "10 o más"), pero guarda
-  // el N° de giro PUNTUADO de ese marcador en que ocurrió la última racha de
-  // ese largo (su último error). 0 = nunca hoy. Solo lectura.
+  // los de arriba (índice = N, 10 = "10 o más"), pero guarda el N° de giro
+  // PUNTUADO de ese marcador en que la racha llegó a N por última vez. 0 = nunca
+  // hoy. Solo lectura.
   copRachasUlt: number[];
   capa1RachasUlt: number[];
   escudoRachasUlt: number[];
@@ -342,14 +344,15 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         if (copHit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         copScore = cs;
-        // Una racha de errores se CIERRA cuando llega un acierto: ahí se anota
-        // su largo (la racha que venía viva en st.copScore, antes de este giro).
-        if (copHit && st.copScore.streak > 0) {
+        // "LLEGA A N O MÁS" (oct 2026) — se anota en el MOMENTO en que la racha
+        // alcanza N errores seguidos (1, 2, 3 … 10), no cuando termina: así cada
+        // error cuenta y reinicia el "voy" de su fila sin importar si la racha
+        // se queda en 1 o sigue hasta 7. Más de 10 no suma otra vez.
+        if (!copHit && cs.streak <= 10) {
           copRachas = [...copRachas];
-          copRachas[Math.min(st.copScore.streak, 10)] += 1;
-          // la racha terminó en el giro anterior (su último error): ese es el giro anotado
+          copRachas[cs.streak] += 1;
           copRachasUlt = [...copRachasUlt];
-          copRachasUlt[Math.min(st.copScore.streak, 10)] = cs.hits + cs.misses - 1;
+          copRachasUlt[cs.streak] = cs.hits + cs.misses;   // N° de giro puntuado de este error
         }
       }
 
@@ -365,11 +368,15 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         if (capa1Hit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         capa1Score = cs;
-        if (capa1Hit && st.capa1Score.streak > 0) {
+        // "LLEGA A N O MÁS" (oct 2026) — se anota en el MOMENTO en que la racha
+        // alcanza N errores seguidos (1, 2, 3 … 10), no cuando termina: así cada
+        // error cuenta y reinicia el "voy" de su fila sin importar si la racha
+        // se queda en 1 o sigue hasta 7. Más de 10 no suma otra vez.
+        if (!capa1Hit && cs.streak <= 10) {
           capa1Rachas = [...capa1Rachas];
-          capa1Rachas[Math.min(st.capa1Score.streak, 10)] += 1;
+          capa1Rachas[cs.streak] += 1;
           capa1RachasUlt = [...capa1RachasUlt];
-          capa1RachasUlt[Math.min(st.capa1Score.streak, 10)] = cs.hits + cs.misses - 1;
+          capa1RachasUlt[cs.streak] = cs.hits + cs.misses;   // N° de giro puntuado de este error
         }
       }
       // Escudo 1 solo: un giro = un evento. En COBERTURA DOBLE ya llega aquí
@@ -384,11 +391,15 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         if (escudoHit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         escudoScore = cs;
-        if (escudoHit && st.escudoScore.streak > 0) {
+        // "LLEGA A N O MÁS" (oct 2026) — se anota en el MOMENTO en que la racha
+        // alcanza N errores seguidos (1, 2, 3 … 10), no cuando termina: así cada
+        // error cuenta y reinicia el "voy" de su fila sin importar si la racha
+        // se queda en 1 o sigue hasta 7. Más de 10 no suma otra vez.
+        if (!escudoHit && cs.streak <= 10) {
           escudoRachas = [...escudoRachas];
-          escudoRachas[Math.min(st.escudoScore.streak, 10)] += 1;
+          escudoRachas[cs.streak] += 1;
           escudoRachasUlt = [...escudoRachasUlt];
-          escudoRachasUlt[Math.min(st.escudoScore.streak, 10)] = cs.hits + cs.misses - 1;
+          escudoRachasUlt[cs.streak] = cs.hits + cs.misses;   // N° de giro puntuado de este error
         }
       }
 
@@ -563,7 +574,7 @@ export const useCopStreak = (): number => useTelemetryStore((s) => s.copScore.ma
 // mantiene correcto en vivo (ver ingest(), más arriba) — solo faltaba este
 // selector para leerlo.
 export const useCopLiveStreak = (): number => useTelemetryStore((s) => s.copScore.streak);
-// Rachas de errores cerradas de hoy, por marcador (índice = largo, 9 = "9 o más"):
+// Veces que la racha de errores llegó a N hoy, por marcador (índice = N, 10 = "10 o más"):
 // real (copRachas), Capa 1 sola y Escudo 1 solo.
 export const useCopRachas = (): number[] => useTelemetryStore((s) => s.copRachas);
 export const useCalor = (): CalorEstado => useTelemetryStore((s) => s.calor);
