@@ -553,10 +553,10 @@ export function QuantumPilot({
         // Cristal oscuro: aurora cian/violeta + rejilla de puntos muy tenue sobre obsidiana;
         // el desenfoque va SOLO aquí (una capa) para que no pese en cada giro.
         background:
-          'radial-gradient(620px 220px at 8% -8%, rgba(51, 208, 232, 0.13), transparent 70%), ' +
-          'radial-gradient(560px 220px at 100% 0%, rgba(165, 124, 255, 0.13), transparent 70%), ' +
-          'radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 14px 14px, ' +
-          'linear-gradient(180deg, rgba(8, 12, 20, 0.93), rgba(4, 7, 12, 0.96))',
+          'radial-gradient(620px 220px at 8% -8%, rgba(46, 232, 255, 0.22), transparent 70%), ' +
+          'radial-gradient(560px 220px at 100% 0%, rgba(194, 139, 255, 0.22), transparent 70%), ' +
+          'radial-gradient(rgba(140, 190, 255, 0.07) 1px, transparent 1px) 0 0 / 14px 14px, ' +
+          'linear-gradient(180deg, rgba(7, 11, 24, 0.985), rgba(4, 6, 14, 0.99))',
 
         color: PILOT_C.ink,
         border: `1px solid ${borde}`,

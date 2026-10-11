@@ -72,13 +72,13 @@ export const CategoryGod = memo(function CategoryGod({ payload, counters, counte
               display: 'grid', gridTemplateColumns: GRID, columnGap: 4, alignItems: 'center',
               height: 'var(--qp-tbl-row)', fontSize: 'var(--qp-fs-tbl)', lineHeight: 1, color: C.ink2, boxSizing: 'border-box',
               borderLeft: `2px solid ${activo ? c : 'transparent'}`, paddingLeft: 2,
-              background: activo ? `linear-gradient(90deg, ${rgba(c, 0.22)}, ${rgba(c, 0.04)})` : i % 2 ? 'rgba(255,255,255,0.025)' : 'transparent',
+              background: activo ? `linear-gradient(90deg, ${rgba(c, 0.34)}, ${rgba(c, 0.06)})` : i % 2 ? 'rgba(255,255,255,0.025)' : 'transparent',
               boxShadow: activo ? `inset 2px 0 8px -3px ${rgba(c, 0.8)}` : undefined,
             }}
           >
             <span style={{ fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: c, background: rgba(c, 0.14), border: `1px solid ${rgba(c, 0.45)}`, boxShadow: activo ? neon(c, 6, 0.35) : undefined, borderRadius: 2, padding: '0 3px', justifySelf: 'start', lineHeight: '11px', boxSizing: 'border-box' }}>{STATE_TXT[r.state]}</span>
             <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 0.5px)', color: activo ? C.ink : C.ink2, whiteSpace: 'nowrap' }}>{r.label}</span>
-            <span style={{ fontFamily: FONT_NUM, fontSize: 'calc(var(--qp-fs-tbl) + 2.5px)', color: activo ? C.white : C.danna, fontWeight: 600, whiteSpace: 'nowrap', textShadow: glowText(activo ? C.white : C.danna, 0.4) }}>{r.pick.replace(/,\s+/g, ',')}</span>
+            <span style={{ fontFamily: FONT_NUM, fontSize: 'calc(var(--qp-fs-tbl) + 2.5px)', color: activo ? C.white : C.danna, fontWeight: 600, whiteSpace: 'nowrap', textShadow: glowText(activo ? C.white : C.danna, 0.7) }}>{r.pick.replace(/,\s+/g, ',')}</span>
             <Group c={r.normal} />
             <span />
             <Group c={r.god} dim={!godActive} color={C.white} />

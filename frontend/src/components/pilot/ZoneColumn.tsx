@@ -53,10 +53,10 @@ const MarketCard = memo(function MarketCard({ mkt }: { mkt: Market }) {
   const cur = live?.streak ?? 0;
 
   return (
-    <div data-qp={`zona-${mkt}`} data-estado={estado} style={{ display: 'flex', flexDirection: 'column', gap: 1, borderLeft: `3px solid ${tone}`, paddingLeft: 8, paddingRight: 2, borderRadius: 4, minWidth: 0, flex: 1, justifyContent: 'space-between', background: `linear-gradient(90deg, ${rgba(tone, 0.16)}, ${rgba(tone, 0.03)} 75%, transparent)`, boxShadow: `inset 3px 0 12px -5px ${rgba(tone, 0.8)}` }}>
+    <div data-qp={`zona-${mkt}`} data-estado={estado} style={{ display: 'flex', flexDirection: 'column', gap: 1, borderLeft: `3px solid ${tone}`, paddingLeft: 8, paddingRight: 2, borderRadius: 4, minWidth: 0, flex: 1, justifyContent: 'space-between', background: `linear-gradient(90deg, ${rgba(tone, 0.2)}, ${rgba(tone, 0.06)} 75%, transparent)`, boxShadow: `inset 4px 0 14px -5px ${rgba(tone, 0.95)}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 4px)', fontWeight: 700, color: C.ink }}>{title}</span>
-        <span data-qp={`zona-${mkt}-estado`} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 4px)', fontWeight: 700, color: tone, whiteSpace: 'nowrap', textShadow: glowText(tone.startsWith('#') ? tone : C.ink3, 0.55) }}>
+        <span data-qp={`zona-${mkt}-estado`} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 4px)', fontWeight: 700, color: tone, whiteSpace: 'nowrap', textShadow: glowText(tone.startsWith('#') ? tone : C.ink3, 0.85) }}>
           {STYLE[estado].label}{deviation === 'peor' ? ' ▼' : deviation === 'mejor' ? ' ▲' : ''}
         </span>
       </div>

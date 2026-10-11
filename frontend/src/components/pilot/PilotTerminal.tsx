@@ -55,7 +55,7 @@ export function PilotTerminal({ payload, god, godTarget, table }: PilotTerminalP
       <style>{CSS}</style>
 
       {/* VEREDICTO — superficie elevada */}
-      <div data-qp="veredicto" style={{ display: 'grid', gridTemplateColumns: `${W_A1}px ${W_A2}px 1fr`, height: t.hA, position: 'relative', minWidth: 0, ...glass2(C.danna, 0.9), background: `linear-gradient(115deg, ${rgba(C.danna, 0.16)}, ${rgba(C.capa1, 0.07)} 45%, ${rgba(C.escudo, 0.12)})`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.16), ${neon(C.danna, 18, 0.2)}` }}>
+      <div data-qp="veredicto" style={{ display: 'grid', gridTemplateColumns: `${W_A1}px ${W_A2}px 1fr`, height: t.hA, position: 'relative', minWidth: 0, ...glass2(C.danna, 1), background: `linear-gradient(115deg, ${rgba(C.danna, 0.27)}, ${rgba(C.capa1, 0.12)} 45%, ${rgba(C.escudo, 0.24)})`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.2), ${neon(C.danna, 22, 0.32)}` }}>
         <span aria-hidden style={{ position: 'absolute', top: -1, left: 16, right: 16, height: 1, background: `linear-gradient(90deg, transparent, ${C.danna}, ${C.escudo}, transparent)`, boxShadow: neon(C.danna, 8, 0.9) }} />
         <OrdenTile />
         <RachaTile />

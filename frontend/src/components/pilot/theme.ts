@@ -25,25 +25,25 @@ export const FONT_MONO = "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menl
 
 export const C = {
   // superficies
-  bg0: '#05080d',
-  bg1: '#0a0f17',
-  bg2: '#0f1724',
-  bg3: '#172234',
-  line: '#18212f',
-  line2: '#27364c',
+  bg0: '#04060e',
+  bg1: '#080c19',
+  bg2: '#0d1426',
+  bg3: '#18223d',
+  line: '#1c2740',
+  line2: '#2e4066',
   // texto (contraste ≥ 4,5:1 sobre bg1/bg2 salvo ink4, solo para estados apagados)
-  ink: '#eaf0f8',
-  ink2: '#adb9cc',
-  ink3: '#98a7c0',
-  ink4: '#7d8ca6',
+  ink: '#f4f8ff',
+  ink2: '#c8d3ea',
+  ink3: '#a9b8d3',
+  ink4: '#8798b6',
   // función
-  danna: '#33d0e8',
-  capa1: '#4f8bff',
-  escudo: '#a57cff',
-  ok: '#2fd48a',
-  warn: '#f5b23a',
-  err: '#ff4d63',
-  white: '#f4f8ff',
+  danna: '#2ee8ff',
+  capa1: '#5b9dff',
+  escudo: '#c28bff',
+  ok: '#24f2a3',
+  warn: '#ffc83d',
+  err: '#ff4668',
+  white: '#ffffff',
 } as const;
 
 // ── Cristal y neón (v10) ─────────────────────────────────────────────────
@@ -57,21 +57,21 @@ export function rgba(hex: string, a: number): string {
 /** Resplandor de neón (sombra exterior) de un color. */
 export const neon = (hex: string, r = 12, a = 0.35) => `0 0 ${r}px ${rgba(hex, a)}`;
 /** Resplandor de cifra/letra. */
-export const glowText = (hex: string, a = 0.5) => `0 0 8px ${rgba(hex, a)}, 0 0 20px ${rgba(hex, a * 0.5)}`;
+export const glowText = (hex: string, a = 0.5) => `0 0 7px ${rgba(hex, a)}, 0 0 18px ${rgba(hex, a * 0.7)}`;
 /** Cristal base (ESTADO): vidrio ahumado con borde de luz arriba. */
 export const GLASS1: React.CSSProperties = {
-  background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018))',
-  border: '1px solid rgba(255,255,255,0.075)',
+  background: 'linear-gradient(180deg, rgba(120,170,255,0.085), rgba(255,255,255,0.025))',
+  border: '1px solid rgba(120,170,255,0.2)',
   borderRadius: 6,
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), inset 0 0 22px rgba(120,170,255,0.025)',
 };
 /** Cristal elevado (RECOMENDACIÓN / ACCIONES): teñido con el color de la función. */
 export function glass2(hex: string, strength = 1): React.CSSProperties {
   return {
-    background: `linear-gradient(180deg, ${rgba(hex, 0.16 * strength)}, ${rgba(hex, 0.05 * strength)} 60%, rgba(255,255,255,0.02))`,
-    border: `1px solid ${rgba(hex, 0.42 * strength)}`,
+    background: `linear-gradient(180deg, ${rgba(hex, 0.26 * strength)}, ${rgba(hex, 0.08 * strength)} 60%, rgba(255,255,255,0.025))`,
+    border: `1px solid ${rgba(hex, 0.6 * strength)}`,
     borderRadius: 6,
-    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.14), ${neon(hex, 16, 0.16 * strength)}`,
+    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.14), ${neon(hex, 20, 0.28 * strength)}`,
   };
 }
 
