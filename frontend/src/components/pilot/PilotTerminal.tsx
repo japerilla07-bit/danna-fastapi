@@ -1,23 +1,28 @@
 // ════════════════════════════════════════════════════════════════════════
-// PilotTerminal — cuerpo del Quantum Pilot (v8 · terminal de lectura rápida).
+// PilotTerminal — cuerpo del Quantum Pilot (v9 · "tres carriles").
 //
-// Tres niveles, una sola pantalla, SIN scroll:
-//   1. VISTAZO  (fila de mando): ORDEN · RACHA vs tope · GOD / TARGET LOCK
-//   2. LECTURA  (fila media):    VOCES · ZONA · MARCADOR+ESCALERA
-//   3. REFERENCIA (abajo):       CATEGORÍAS+GOD · CALOR · BANKROLL
+//   ┌ VEREDICTO (elevado) ─ JUEGA ESTO · ERRORES SEGUIDOS · GOD ─────────────┐
+//   ├ ESTADO (base) ─────────────────────────────────┬────────────────────────┤
+//   │  carril D.A.N.N.A. │ carril Capa 1 │ carril Escudo │  casilla: docenas      │
+//   │  jugada·marcador·escalera cada uno             │  casilla: columnas     │
+//   │  categorías (las 9) + GOD                      │  calor reciente        │
+//   ├ ACCIONES (elevado) ─ TARGET LOCK · GOD target ─┴────────────────────────┤
 //
 // Solo presentación: lee los MISMOS selectores del store y recibe por props lo
-// que ya recibía QuantumPilot. Ninguna lógica de negocio vive acá.
+// que ya recibía QuantumPilot. Ninguna lógica de negocio vive acá. Todas las
+// alturas son FIJAS por nivel (theme.ts): nada se mueve entre giros.
 // ════════════════════════════════════════════════════════════════════════
 
 import React from 'react';
-import { C, DENSITY, FONT_MONO, useDensity } from './theme';
+import { C, FONT_UI, PAD_X, W_RIGHT, COL_GAP, LANE_GAP, W_A1, W_A2, laneHeight, bodyHeight, useDensity } from './theme';
 import { OrdenTile, RachaTile, GodTile, type GodTileProps } from './CommandRow';
-import { VoicesColumn } from './VoicesColumn';
+import { LaneReal, LaneCapa1, LaneEscudo } from './Lanes';
+import { Rail, type GodTargetProps } from './Rail';
 import { ZoneColumn } from './ZoneColumn';
-import { ScoreColumn, type GodTargetProps } from './ScoreLadder';
 import { CategoryGod, type CategoryGodProps } from './CategoryGod';
 import { CalorStrip } from './CalorStrip';
+
+export type { GodTargetProps };
 
 export interface PilotTerminalProps {
   payload: any;
@@ -26,48 +31,55 @@ export interface PilotTerminalProps {
   table: Omit<CategoryGodProps, 'payload' | 'godActive' | 'radarScore'> & { godActive: boolean; radarScore: number };
 }
 
-// Márgenes/huecos HORIZONTALES fijos: el ancho útil de cada columna es el mismo en
-// todos los niveles de densidad (solo cambia lo vertical).
-const COL_PAD = 6;
-const COL_GAP = 5;
-
 const CSS = `
 .qp-t *{box-sizing:border-box}
+.qp-t{line-height:1.2}
 .qp-t button:focus-visible,.qp-t input:focus-visible{outline:2px solid ${C.danna};outline-offset:1px}
-.qp-t button:not(:disabled):hover{filter:brightness(1.18)}
+.qp-t button:not([aria-disabled="true"]):hover{filter:brightness(1.2)}
 `;
 
 export function PilotTerminal({ payload, god, godTarget, table }: PilotTerminalProps) {
-  const dens = DENSITY[useDensity()];
+  const t = useDensity();
   const vars = {
-    '--qp-row': `${dens.row}px`, '--qp-ladder': `${dens.ladder}px`, '--qp-ladder-low': `${dens.ladderLow}px`,
-    '--qp-sc-row': `${dens.scRow}px`, '--qp-trow': `${dens.tRow}px`, '--qp-gap': `${dens.gap}px`, '--qp-pad': `${dens.pad}px`, '--qp-padx': `${COL_PAD}px`,
-    '--qp-fs-tbl': `${dens.fsTbl}px`, '--qp-fs-lbl': `${dens.fsLbl}px`, '--qp-fs-txt': `${dens.fsTxt}px`,
-    '--qp-fs-val': `${dens.fsVal}px`, '--qp-fs-pick': `${dens.fsPick}px`, '--qp-fs-order': `${dens.fsOrder}px`, '--qp-fs-mega': `${dens.fsMega}px`,
+    '--qp-gap': `${t.gap}px`,
+    '--qp-lane-head': `${t.laneHead}px`, '--qp-lane-pick': `${t.lanePick}px`, '--qp-lane-note': `${t.laneNote}px`, '--qp-lane-score': `${t.laneScore}px`,
+    '--qp-ladder-head': `${t.ladderHead}px`, '--qp-ladder': `${t.ladder}px`, '--qp-ladder-low': `${t.ladderLow}px`,
+    '--qp-cat-head': `${t.catHead}px`, '--qp-tbl-row': `${t.tRow}px`,
+    '--qp-fs-hero': `${t.fsHero}px`, '--qp-fs-mega': `${t.fsMega}px`, '--qp-fs-pick': `${t.fsPick}px`,
+    '--qp-fs-tbl': `${t.fsTbl}px`, '--qp-fs-txt': `${t.fsTxt}px`, '--qp-fs-lbl': `${t.fsLbl}px`, '--qp-fs-val': `${t.fsVal}px`,
   } as React.CSSProperties;
+  const hBody = bodyHeight(t);
 
   return (
-    <div className="qp-t" style={{ ...vars, display: 'flex', flexDirection: 'column', gap: dens.gap, padding: `${dens.pad}px ${COL_PAD}px`, fontFamily: FONT_MONO, color: C.ink, minHeight: 0 }}>
+    <div className="qp-t" style={{ ...vars, display: 'flex', flexDirection: 'column', gap: t.gap, padding: `${t.pad}px ${PAD_X}px`, fontFamily: FONT_UI, color: C.ink, minHeight: 0 }}>
       <style>{CSS}</style>
 
-      {/* 1 · VISTAZO */}
-      <div style={{ display: 'grid', gridTemplateColumns: '368px 232px 1fr', columnGap: COL_GAP, height: dens.hCmd }}>
+      {/* VEREDICTO — superficie elevada */}
+      <div data-qp="veredicto" style={{ display: 'grid', gridTemplateColumns: `${W_A1}px ${W_A2}px 1fr`, height: t.hA, background: `linear-gradient(180deg, ${C.bg3}, ${C.bg2})`, borderRadius: 4, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05)`, minWidth: 0 }}>
         <OrdenTile />
         <RachaTile />
         <GodTile {...god} />
       </div>
 
-      {/* 2 · LECTURA */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 336px 1fr', columnGap: COL_GAP, height: dens.hMid }}>
-        <VoicesColumn payload={payload} godTarget={godTarget} />
-        <ZoneColumn />
-        <ScoreColumn />
+      {/* ESTADO — superficie base */}
+      <div style={{ display: 'grid', gridTemplateColumns: `minmax(0,1fr) ${W_RIGHT}px`, columnGap: COL_GAP, height: hBody }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: t.gap, minWidth: 0, minHeight: 0 }}>
+          <div data-qp="lanes" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: LANE_GAP, height: laneHeight(t) }}>
+            <LaneReal payload={payload} />
+            <LaneCapa1 />
+            <LaneEscudo />
+          </div>
+          <CategoryGod payload={payload} {...table} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: t.gap, minWidth: 0, minHeight: 0, height: hBody }}>
+          <ZoneColumn />
+          <CalorStrip />
+        </div>
       </div>
 
-      {/* 3 · REFERENCIA */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 372px', columnGap: COL_GAP, height: dens.hRef }}>
-        <CategoryGod payload={payload} {...table} />
-        <CalorStrip />
+      {/* ACCIONES — superficie elevada */}
+      <div style={{ height: t.hRail, background: C.bg2, borderRadius: 4, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04)`, minWidth: 0 }}>
+        <Rail god={god} godTarget={godTarget} />
       </div>
     </div>
   );

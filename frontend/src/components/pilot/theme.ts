@@ -1,109 +1,154 @@
 // ════════════════════════════════════════════════════════════════════════
-// Tokens de diseño del Quantum Pilot "terminal" — UNA sola fuente.
-// Ningún componente del pilot usa colores/tamaños sueltos: todo sale de acá.
+// Tokens de diseño del Quantum Pilot (v9 · "tres carriles") — UNA sola fuente.
+// Ningún componente del pilot usa colores, fuentes ni medidas sueltas.
 //
-// Dirección de arte: obsidiana / carbón, líneas finas, acentos por FUNCIÓN
-// (no por decoración): cian = D.A.N.N.A./motor, azul = Capa 1, violeta =
-// Escudo, esmeralda = acierto/favorable, ámbar = atención, ROJO solo para
-// error/riesgo.
+// Dirección de arte: estación de control técnico. Obsidiana y grafito en TRES
+// niveles de superficie con significado:
+//   bg2 (elevado)  = lo que RECOMIENDA el motor y lo que PUEDES HACER tú
+//   bg1 (base)     = el ESTADO real de la sesión (marcadores, escaleras, zonas)
+//   bg0 (fondo)    = el marco del panel
+// Color por FUNCIÓN: cian = D.A.N.N.A./motor · azul = Capa 1 · violeta = Escudo ·
+// esmeralda = acierto · ámbar = atención · ROJO solo error/riesgo.
+//
+// Tipografía (las tres ya las carga tu app: index.html / index.css):
+//   FONT_UI   Space Grotesk   → títulos y explicaciones (minúscula normal)
+//   FONT_NUM  Barlow Condensed→ cifras grandes, jugadas y rótulos pequeños
+//   FONT_MONO JetBrains Mono  → SOLO columnas de cifras (tabulares)
 // ════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useState } from 'react';
 import type React from 'react';
 
-export const FONT_HEAD = "'Rajdhani', 'Segoe UI', sans-serif";
+export const FONT_UI = "'Space Grotesk', 'Segoe UI', system-ui, sans-serif";
+export const FONT_NUM = "'Barlow Condensed', 'Arial Narrow', 'Segoe UI', sans-serif";
 export const FONT_MONO = "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace";
 
 export const C = {
   // superficies
-  bg0: '#05080d',  // fondo del panel
-  bg1: '#0a0f17',  // bloque
-  bg2: '#0f1622',  // bloque elevado / cabecera de tabla
-  bg3: '#161f2e',  // hover / realce
-  line: '#1c2636', // hairline
-  line2: '#2a384e',// hairline de énfasis
-  // texto
+  bg0: '#05080d',
+  bg1: '#0a0f17',
+  bg2: '#0f1724',
+  bg3: '#172234',
+  line: '#18212f',
+  line2: '#27364c',
+  // texto (contraste ≥ 4,5:1 sobre bg1/bg2 salvo ink4, solo para estados apagados)
   ink: '#eaf0f8',
   ink2: '#adb9cc',
   ink3: '#8190aa',
   ink4: '#6f7e97',
   // función
-  danna: '#33d0e8',   // D.A.N.N.A. / motor / acento general
-  capa1: '#4f8bff',   // Capa 1 · Copiloto
-  escudo: '#a57cff',  // Escudo 1 · Cobertura
-  ok: '#2fd48a',      // acierto / favorable
-  warn: '#f5b23a',    // atención (más seguido de lo normal, 3 seguidos)
-  err: '#ff4d63',     // error / riesgo
+  danna: '#33d0e8',
+  capa1: '#4f8bff',
+  escudo: '#a57cff',
+  ok: '#2fd48a',
+  warn: '#f5b23a',
+  err: '#ff4d63',
   white: '#f4f8ff',
 } as const;
 
 /** Tope de errores seguidos que Gunner no quiere pasar. */
 export const TOPE_ERRORES = 4;
 
-export type Density = 'tight' | 'compact' | 'normal' | 'roomy';
+// ── Retícula horizontal FIJA (el panel mide siempre 1060 px) ─────────────
+// 1060 − borde 2 − relleno 2×10 = 1038 útiles.
+export const PAD_X = 10;
+export const W_RIGHT = 284;       // columna derecha (zonas + calor)
+export const COL_GAP = 14;        // entre columna izquierda y derecha
+export const LANE_GAP = 16;       // entre carriles
+export const W_A1 = 436;          // franja de veredicto: JUEGA ESTO
+export const W_A2 = 290;          //                      ERRORES SEGUIDOS
+// (A3 = resto)                   //                      GOD
 
 export interface Dens {
-  /** alto de fila de tabla densa */
-  row: number;
-  /** alto de fila de la escalera, filas 1-4 / 5-10 */
-  ladder: number;
-  ladderLow: number;
-  /** alto de fila de la tabla MARCADORES */
-  scRow: number;
-  /** alto de fila de la tabla de CATEGORÍAS */
-  tRow: number;
-  gap: number;
+  /** relleno vertical exterior y hueco entre franjas */
   pad: number;
-  /** alturas FIJAS de cada franja (geometría estable: nada salta entre giros) */
-  hCmd: number;
-  hMid: number;
-  hRef: number;
+  gap: number;
+  /** alturas FIJAS (geometría estable: nada salta entre giros) */
+  hA: number;       // franja de veredicto
+  hRail: number;    // riel de acciones
+  laneHead: number;
+  lanePick: number; // cada fila de jugada
+  laneNote: number;
+  laneScore: number;
+  ladderHead: number;
+  ladder: number;   // filas 1-4 de la escalera
+  ladderLow: number;// filas 5-10
+  catHead: number;
+  tRow: number;     // fila de categorías
   /** fuentes */
-  fsTbl: number;   // tablas densas
-  fsLbl: number;   // rótulos pequeños (MAYÚSCULAS)
-  fsTxt: number;   // texto corrido
-  fsVal: number;   // valores de lectura rápida
-  fsPick: number;  // picks (zonas) de las voces
-  fsOrder: number; // ORDEN (héroe)
-  fsMega: number;  // dígito de racha
+  fsHero: number;   // jugada grande (JUEGA ESTO)
+  fsMega: number;   // dígito de racha
+  fsPick: number;   // jugada de carril
+  fsTbl: number;    // columnas de cifras (mono)
+  fsTxt: number;    // texto corrido
+  fsLbl: number;    // rótulos pequeños
+  fsVal: number;    // cifras de marcador
 }
+export type Density = Dens;
 
-// Solo cambian alturas y las fuentes del nivel "vistazo" cuando sobra alto. Las
-// tablas densas (fsTbl) NO crecen: su ancho (1060 px, fijo) manda ahí. El ancho
-// del panel NUNCA cambia. Los umbrales de MIN_VIEWPORT salen de MEDIR cada nivel (ver
-// pruebas): es el alto de ventana mínimo con el que ese nivel cabe sin scroll.
-export const DENSITY: Record<Density, Dens> = {
-  tight:   { row: 13, ladder: 13, ladderLow: 10, scRow: 13, tRow: 14, gap: 4, pad: 5,  hCmd: 88,  hMid: 236, hRef: 172, fsTbl: 10,   fsLbl: 9,    fsTxt: 10.5, fsVal: 12, fsPick: 15, fsOrder: 24, fsMega: 34 },
-  compact: { row: 15, ladder: 14, ladderLow: 11, scRow: 15, tRow: 17, gap: 5, pad: 6,  hCmd: 92,  hMid: 258, hRef: 196, fsTbl: 10.5, fsLbl: 9.5,  fsTxt: 11,   fsVal: 13, fsPick: 17, fsOrder: 27, fsMega: 38 },
-  normal:  { row: 17, ladder: 16, ladderLow: 12, scRow: 17, tRow: 18, gap: 7, pad: 8,  hCmd: 100, hMid: 290, hRef: 212, fsTbl: 10.5, fsLbl: 9.5,  fsTxt: 11.5, fsVal: 14, fsPick: 18, fsOrder: 27, fsMega: 40 },
-  roomy:   { row: 19, ladder: 18, ladderLow: 14, scRow: 19, tRow: 20, gap: 9, pad: 10, hCmd: 112, hMid: 320, hRef: 232, fsTbl: 10.5, fsLbl: 10,   fsTxt: 12,   fsVal: 15, fsPick: 20, fsOrder: 30, fsMega: 46 },
-};
+// ESCALA CONTINUA: dos anclas (la más compacta que se lee bien y la más holgada) y
+// una interpolación según el alto REAL de la ventana. Así el panel aprovecha todo el
+// alto disponible (nada de saltos entre niveles) y el ANCHO no cambia nunca.
+// Solo cambian alturas y tamaños de letra; todo se redondea a enteros (letras a 0,5).
+export const DENSITY_TIGHT: Dens   = { pad: 6,  gap: 6,  hA: 80,  hRail: 28, laneHead: 18, lanePick: 22, laneNote: 38, laneScore: 26, ladderHead: 12, ladder: 12, ladderLow: 9,  catHead: 29, tRow: 13, fsHero: 26, fsMega: 38, fsPick: 17, fsTbl: 10,   fsTxt: 10.5, fsLbl: 10.5, fsVal: 14 };
+export const DENSITY_ROOMY: Dens   = { pad: 10, gap: 10, hA: 108, hRail: 38, laneHead: 24, lanePick: 30, laneNote: 44, laneScore: 38, ladderHead: 15, ladder: 17, ladderLow: 14, catHead: 34, tRow: 18, fsHero: 38, fsMega: 62, fsPick: 24, fsTbl: 11.5, fsTxt: 12,   fsLbl: 12,   fsVal: 18 };
 
-/** Alto del cascarón (encabezado 28 + cuerpo + borde 2) que necesita cada nivel.
- *  Sale de las MISMAS alturas fijas que usa PilotTerminal — no hay números sueltos. */
+/** Hueco entre los grupos de un carril (cabecera · jugadas · nota · marcador · escalera). */
+export const LANE_STACK_GAP = 3;
 export const SHELL_HEADER = 28;
-export function shellHeightFor(d: Density): number {
-  const t = DENSITY[d];
-  return SHELL_HEADER + 2 * t.pad + 2 * t.gap + t.hCmd + t.hMid + t.hRef + 2;
+/** Respiro inferior de cada carril y de la tabla: el cuadro tipográfico de la última fila (más alto que su fila) cae DENTRO del bloque. */
+export const LANE_PAD_B = 2;
+
+/** Alto del carril = suma de sus bloques fijos. */
+export function laneHeight(t: Dens): number {
+  return t.laneHead + 2 * t.lanePick + t.laneNote + t.laneScore + (t.ladderHead + 4 * t.ladder + 6 * t.ladderLow) + 4 * LANE_STACK_GAP + LANE_PAD_B;
+}
+/** Alto de la tabla de categorías (cabecera + 9 filas). */
+export function catHeight(t: Dens): number {
+  return t.catHead + 9 * t.tRow + 2;
+}
+/** Alto del cuerpo central = carriles + hueco + categorías (la columna derecha usa el mismo). */
+export function bodyHeight(t: Dens): number {
+  return laneHeight(t) + t.gap + catHeight(t);
 }
 
-/** Alto de ventana mínimo (px) con el que cada nivel cabe sin scroll: el panel
- *  mide como máximo 96vh. */
-export const MIN_VIEWPORT: Record<Density, number> = {
-  tight: 0,
-  compact: Math.ceil(shellHeightFor('compact') / 0.96),
-  normal: Math.ceil(shellHeightFor('normal') / 0.96),
-  roomy: Math.ceil(shellHeightFor('roomy') / 0.96),
-};
+/** Alto del cascarón (encabezado + cuerpo + borde 2) — las MISMAS cifras que usa PilotTerminal. */
+export function shellHeightFor(t: Dens): number {
+  return SHELL_HEADER + 2 * t.pad + t.hA + t.gap + bodyHeight(t) + t.gap + t.hRail + 2;
+}
 
-export function densityForHeight(h: number): Density {
-  return h >= MIN_VIEWPORT.roomy ? 'roomy' : h >= MIN_VIEWPORT.normal ? 'normal' : h >= MIN_VIEWPORT.compact ? 'compact' : 'tight';
+const KEYS = Object.keys(DENSITY_TIGHT) as (keyof Dens)[];
+const HALF = new Set<keyof Dens>(['fsTbl', 'fsTxt', 'fsLbl']);
+function mix(k: number): Dens {
+  const o = {} as Dens;
+  for (const key of KEYS) {
+    const v = DENSITY_TIGHT[key] + k * (DENSITY_ROOMY[key] - DENSITY_TIGHT[key]);
+    o[key] = HALF.has(key) ? Math.round(v * 2) / 2 : Math.round(v);
+  }
+  return o;
+}
+
+/** Alto mínimo de ventana con el que cabe el nivel más compacto (el panel mide ≤ 96vh). Por debajo, el cuerpo hace scroll interno. */
+export const MIN_VIEWPORT = Math.ceil(shellHeightFor(DENSITY_TIGHT) / 0.96);
+
+const cache = new Map<number, Dens>();
+/** Parámetros de densidad para un alto de ventana: el MÁS holgado que cabe sin scroll. */
+export function densityForHeight(h: number): Dens {
+  const hh = Math.floor(h);
+  const hit = cache.get(hh);
+  if (hit) return hit;
+  const avail = hh * 0.96;
+  let k = Math.max(0, Math.min(1, (avail - shellHeightFor(DENSITY_TIGHT)) / (shellHeightFor(DENSITY_ROOMY) - shellHeightFor(DENSITY_TIGHT))));
+  let d = mix(k);
+  while (k > 0 && shellHeightFor(d) > avail) { k = Math.max(0, k - 0.01); d = mix(k); }
+  cache.set(hh, d);
+  return d;
 }
 
 /** Densidad según el alto REAL de la ventana (se recalcula al redimensionar). */
-export function useDensity(): Density {
-  const read = () => (typeof window === 'undefined' ? 'compact' : densityForHeight(window.innerHeight));
-  const [d, setD] = useState<Density>(read);
+export function useDensity(): Dens {
+  const read = () => densityForHeight(typeof window === 'undefined' ? 700 : window.innerHeight);
+  const [d, setD] = useState<Dens>(read);
   useEffect(() => {
     const on = () => setD(read());
     window.addEventListener('resize', on);
@@ -112,8 +157,17 @@ export function useDensity(): Density {
   return d;
 }
 
+/** Cifras tabulares (columnas). */
 export const num: React.CSSProperties = {
   fontFamily: FONT_MONO,
   fontVariantNumeric: 'tabular-nums',
   fontFeatureSettings: '"tnum" 1',
+};
+
+/** Cifras condensadas grandes (jugadas, marcadores, racha). */
+export const numDisplay: React.CSSProperties = {
+  fontFamily: FONT_NUM,
+  fontVariantNumeric: 'tabular-nums',
+  fontFeatureSettings: '"tnum" 1',
+  letterSpacing: 0,
 };

@@ -4,12 +4,12 @@
 
 import React, { useRef, useState } from 'react';
 import { MESA_KEY, SALDO_INICIAL_KEY, SALDO_FINAL_KEY, fmtCOP, leerNumero } from '@/components/BankrollLedger';
-import { C, FONT_MONO, num } from './theme';
+import { C, FONT_MONO, FONT_NUM, numDisplay } from './theme';
 import { Lbl } from './ui';
 
 function EditBtn({ onClick, children, color, label }: { onClick: () => void; children: React.ReactNode; color: string; label: string }) {
   return (
-    <button type="button" onClick={onClick} aria-label={label} style={{ background: 'transparent', border: `1px solid ${color}66`, borderRadius: 3, color, fontFamily: FONT_MONO, fontSize: 9, letterSpacing: '0.06em', padding: '0 5px', height: 16, minWidth: 20, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+    <button type="button" onClick={onClick} aria-label={label} style={{ background: 'transparent', border: `1px solid ${color}66`, borderRadius: 3, color, fontFamily: FONT_NUM, fontSize: 13, padding: '0 6px', height: 18, minWidth: 20, cursor: 'pointer', whiteSpace: 'nowrap' }}>
       {children}
     </button>
   );
@@ -25,7 +25,7 @@ function Field({
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: shrink ? '0 1 auto' : '0 0 auto' }} data-qp={testId}>
-      <Lbl color={C.ink2} style={{ fontSize: 9.5 }}>{label}</Lbl>
+      <Lbl color={C.ink2} style={{ fontSize: 12 }}>{label}</Lbl>
       {editing ? (
         <input
           ref={ref} autoFocus aria-label={label}
@@ -38,7 +38,7 @@ function Field({
         />
       ) : (
         <>
-          <span data-qp={`${testId}-valor`} style={{ ...num, fontSize: 12.5, fontWeight: 700, color: empty ? C.ink3 : C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: mode === 'money' ? 110 : 170, minWidth: 0 }}>{display}</span>
+          <span data-qp={`${testId}-valor`} style={{ ...numDisplay, fontSize: 16, fontWeight: 600, color: empty ? C.ink3 : C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: mode === 'money' ? 110 : 170, minWidth: 0 }}>{display}</span>
           <EditBtn onClick={start} color={color} label={`${btn} ${label}`}>✎</EditBtn>
         </>
       )}
@@ -86,8 +86,8 @@ export function BankrollBar() {
       <Field label="SALDO FINAL" display={saldoFinal != null ? fmtCOP(saldoFinal) : '—'} empty={saldoFinal == null} mode="money" raw={raw} setRaw={setRaw}
         editing={edit === 'sf'} start={() => { setRaw(saldoFinal != null ? Math.round(saldoFinal).toString() : ''); setEdit('sf'); }} commit={commit} cancel={cancel} color={C.white} btn={saldoFinal != null ? 'EDITAR' : 'INGRESAR'} testId="bk-sf" />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 150, flexShrink: 0, justifyContent: 'flex-end' }} data-qp="bk-pl">
-        <Lbl color={C.ink2} style={{ fontSize: 9.5 }}>P&amp;L (FINAL − INICIAL)</Lbl>
-        <span style={{ ...num, fontSize: 14, fontWeight: 800, color: !hayPL ? C.ink4 : plPos ? C.ok : C.err, whiteSpace: 'nowrap' }}>
+        <Lbl color={C.ink2} style={{ fontSize: 12 }}>P&amp;L (final − inicial)</Lbl>
+        <span style={{ ...numDisplay, fontSize: 18, fontWeight: 700, color: !hayPL ? C.ink4 : plPos ? C.ok : C.err, whiteSpace: 'nowrap' }}>
           {hayPL ? `${plPos ? '+' : '−'}${fmtCOP(pl)}` : '—'}
         </span>
       </div>

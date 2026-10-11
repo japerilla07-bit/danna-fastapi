@@ -545,7 +545,7 @@ export function QuantumPilot({
 
   return (
     <div
-      className="fixed z-50 w-[1060px] max-w-[95vw] max-h-[96vh] rounded-lg overflow-hidden font-mono select-none flex flex-col"
+      className="fixed z-50 w-[1060px] max-w-[95vw] max-h-[96vh] rounded-lg overflow-hidden select-none flex flex-col"
       data-qp="shell"
       style={{
         left: pos.x,
@@ -561,11 +561,11 @@ export function QuantumPilot({
         className="flex items-center justify-between px-3 cursor-grab active:cursor-grabbing"
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
-        style={{ height: 28, flexShrink: 0, background: PILOT_C.bg1, borderBottom: `1px solid ${PILOT_C.line}` }}
+        style={{ height: 28, flexShrink: 0, background: PILOT_C.bg0, borderBottom: `1px solid ${PILOT_C.line}` }}
       >
         <div className="flex items-center gap-2 shrink-0">
           <span style={{ color: godBet.active ? PILOT_C.white : PILOT_C.danna, fontSize: 14 }} className={godBet.active ? 'animate-pulse' : ''}>⚡</span>
-          <span className="font-bold" style={{ fontSize: 12, letterSpacing: '0.28em', color: PILOT_C.ink }}>QUANTUM PILOT</span>
+          <span style={{ fontFamily: "'Space Grotesk', 'Segoe UI', system-ui, sans-serif", fontWeight: 700, fontSize: 13.5, color: PILOT_C.ink }}>Quantum Pilot</span>
         </div>
         {/* BANKROLL & LEDGER — barra de estado en el encabezado (manual, local).
             Sin arrastre: los campos son editables. */}

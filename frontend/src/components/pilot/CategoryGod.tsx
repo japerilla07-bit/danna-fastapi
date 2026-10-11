@@ -1,19 +1,17 @@
-// TABLA DE CATEGORÍAS (nivel 3 — referencia): las 9 categorías con su
-// estado/pick y los contadores NORMALES, más las columnas GOD en la MISMA fila
-// (antes: GodBetPanel debajo, otra tabla). GOD solo se llena cuando está
-// activo — igual que antes, que sólo dibujaba la tabla GOD con GOD activo.
+// SUGERENCIAS POR CATEGORÍA (las 9) con GOD en la MISMA fila (v8 → v9: mismo
+// contenido, composición sin caja). GOD solo se llena cuando está activo.
 
 import React, { memo, useMemo } from 'react';
 import type { BadgeState } from '@/components/CategoryTable';
 import { buildCategoryRows, type CounterView } from '@/domain/categoryRows';
-import { C, FONT_MONO, num } from './theme';
+import { C, FONT_UI, FONT_NUM, LANE_PAD_B, num } from './theme';
 import { Lbl } from './ui';
 
 const STATE_COLOR: Record<BadgeState, string> = { bet: C.ok, prb: C.white, wt: C.danna };
 const STATE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
 
 // badge · categoría · pick · [W L Sq Mx AVG] · sep · [W L Sq Mx AVG GOD]
-const GRID = '28px 114px minmax(0,1fr) repeat(4, 20px) 28px 8px repeat(4, 20px) 30px';
+const GRID = '30px 116px minmax(0,1fr) repeat(4, 24px) 32px 10px repeat(4, 24px) 34px';
 
 const Group = ({ c, dim, color }: { c: CounterView; dim?: boolean; color?: string }) => {
   const v = (x: React.ReactNode, strong = false) => (
@@ -40,24 +38,27 @@ export const CategoryGod = memo(function CategoryGod({ payload, counters, counte
     () => buildCategoryRows(payload, counters, errorHist, countersGod, errorHist),
     [payload, counters, errorHist, countersGod],
   );
-  const H: React.CSSProperties = { fontSize: 9, color: C.ink3, fontWeight: 700, textAlign: 'right', letterSpacing: '0.04em' };
+  const H: React.CSSProperties = { textAlign: 'right' };
+  const HG: React.CSSProperties = { textAlign: 'right', color: C.white };
   return (
-    <section aria-label="Sugerencias por categoría" data-qp="categorias" style={{ background: C.bg1, border: `1px solid ${C.line}`, borderRadius: 4, padding: '4px var(--qp-padx) 3px', display: 'flex', flexDirection: 'column', minWidth: 0, ...num }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, minHeight: 'var(--qp-row)' }}>
-        <Lbl color={C.ink2} style={{ fontSize: 9.5 }}>SUGERENCIAS POR CATEGORÍA (las 9)</Lbl>
-        <span data-qp="god-estado-tabla" style={{ fontFamily: FONT_MONO, fontSize: 9.5, whiteSpace: 'nowrap', color: godActive ? C.white : C.ink3 }}>
-          {godActive ? (
-            <><b style={{ letterSpacing: '0.1em' }}>⚡ GOD BET — ACTIVO</b> (OPTIMAL + Radar ≥7) · Radar actual: <b>{radarScore}/10</b></>
-          ) : (
-            <><b style={{ letterSpacing: '0.1em' }}>⚡ GOD BET — INACTIVO</b> · Esperando OPTIMAL + Radar ≥7 · Radar actual: <b style={{ color: C.ink2 }}>{radarScore}/10</b></>
-          )}
-        </span>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: GRID, columnGap: 4, alignItems: 'center', borderBottom: `1px solid ${C.line2}`, paddingBottom: 1 }}>
-        <span /><span style={{ ...H, textAlign: 'left' }}>CATEGORÍA</span><span style={{ ...H, textAlign: 'left' }}>PICK</span>
-        <span style={H}>W</span><span style={H}>L</span><span style={H}>SEQ</span><span style={H}>MAX</span><span style={H}>AVG</span>
-        <span />
-        <span style={{ ...H, color: C.white }}>GW</span><span style={{ ...H, color: C.white }}>GL</span><span style={{ ...H, color: C.white }}>GSQ</span><span style={{ ...H, color: C.white }}>GMX</span><span style={{ ...H, color: C.white }}>GAVG</span>
+    <section aria-label="Sugerencias por categoría" data-qp="categorias" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, paddingBottom: LANE_PAD_B, boxSizing: 'border-box', ...num }}>
+      <div style={{ height: 'var(--qp-cat-head)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderBottom: `1px solid ${C.line2}`, boxSizing: 'border-box', paddingBottom: 1 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, lineHeight: 1.2 }}>
+          <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 1px)', fontWeight: 700, color: C.ink }}>Sugerencias por categoría <span style={{ fontWeight: 400, color: C.ink3 }}>(las 9)</span></span>
+          <span data-qp="god-estado-tabla" style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 1px)', whiteSpace: 'nowrap', color: godActive ? C.white : C.ink3 }}>
+            {godActive ? (
+              <><b>⚡ GOD BET — ACTIVO</b> (OPTIMAL + Radar ≥7) · Radar actual: <b>{radarScore}/10</b></>
+            ) : (
+              <><b>⚡ GOD BET — INACTIVO</b> · Esperando OPTIMAL + Radar ≥7 · Radar actual: <b style={{ color: C.ink2 }}>{radarScore}/10</b></>
+            )}
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: GRID, columnGap: 4, alignItems: 'baseline', lineHeight: 1.1 }}>
+          <span /><Lbl>categoría</Lbl><Lbl>pick</Lbl>
+          <Lbl style={H}>W</Lbl><Lbl style={H}>L</Lbl><Lbl style={H}>SEQ</Lbl><Lbl style={H}>MAX</Lbl><Lbl style={H}>AVG</Lbl>
+          <span />
+          <Lbl style={HG}>GW</Lbl><Lbl style={HG}>GL</Lbl><Lbl style={HG}>GSQ</Lbl><Lbl style={HG}>GMX</Lbl><Lbl style={HG}>GAVG</Lbl>
+        </div>
       </div>
       {rows.map((r, i) => {
         const c = STATE_COLOR[r.state];
@@ -69,14 +70,14 @@ export const CategoryGod = memo(function CategoryGod({ payload, counters, counte
             data-state={r.state}
             style={{
               display: 'grid', gridTemplateColumns: GRID, columnGap: 4, alignItems: 'center',
-              height: 'var(--qp-trow)', fontSize: 'var(--qp-fs-tbl)', color: C.ink2,
+              height: 'var(--qp-tbl-row)', fontSize: 'var(--qp-fs-tbl)', lineHeight: 1, color: C.ink2, boxSizing: 'border-box',
               borderLeft: `2px solid ${activo ? c : 'transparent'}`, paddingLeft: 2,
-              background: activo ? `${c}14` : i % 2 ? 'rgba(255,255,255,0.02)' : 'transparent',
+              background: activo ? `${c}16` : i % 2 ? 'rgba(255,255,255,0.025)' : 'transparent',
             }}
           >
-            <span style={{ fontSize: 9, fontWeight: 800, color: c, background: `${c}22`, borderRadius: 2, padding: '0 3px', justifySelf: 'start' }}>{STATE_TXT[r.state]}</span>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
-            <span title={r.pick} style={{ color: activo ? C.white : C.danna, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.pick.replace(/,\s+/g, ',')}</span>
+            <span style={{ fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: c, background: `${c}22`, borderRadius: 2, padding: '0 4px', justifySelf: 'start', lineHeight: '13px' }}>{STATE_TXT[r.state]}</span>
+            <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 0.5px)', color: activo ? C.ink : C.ink2, whiteSpace: 'nowrap' }}>{r.label}</span>
+            <span style={{ fontFamily: FONT_NUM, fontSize: 'calc(var(--qp-fs-tbl) + 2.5px)', color: activo ? C.white : C.danna, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.pick.replace(/,\s+/g, ',')}</span>
             <Group c={r.normal} />
             <span />
             <Group c={r.god} dim={!godActive} color={C.white} />
