@@ -183,7 +183,7 @@ function MotorRow({ label, state, pick, tid }: { label: string; state: BadgeStat
         <Lbl color={C.ink2}>{label}</Lbl>
         <span style={{ alignSelf: 'flex-start', fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: c, background: rgba(c, 0.16), border: `1px solid ${rgba(c, 0.5)}`, boxShadow: neon(c, 6, 0.4), borderRadius: 2, padding: '0 3px', lineHeight: '11px' }}>{BADGE_TXT[state]}</span>
       </span>
-      <Big size="var(--qp-fs-pick)" weight={600} color={C.white} glow={0.65} glowColor={C.danna} style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{pick}</Big>
+      <Big size="var(--qp-fs-pick)" weight={600} color={C.white} glow={0.65} glowColor={C.danna} style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{abrevZonas(pick) || pick}</Big>
     </div>
   );
 }

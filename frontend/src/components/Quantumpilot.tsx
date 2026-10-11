@@ -85,6 +85,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
 import { PilotTerminal } from '@/components/pilot/PilotTerminal';
+import { NodeField } from '@/components/pilot/NodeField';
 import { BankrollBar } from '@/components/pilot/BankrollBar';
 import { C as PILOT_C, densityForHeight, shellHeightFor } from '@/components/pilot/theme';
 import { useCopLiveStreak } from '@/store/telemetryStore';
@@ -563,9 +564,10 @@ export function QuantumPilot({
         boxShadow: `0 12px 44px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 30px ${borde.replace(/[\d.]+\)$/, '0.22)')}, inset 0 1px 0 rgba(255, 255, 255, 0.1)`,
       }}
     >
+      <NodeField />
       {/* ═══ Header (arrastrable) ═══ */}
       <div
-        className="flex items-center justify-between px-3 cursor-grab active:cursor-grabbing"
+        className="relative flex items-center justify-between px-3 cursor-grab active:cursor-grabbing"
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
         style={{ height: 28, flexShrink: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))', borderBottom: '1px solid rgba(51, 208, 232, 0.22)' }}
@@ -596,7 +598,7 @@ export function QuantumPilot({
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pilot-scroll" data-qp="body">
+      <div className="relative flex-1 min-h-0 overflow-y-auto overscroll-contain pilot-scroll" data-qp="body">
         <PilotTerminal
           payload={payload}
           god={{
