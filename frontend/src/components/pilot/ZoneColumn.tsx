@@ -12,7 +12,6 @@ import {
 import { cellKeyOf, cellStats, fusedZone, liveDeviation, type Zone, type Market } from '@/domain/zoneMatrix';
 import { STYLE, INSTRUCCION } from '@/components/MatrixPanel';
 import { C, FONT_UI, num, rgba, glowText, neon } from './theme';
-import { Hair } from './ui';
 import { colorRacha } from './CommandRow';
 
 export const ZONE_TONE: Record<Zone, string> = {
@@ -94,7 +93,6 @@ export function ZoneColumn() {
   return (
     <section aria-label="Estado de la casilla actual" data-qp="zona" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--qp-gap)', minHeight: 0, minWidth: 0 }}>
       <MarketCard mkt="doc" />
-      <Hair />
       <MarketCard mkt="col" />
     </section>
   );
