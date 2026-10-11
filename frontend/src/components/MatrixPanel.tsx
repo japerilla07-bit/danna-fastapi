@@ -527,10 +527,11 @@ function useMarketRead(mkt: Market): MarketRead {
  *    D.A.N.N.A. real: 34,89% de error en 18.122 giros puntuados
  *    Capa 1:          33,48% de error en 14.079
  *    Escudo:          34,90% de error en 16.909
- *  De acá sale el "normal" de cada "cada X giros": 1 / ((1-q)² · qᴸ) para una
- *  racha de largo L. AUDITADO (oct 2026): esa fórmula con estos q cae pegada a
- *  lo que de verdad pasó en las 59 sesiones (1 error cada ~6,8 · 2 seguidos
- *  cada ~19 · 3 cada ~55 · 4 cada ~170 giros), así que "normal" ya es dato real.
+ *  De acá sale el "normal" de cada "cada X giros": 1 / ((1-q) · qᴺ) para una
+ *  racha que LLEGA a N errores seguidos (o más). AUDITADO (oct 2026): esa
+ *  fórmula con estos q cae pegada a lo que de verdad pasó en las 59 sesiones
+ *  (D.A.N.N.A.: llega a 1 cada ~4,4 giros · a 2 cada ~12,6 · a 3 cada ~37 · a 4
+ *  cada ~110 · a 5 cada ~307), así que "normal" ya es dato real.
  *  El Escudo traía 0,22 — era de cuando su marcador contaba la cobertura doble
  *  como acierto si ganaba CUALQUIERA de los dos mercados (4 zonas). Desde que
  *  puntúa solo el mercado de la ▲ PRIORIDAD su error real es 34,9%, y con 0,22
@@ -541,37 +542,38 @@ const ERR_NORMAL = { real: 0.3489, capa1: 0.3348, escudo: 0.349 };
 /** FRECUENCIA DE RACHAS EN VIVO (oct 2026) — pedido de Gunner: "que me diga
  *  el copiloto, el motor, el escudo viene cometiendo un error cada X giros,
  *  dos errores cada tanto". Para UN marcador (real, Capa 1 o Escudo 1) muestra,
- *  por cada largo de racha (1 error, 2 seguidos, 3 … 10), CADA CUÁNTOS GIROS se
- *  repite: giros puntuados de ese marcador ÷ veces que pasó esa racha.
+ *  por cada largo N (1 error, 2 seguidos … 10 o más), CADA CUÁNTOS GIROS la
+ *  racha LLEGA a N: giros puntuados de ese marcador ÷ veces que llegó a N.
  *  Solo lectura — no cambia ninguna decisión ni el freno.
  *
- *  FIX (oct 2026) — Gunner: "llegué a racha de 4 y no sale nada". La tabla solo
- *  contaba rachas CERRADAS (una racha se cierra cuando llega un acierto), así
- *  que una racha de 4 en curso no aparecía hasta terminar — justo la que más
- *  importa. Ahora la racha en curso cuenta desde el momento en que ocurre (fila
- *  marcada "ahora") y, si crece, pasa a la fila siguiente. Filas 1 a 4 siempre
- *  visibles (4 es el tope que Gunner quiere no pasar); 5 a 10 aparecen cuando
- *  ya pasaron o están pasando (10 = "10 o más").
+ *  FIX (oct 2026) — Gunner: "el contador dice voy 5 para 1 error pero solo
+ *  funciona si hay 1 error; si llega a 2 o a 3 no aplica, y de todas maneras
+ *  está cometiendo un error". Tenía razón: la tabla contaba rachas CERRADAS de
+ *  largo EXACTO, así que la fila "1 error" ignoraba todo error que terminaba
+ *  en racha de 2 o más (en las 59 sesiones guardadas, 57% de los errores), y su
+ *  "voy" seguía subiendo mientras se fallaba. Ahora la fila N cuenta "llega a N
+ *  o más", anotada en el momento en que ocurre: cada error reinicia la fila
+ *  que le toca, la racha en curso aparece al instante (no hay que esperar a
+ *  que termine) y no depende de cómo termine. Filas 1 a 4 siempre visibles
+ *  (4 es el tope que Gunner quiere no pasar); 5 a 10 aparecen cuando ya
+ *  llegaron (10 = "10 o más").
  *
- *  "voy" = en qué giro va: cuántos giros puntuados de este marcador pasaron
- *  desde la última vez que ocurrió esa racha (o desde que empezó la sesión, si
- *  hoy no ha pasado). Informa; no predice — las rachas son independientes. */
+ *  "voy" = en qué giro va: giros puntuados de este marcador desde la última
+ *  vez que la racha llegó a N (o desde que empezó la sesión, si hoy no ha
+ *  llegado). Si la racha de AHORA ya llegó a N, dice "ahora". Informa; no
+ *  predice — las rachas son independientes. */
 function RachasFrecuencia({ rachas, ult, live, scored, titulo, q }: {
   rachas: number[]; ult: number[]; live: number; scored: number; titulo: string; q: number;
 }) {
   const MAX_LEN = 10;
-  const liveLen = Math.min(live, MAX_LEN);
-  const filas: { len: number; c: number; enCurso: boolean }[] = [];
+  const filas: number[] = [];
   for (let len = 1; len <= MAX_LEN; len++) {
-    const enCurso = live > 0 && liveLen === len;
-    const c = (rachas[len] ?? 0) + (enCurso ? 1 : 0);   // cerradas + la que está en curso
-    if (len > 4 && c === 0) continue;
-    filas.push({ len, c, enCurso });
+    if (len <= 4 || (rachas[len] ?? 0) > 0) filas.push(len);
   }
   // FIX (oct 2026) — Gunner: "los errores seguidos están cortados en la tercera
   // columna". Cada racha era UN texto largo con nowrap en una columna de ~200px
   // útiles y el contenedor recortaba el "normal" y la flecha. Ahora es TABLA de
-  // columnas fijas (racha · cada · normal · voy), con encabezado.
+  // columnas fijas (llega a · cada · normal · voy), con encabezado.
   const H: React.CSSProperties = { fontSize: 9.5, color: '#7d8aa0', textAlign: 'right' };
   return (
     <div style={{ marginTop: 5 }}>
@@ -579,30 +581,34 @@ function RachasFrecuencia({ rachas, ult, live, scored, titulo, q }: {
         {titulo}
       </span>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 38px 38px 36px', columnGap: 5, rowGap: 1, maxWidth: 290, marginTop: 3, fontFamily: FONT_MONO, fontSize: 11.5 }}>
-        <span style={{ fontSize: 9.5, color: '#7d8aa0' }}>racha</span>
+        <span style={{ fontSize: 9.5, color: '#7d8aa0' }} title="la racha de errores llega a este largo (o más)">llega a</span>
         <span style={H} title="cada cuántos giros pasa hoy">cada</span>
         <span style={H} title="cada cuántos giros pasa en promedio en todas las sesiones guardadas">normal</span>
-        <span style={H} title="giros que lleva desde la última vez que pasó (o desde que empezó la sesión si hoy no ha pasado)">voy</span>
-        {filas.map(({ len, c, enCurso }) => {
+        <span style={H} title="giros que lleva desde la última vez que llegó (o desde que empezó la sesión si hoy no ha llegado)">voy</span>
+        {filas.map((len) => {
+          const c = rachas[len] ?? 0;
           const cada = c > 0 ? Math.max(1, Math.round(scored / c)) : null;
-          // "Normal" = cada cuántos giros pasa esa racha en las sesiones guardadas
-          // (a partir del % de error de esta capa: ERR_NORMAL). Solo se marca
-          // más seguido / más espaciado con ≥80 giros puntuados y ≥2 veces (antes es ruido).
-          const normal = len >= MAX_LEN ? null : Math.round(1 / (Math.pow(1 - q, 2) * Math.pow(q, len)));
+          // "Normal" = cada cuántos giros la racha llega a N o más por azar, con el
+          // % de error de esta capa (ERR_NORMAL): una racha de ≥N empieza tras un
+          // acierto y sigue con N errores → 1 / ((1-q) · qᴺ). Solo se marca más
+          // seguido / más espaciado con ≥80 giros puntuados y ≥2 veces (antes es ruido).
+          const normal = Math.round(1 / ((1 - q) * Math.pow(q, len)));
           const confiable = scored >= 80 && c >= 2;
-          const masSeguido = cada !== null && normal !== null && confiable && cada < normal * 0.7;
-          const masEspaciado = cada !== null && normal !== null && confiable && cada > normal * 1.5;
+          const masSeguido = cada !== null && confiable && cada < normal * 0.7;
+          const masEspaciado = cada !== null && confiable && cada > normal * 1.5;
           const sinDatos = c === 0;
           const color = sinDatos ? '#6b778c' : len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#b4c0d4';
           const colorCada = masSeguido ? '#ff9f1a' : masEspaciado ? '#00ff9d' : (len >= 4 ? '#ff1e38' : '#ffffff');
-          // voy: giros desde la última vez (o desde el inicio si no ha pasado hoy)
-          const voy = enCurso ? 0 : c > 0 ? Math.max(0, scored - (ult[len] ?? 0)) : scored;
+          // la racha de AHORA ya llegó a este largo → "ahora"; si no, giros desde
+          // la última vez (o desde el inicio de la sesión si hoy no ha llegado)
+          const enRacha = live >= len;
+          const voy = enRacha ? 0 : c > 0 ? Math.max(0, scored - (ult[len] ?? 0)) : scored;
           const ref = cada ?? normal;
-          const voyColor = enCurso ? '#ff1e38' : ref !== null && voy >= ref ? '#ffdf60' : '#cbd5e1';
+          const voyColor = enRacha ? '#ff1e38' : voy >= ref ? '#ffdf60' : '#cbd5e1';
           return (
             <Fragment key={len}>
               <span style={{ color, whiteSpace: 'nowrap' }}>
-                {len === 1 ? '1 error' : len >= MAX_LEN ? '10+ seg.' : `${len} seguidos`}
+                {len === 1 ? '1 error' : len >= MAX_LEN ? '10 o más' : `${len} seguidos`}
               </span>
               <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                 {cada !== null ? <b style={{ color: colorCada }}>{cada}</b> : <span style={{ color: '#6b778c' }}>—</span>}
@@ -615,12 +621,12 @@ function RachasFrecuencia({ rachas, ult, live, scored, titulo, q }: {
                   </span>
                 )}
               </span>
-              <span style={{ opacity: 0.75, textAlign: 'right' }}>{normal !== null ? normal : '—'}</span>
+              <span style={{ opacity: 0.75, textAlign: 'right' }}>{normal}</span>
               <span
-                style={{ textAlign: 'right', color: voyColor, fontWeight: enCurso ? 800 : 400, whiteSpace: 'nowrap' }}
-                title={enCurso ? 'racha en curso: todavía no cerró' : sinDatos ? 'giros desde que empezó la sesión sin que pase' : 'giros desde la última vez que pasó'}
+                style={{ textAlign: 'right', color: voyColor, fontWeight: enRacha ? 800 : 400, whiteSpace: 'nowrap' }}
+                title={enRacha ? 'la racha de ahora ya llegó a este largo' : sinDatos ? 'giros desde que empezó la sesión sin que llegue' : 'giros desde la última vez que llegó'}
               >
-                {enCurso ? 'ahora' : voy}
+                {enRacha ? 'ahora' : voy}
               </span>
             </Fragment>
           );
@@ -947,7 +953,7 @@ export function CopilotScoreboard({ bare = false }: { bare?: boolean } = {}) {
   const copWr = useCopWr();
   const copLive = useCopLiveStreak();
   const copStreak = useCopStreak(); // peor racha de la sesión (maxStreak)
-  const copRachas = useCopRachas(); // frecuencia de rachas cerradas hoy (idx = largo, 10 = 10+)
+  const copRachas = useCopRachas(); // veces que la racha llegó a N hoy (idx = N, 10 = 10 o más)
   const copUlt = useCopRachasUlt(); // giro en que pasó por última vez cada largo
 
   // v7 (oct 2026): glow reservado para lo crítico/accionable (ACIERTOS,
