@@ -81,6 +81,7 @@ import {
 // baja: "el escudo numero 2... no sirve". Se sacó por completo de
 // copilot.ts — decidirPiloto() hoy es 1:1 con la Capa 1.
 import type { MarketRead } from '@/domain/copilot';
+import { ERR_NORMAL, filasRacha, RACHA_MAX_LEN } from '@/domain/rachasFrecuencia';
 import { leerCalor, resumenVolvio, CALOR_VENTANA, CALOR_VENTANA_DOS, CALOR_VUELTA, type LecturaCalor } from '@/domain/calor';
 
 const FONT_HEAD = "'Rajdhani', sans-serif";
@@ -93,7 +94,7 @@ const FONT_MONO = "'JetBrains Mono', monospace";
 // que el nivel "precaución" de CopilotOrder, que usa esta misma semántica
 // (esperar/no hay entrada sólida todavía). SANTUARIO/VERDE/TÓXICA/AGUJERO/
 // NEUTRA quedan igual — no hubo pedido de tocarlos.
-const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: string }> = {
+export const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: string }> = {
   SANTUARIO: { label: 'SANTUARIO', color: '#00ff9d', glow: 'rgba(0,255,157,0.85)', dim: 'rgba(0,255,157,0.15)' },
   VERDE:     { label: 'VERDE',     color: '#10e57b', glow: 'rgba(16,229,123,0.70)', dim: 'rgba(16,229,123,0.12)' },
   PROBE:     { label: 'PROBE',     color: '#f4f8ff', glow: 'rgba(244,248,255,0.55)', dim: 'rgba(244,248,255,0.12)' },
@@ -102,7 +103,7 @@ const STYLE: Record<Zone, { label: string; color: string; glow: string; dim: str
   NEUTRA:    { label: 'SIN DATOS', color: '#5c687a', glow: 'rgba(92,104,122,0.40)', dim: 'rgba(92,104,122,0.10)' },
 };
 
-const INSTRUCCION: Record<Zone, string> = {
+export const INSTRUCCION: Record<Zone, string> = {
   SANTUARIO: 'Entrá con confianza. Progresión normal.',
   VERDE:     'Operá. Progresión suave.',
   PROBE:     'Esperá 1 error antes de entrar.',
@@ -537,7 +538,7 @@ function useMarketRead(mkt: Market): MarketRead {
  *  puntúa solo el mercado de la ▲ PRIORIDAD su error real es 34,9%, y con 0,22
  *  el "normal" salía absurdo (4 seguidos "normal 702", 7 seguidos "normal
  *  65895"). Se afina cuando entren sesiones nuevas. */
-const ERR_NORMAL = { real: 0.3489, capa1: 0.3348, escudo: 0.349 };
+// (ERR_NORMAL vive ahora en domain/rachasFrecuencia.ts — mismos valores.)
 
 /** FRECUENCIA DE RACHAS EN VIVO (oct 2026) — pedido de Gunner: "que me diga
  *  el copiloto, el motor, el escudo viene cometiendo un error cada X giros,
@@ -565,11 +566,8 @@ const ERR_NORMAL = { real: 0.3489, capa1: 0.3348, escudo: 0.349 };
 function RachasFrecuencia({ rachas, ult, live, scored, titulo, q }: {
   rachas: number[]; ult: number[]; live: number; scored: number; titulo: string; q: number;
 }) {
-  const MAX_LEN = 10;
-  const filas: number[] = [];
-  for (let len = 1; len <= MAX_LEN; len++) {
-    if (len <= 4 || (rachas[len] ?? 0) > 0) filas.push(len);
-  }
+  const MAX_LEN = RACHA_MAX_LEN;
+  const filas = filasRacha(rachas, ult, live, scored, q);
   // FIX (oct 2026) — Gunner: "los errores seguidos están cortados en la tercera
   // columna". Cada racha era UN texto largo con nowrap en una columna de ~200px
   // útiles y el contenedor recortaba el "normal" y la flecha. Ahora es TABLA de
@@ -585,25 +583,9 @@ function RachasFrecuencia({ rachas, ult, live, scored, titulo, q }: {
         <span style={H} title="cada cuántos giros pasa hoy">cada</span>
         <span style={H} title="cada cuántos giros pasa en promedio en todas las sesiones guardadas">normal</span>
         <span style={H} title="giros que lleva desde la última vez que llegó (o desde que empezó la sesión si hoy no ha llegado)">voy</span>
-        {filas.map((len) => {
-          const c = rachas[len] ?? 0;
-          const cada = c > 0 ? Math.max(1, Math.round(scored / c)) : null;
-          // "Normal" = cada cuántos giros la racha llega a N o más por azar, con el
-          // % de error de esta capa (ERR_NORMAL): una racha de ≥N empieza tras un
-          // acierto y sigue con N errores → 1 / ((1-q) · qᴺ). Solo se marca más
-          // seguido / más espaciado con ≥80 giros puntuados y ≥2 veces (antes es ruido).
-          const normal = Math.round(1 / ((1 - q) * Math.pow(q, len)));
-          const confiable = scored >= 80 && c >= 2;
-          const masSeguido = cada !== null && confiable && cada < normal * 0.7;
-          const masEspaciado = cada !== null && confiable && cada > normal * 1.5;
-          const sinDatos = c === 0;
+        {filas.map(({ len, c, cada, normal, masSeguido, masEspaciado, sinDatos, enRacha, voy, ref }) => {
           const color = sinDatos ? '#6b778c' : len >= 4 ? '#ff1e38' : len === 3 ? '#f4f8ff' : '#b4c0d4';
           const colorCada = masSeguido ? '#ff9f1a' : masEspaciado ? '#00ff9d' : (len >= 4 ? '#ff1e38' : '#ffffff');
-          // la racha de AHORA ya llegó a este largo → "ahora"; si no, giros desde
-          // la última vez (o desde el inicio de la sesión si hoy no ha llegado)
-          const enRacha = live >= len;
-          const voy = enRacha ? 0 : c > 0 ? Math.max(0, scored - (ult[len] ?? 0)) : scored;
-          const ref = cada ?? normal;
           const voyColor = enRacha ? '#ff1e38' : voy >= ref ? '#ffdf60' : '#cbd5e1';
           return (
             <Fragment key={len}>

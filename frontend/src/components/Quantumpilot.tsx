@@ -84,10 +84,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
-import { CopilotOrder, CopilotScoreboard, ZoneDetailGrid, ZoneQuickBadges } from '@/components/MatrixPanel';
-import { CategoryTable, toState, pickLabel, type BadgeState } from '@/components/CategoryTable';
-import { GodBetPanel } from '@/components/GodBetPanel';
-import { BankrollLedger } from '@/components/BankrollLedger';
+import { PilotTerminal } from '@/components/pilot/PilotTerminal';
+import { BankrollBar } from '@/components/pilot/BankrollBar';
+import { C as PILOT_C, densityForHeight, shellHeightFor } from '@/components/pilot/theme';
+import { useCopLiveStreak } from '@/store/telemetryStore';
 
 // ── Tipos ─────────────────────────────────────────────────────────
 
@@ -351,107 +351,13 @@ function ParticleCanvas({ active }: { active: boolean }) {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────
-
-// Banda de sección: rótulo + línea fina debajo, reutilizada en todo el
-// cockpit para que cada bloque diga de dónde sale el número (evita el
-// "¿cuál marcador miro?") y marque el corte con la sección siguiente sin
-// meter una caja — es la idea de "banda" de la crítica de Gunner, aplicada
-// como el separador estándar de todo el panel. `right` es para contenido
-// extra alineado a la derecha del rótulo (p. ej. los chips de ZONA).
-function Band({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: '1px solid rgba(34, 211, 238, 0.3)', paddingBottom: 5,
-      }}
-    >
-      <span
-        className="text-[12px] font-bold"
-        style={{ letterSpacing: '0.3em', color: '#22d3ee', textShadow: '0 0 9px rgba(34,211,238,0.6)' }}
-      >
-        {children}
-      </span>
-      {right}
-    </div>
-  );
-}
-
-// Micropanel genérico — borde + fondo sutil + glow, UNA sola capa. Mismo
-// criterio que microPanel() en MatrixPanel.tsx, replicado acá porque este
-// archivo no importa estilos de ese módulo.
-//
-// v7 (oct 2026) — rediseño cockpit: backdrop-filter real (glassmorphism),
-// mismo cambio que en MatrixPanel.tsx — pedido explícito de Gunner sobre el
-// prototipo. Cero cambio de lógica.
-function microPanel(accent: string, glowStrength = 0.14): React.CSSProperties {
-  const alphaHex = Math.round(glowStrength * 255).toString(16).padStart(2, '0');
-  return {
-    border: `1px solid ${accent}66`,
-    background: 'rgba(10, 16, 28, 0.55)',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    borderRadius: 10,
-    boxShadow: `0 0 16px ${accent}${alphaHex}, inset 0 1px 0 ${accent}14`,
-  };
-}
-
-// Pick concreto de DOCENAS/COLUMNAS (1-12, Col 2, etc.) — responde el
-// reclamo de Gunner: el veredicto del copiloto ("DOCENAS · ENTRÁ") dice QUÉ
-// MERCADO, no CUÁL docena/columna específica. Lee bet_advice con la MISMA
-// función (toState/pickLabel) que usa CategoryTable, así nunca puede mostrar
-// algo distinto de lo que dice la fila "Docenas"/"Columnas" de la tabla.
-// Va pegado a CopilotOrder, arriba de todo — cero scroll para verlo.
-//
-// v4: micropanel completo (borde + fondo del color de estado) en vez de
-// solo acento lateral — más fácil de ubicar de un vistazo. FIX real: el
-// pick se cortaba con elipsis (maxWidth:150) y tapaba la segunda columna/
-// docena sugerida — eso es información que el operador necesita para
-// jugar, nunca se debe ocultar. Ahora el texto se ve completo, envuelve en
-// dos líneas si hace falta en vez de truncarse.
-// v7 (oct 2026): PRB deja de ser ámbar (blanco neón, mismo criterio que en
-// CategoryTable.tsx/MatrixPanel.tsx). WT pasa de gris a cian — ya no hace
-// falta reservar el gris para "sin acción": ahora el color vive en el fondo
-// de la píldora, no en todo el bloque.
-const BADGE_COLOR: Record<BadgeState, string> = { bet: '#4ade80', prb: '#f4f8ff', wt: '#67e8f9' };
-const BADGE_BG: Record<BadgeState, string> = {
-  bet: 'rgba(74,222,128,0.14)', prb: 'rgba(244,248,255,0.12)', wt: 'rgba(34,211,238,0.12)',
-};
-const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
-
-// v7: pasa de micropanel propio a FILA dentro de la tarjeta DECISIÓN (ver
-// el nuevo render más abajo) — Gunner pidió que ZONA/DECISIÓN/MARCADOR/
-// BANKROLL/tabla sean, cada uno, UNA sola tarjeta; DOCENAS y COLUMNAS viven
-// ahora como dos filas de esa tarjeta, separadas por una línea fina en vez
-// de ser dos cajas propias dentro de otra caja.
-function DocColQuickPick({ label, state, pick, last = false }: { label: string; state: BadgeState; pick: string; last?: boolean }) {
-  const color = BADGE_COLOR[state];
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '11px 2px', borderBottom: last ? 'none' : '1px solid rgba(255,255,255,0.055)' }}>
-      <span className="flex items-center gap-2 shrink-0">
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}` }} />
-        <span className="text-[13.5px] text-gray-400" style={{ letterSpacing: '0.1em' }}>{label}</span>
-      </span>
-      <span className="flex items-center gap-2 min-w-0" style={{ justifyContent: 'flex-end' }}>
-        <span
-          style={{
-            fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', color,
-            background: BADGE_BG[state], borderRadius: 4, padding: '3px 7px', flexShrink: 0,
-          }}
-        >
-          {BADGE_TXT[state]}
-        </span>
-        <span
-          title={pick}
-          className="font-black text-white"
-          style={{ fontSize: 19, whiteSpace: 'normal', overflowWrap: 'break-word', textAlign: 'right', lineHeight: 1.25 }}
-        >
-          {pick}
-        </span>
-      </span>
-    </div>
-  );
+// Posición inicial vertical: 100 px si la ventana es alta; si es de portátil se
+// sube para que el panel (~600 px de alto) quede ENTERO a la vista sin tener
+// que arrastrarlo. Solo el arranque — el usuario lo mueve igual que siempre.
+function initialY(): number {
+  if (typeof window === 'undefined') return 100;
+  const alto = shellHeightFor(densityForHeight(window.innerHeight));
+  return Math.max(8, Math.min(100, window.innerHeight - alto - 8));
 }
 
 // ── Componente principal ─────────────────────────────────────────
@@ -463,8 +369,9 @@ export function QuantumPilot({
   bankroll,
   errorHist = {},
 }: Props) {
-  const { pos, onMouseDown } = useDrag({ x: 20, y: 100 });
+  const { pos, onMouseDown } = useDrag({ x: 20, y: initialY() });
   const [minimized, setMinimized] = useState(false);
+  const copLive = useCopLiveStreak();   // solo para el color del borde (lectura del store)
 
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -620,365 +527,94 @@ export function QuantumPilot({
   }
 
   // ── Render principal
+  // v8 (oct 2026) — TERMINAL DE LECTURA RÁPIDA: el cuerpo vive en
+  // components/pilot/PilotTerminal.tsx (3 niveles, una pantalla, sin scroll).
+  // Acá solo queda el cascarón flotante (drag, minimizar, borde) y la lógica de
+  // GOD/override de siempre, pasada por props.
+  const radarScore = godBet.radar_score;
+  const lockLoading = !!topPick && loadingKey === topPick.bet_key;
+  const isOverride = !!topPick && override?.bet_key === topPick.bet_key;
+
+  // Borde ambiente = errores seguidos del marcador real (cian calmado → ámbar
+  // a 3 → rojo a 4+). Es lo ÚNICO que cambia el cascarón; GOD ya no pinta todo
+  // el panel de rojo (su estado vive en el bloque GOD y en la tabla).
+  const borde =
+    copLive >= 4 ? 'rgba(255, 77, 99, 0.75)'
+    : copLive === 3 ? 'rgba(245, 178, 58, 0.6)'
+    : 'rgba(51, 208, 232, 0.28)';
+
   return (
     <div
-      className="fixed z-50 w-[1060px] max-w-[95vw] max-h-[96vh] rounded-xl overflow-hidden font-mono text-gray-200 select-none flex flex-col"
+      className="fixed z-50 w-[1060px] max-w-[95vw] max-h-[96vh] rounded-lg overflow-hidden font-mono select-none flex flex-col"
+      data-qp="shell"
       style={{
         left: pos.x,
         top: pos.y,
-        background:
-          'linear-gradient(145deg, rgba(8, 12, 22, 0.95) 0%, rgba(15, 23, 42, 0.92) 50%, rgba(8, 12, 22, 0.95) 100%)',
-        backdropFilter: 'blur(20px) saturate(140%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(140%)',
-        border: godBet.active
-          ? '1px solid rgba(220, 38, 38, 0.5)'
-          : '1px solid rgba(34, 211, 238, 0.25)',
-        boxShadow: godBet.active
-          ? '0 0 0 1px rgba(220, 38, 38, 0.15) inset, 0 0 25px rgba(220, 38, 38, 0.35), 0 8px 32px rgba(0, 0, 0, 0.6)'
-          : '0 0 0 1px rgba(34, 211, 238, 0.08) inset, 0 0 25px rgba(34, 211, 238, 0.18), 0 8px 32px rgba(0, 0, 0, 0.6)',
+        background: PILOT_C.bg0,
+        color: PILOT_C.ink,
+        border: `1px solid ${borde}`,
+        boxShadow: '0 10px 36px rgba(0, 0, 0, 0.65)',
       }}
     >
-      <ParticleCanvas active={godBet.active} />
-
-      {/* ═══ Header ═══ */}
+      {/* ═══ Header (arrastrable) ═══ */}
       <div
-        className="relative z-10 flex items-center justify-between px-4 py-3 cursor-grab active:cursor-grabbing"
+        className="flex items-center justify-between px-3 cursor-grab active:cursor-grabbing"
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
-        style={{
-          background: godBet.active
-            ? 'linear-gradient(90deg, rgba(127, 29, 29, 0.4) 0%, rgba(69, 10, 10, 0.2) 100%)'
-            : 'linear-gradient(90deg, rgba(8, 47, 73, 0.4) 0%, rgba(15, 23, 42, 0.2) 100%)',
-          borderBottom: godBet.active
-            ? '1px solid rgba(220, 38, 38, 0.3)'
-            : '1px solid rgba(34, 211, 238, 0.2)',
-        }}
+        style={{ height: 28, flexShrink: 0, background: PILOT_C.bg1, borderBottom: `1px solid ${PILOT_C.line}` }}
       >
-        <div className="flex items-center gap-2.5">
-          <span
-            className={`text-xl ${godBet.active ? 'text-red-400 animate-pulse' : 'text-cyan-400'}`}
-            style={{
-              textShadow: godBet.active
-                ? '0 0 10px rgba(220, 38, 38, 0.8), 0 0 20px rgba(220, 38, 38, 0.4)'
-                : '0 0 10px rgba(34, 211, 238, 0.8), 0 0 20px rgba(34, 211, 238, 0.4)',
-            }}
-          >
-            ⚡
-          </span>
-          <span
-            className="font-bold text-[15px]"
-            style={{
-              letterSpacing: '0.25em',
-              color: godBet.active ? '#fca5a5' : '#67e8f9',
-              textShadow: godBet.active
-                ? '0 0 8px rgba(220, 38, 38, 0.5)'
-                : '0 0 8px rgba(34, 211, 238, 0.4)',
-            }}
-          >
-            QUANTUM PILOT
-          </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span style={{ color: godBet.active ? PILOT_C.white : PILOT_C.danna, fontSize: 14 }} className={godBet.active ? 'animate-pulse' : ''}>⚡</span>
+          <span className="font-bold" style={{ fontSize: 12, letterSpacing: '0.28em', color: PILOT_C.ink }}>QUANTUM PILOT</span>
+        </div>
+        {/* BANKROLL & LEDGER — barra de estado en el encabezado (manual, local).
+            Sin arrastre: los campos son editables. */}
+        <div
+          className="flex-1 min-w-0 mx-3 cursor-default"
+          style={{ height: '100%' }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <BankrollBar />
         </div>
         <button
+          type="button"
+          aria-label="Minimizar Quantum Pilot"
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={() => setMinimized(true)}
-          className="text-gray-500 hover:text-cyan-300 px-2 text-lg focus:outline-none transition-colors"
+          className="px-2 text-lg leading-none transition-colors"
+          style={{ color: PILOT_C.ink3 }}
         >
           —
         </button>
       </div>
 
-      {/* Scan-line decorativa */}
-      <div
-        className="relative z-10 h-px w-full"
-        style={{
-          background: godBet.active
-            ? 'linear-gradient(90deg, transparent 0%, rgba(220, 38, 38, 0.6) 50%, transparent 100%)'
-            : 'linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.5) 50%, transparent 100%)',
-        }}
-      />
-
-      <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col p-4 gap-3 pilot-scroll">
-        {/* ═══ 1. Estado verdict — UN micropanel con divisores internos,
-             igual que CopilotScoreboard (MatrixPanel.tsx). v4: antes era
-             una fila suelta sin separación real del resto del scroll. ═══ */}
-        <div style={{ display: 'flex', alignItems: 'stretch', padding: '10px 4px', ...microPanel('#22d3ee', 0.1) }}>
-          <div style={{ flex: 1, padding: '0 14px', borderRight: '1px solid rgba(34,211,238,0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <span className="text-[11.5px] text-gray-400" style={{ letterSpacing: '0.25em' }}>ESTADO</span>
-            <span
-              className="font-black text-lg"
-              style={{
-                letterSpacing: '0.08em', marginTop: 3,
-                color: godBet.active ? '#f87171' : '#f4f8ff',
-                textShadow: godBet.active
-                  ? '0 0 12px rgba(248, 113, 113, 0.7)'
-                  : '0 0 12px rgba(244, 248, 255, 0.55)',
-              }}
-            >
-              {topPick ? 'CON PICK' : 'EN ESPERA'}
-            </span>
-          </div>
-          <div style={{ padding: '0 14px', borderRight: '1px solid rgba(34,211,238,0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 72 }}>
-            <span className="text-[11.5px] text-gray-400" style={{ letterSpacing: '0.2em' }}>HUD</span>
-            <span className="font-bold text-[15px] truncate" style={{ color: '#67e8f9', marginTop: 3, textShadow: '0 0 7px rgba(103,232,249,0.5)' }}>{hudState}</span>
-          </div>
-          <div style={{ padding: '0 14px', borderRight: '1px solid rgba(34,211,238,0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 58 }}>
-            <span className="text-[11.5px] text-gray-400" style={{ letterSpacing: '0.2em' }}>RADAR</span>
-            <span className="font-black text-lg" style={{ color: godBet.radar_score >= 7 ? '#4ade80' : '#cbd5e1', marginTop: 3 }}>
-              {godBet.radar_score}/10
-            </span>
-          </div>
-          <div
-            style={{ paddingLeft: 14, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 96 }}
-            title={`Grupos individuales de ${godBet.best_p_key ?? '—'} y su suma`}
-          >
-            <span className="text-[10.5px] text-gray-400" style={{ letterSpacing: '0.12em' }}>
-              {({
-                docenas: 'DOC', columnas: 'COL', color: 'CLR',
-                paridad: 'PAR', rango: 'RNG',
-              } as Record<string, string>)[godBet.best_p_key ?? ''] ?? (godBet.best_p_key ?? 'P').toUpperCase()}
-            </span>
-            <span className="text-[12px] font-mono text-cyan-400 leading-tight">
-              {(godBet.best_g1 ?? '—')} {godBet.best_p1 != null ? (godBet.best_p1 * 100).toFixed(1) : '—'}
-            </span>
-            <span className="text-[12px] font-mono text-cyan-500 leading-tight">
-              {(godBet.best_g2 ?? '—')} {godBet.best_p2 != null ? (godBet.best_p2 * 100).toFixed(1) : '—'}
-            </span>
-            <span className="font-black text-sm font-mono" style={{ color: '#67e8f9', textShadow: '0 0 7px rgba(103,232,249,0.5)' }}>
-              Σ{godBet.best_p_raw != null ? (godBet.best_p_raw * 100).toFixed(1) : '—'}%
-            </span>
-          </div>
-        </div>
-
-        {/* oct 2026 — barra "MESA" (CCS 0/100) retirada a pedido de Gunner:
-             no le servía. Con ella se fue también fmtPctClass/ccsPct, que
-             solo existían para pintarla. */}
-
-        {/* ═══════════════════════════════════════════════════════════════
-             v7 (oct 2026) — REDISEÑO COCKPIT COMPLETO. Gunner: "olvida lo
-             que tenemos empieza de cero investiga busca y encuentra la
-             mejor interfaz". Se validó layout + paleta + tipografía sobre
-             un prototipo interactivo (Artifact) antes de tocar este
-             archivo — layout aprobado:
-               ZONA (rail izq.) | DECISIÓN (centro, héroe) | MARCADOR +
-               BANKROLL (rail der.) — las tres, UNA tarjeta glass cada una.
-               SUGERENCIAS POR CATEGORÍA pasa a franja de ancho completo
-               debajo (antes era la columna central B, angosta y con la
-               tabla comprimida).
-             Reglas de layout (feedback puntual de Gunner sobre el
-             prototipo, aplicadas acá):
-               1. Glassmorphism real (microPanel() ya trae backdrop-filter
-                  desde este mismo pase — ver arriba).
-               2. Blanco neón en vez de naranja/ámbar en toda la columna
-                  DECISIÓN/MARCADOR (ver TARGET LOCK, GOD TARGET, badges).
-               3. Glow reservado a lo crítico: el pick activo, P&L,
-                  aciertos/errores — el resto queda mate.
-               4. MARCADOR + GOD TARGET comparten UNA tarjeta, separados por
-                  tono (no por línea) — mismo criterio que ZONA
-                  (ZoneDetailGrid `grouped`).
-               5. Badges + zebra en la tabla — ver CategoryTable.tsx.
-             DECISIÓN es la única sección que NO se volvió una tarjeta
-             externa nueva: CopilotOrder/DocColQuickPick/TARGET LOCK ya eran
-             3-4 micropaneles independientes (arquitectura que v6 fijó a
-             propósito — "nunca anidar"). En vez de meterlos dentro de una
-             quinta caja (lo que duplicaría bordes), CopilotOrder pasa a
-             `bare` + `hero` y las demás piezas se aplanan a filas — el
-             resultado visual es UNA tarjeta (igual al prototipo), sin cajas
-             anidadas en el código. ═══════════════════════════════════════ */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '264px 1fr 236px', gap: 14, alignItems: 'start' }}>
-
-        {/* ── COLUMNA IZQUIERDA: ZONA — ahora rail, UNA tarjeta (antes
-             columna C, dos micropaneles sueltos). ── */}
-        <div className="flex flex-col gap-1.5">
-          <Band right={<ZoneQuickBadges />}>ZONA</Band>
-          <ZoneDetailGrid direction="column" compact grouped />
-        </div>
-
-        {/* ── COLUMNA CENTRAL: DECISIÓN — tratamiento héroe. UNA tarjeta
-             (microPanel acá, bare+hero en CopilotOrder adentro). ── */}
-        <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: 4, ...microPanel('#67e8f9', 0.06) }}>
-          <Band>DECISIÓN</Band>
-          <div style={{ marginTop: 10 }}>
-            <CopilotOrder hero bare />
-          </div>
-
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '10px 0 2px' }} />
-
-          {/* Pick concreto de cada mercado — el copiloto dice QUÉ mercado
-              (docenas o columnas), esto dice CUÁL docena/columna. Mismo
-              bet_advice que lee la fila "Docenas"/"Columnas" de la tabla
-              de abajo, sin tener que scrollear hasta ahí para verlo.
-              v7: pasan de 2 micropaneles propios a 2 filas de esta misma
-              tarjeta, separadas por una línea fina. */}
-          {(() => {
-            const advice: Record<string, any> = (payload as any)?.decision?.bet_advice ?? {};
-            const docState = toState(advice['docenas']);
-            const colState = toState(advice['columnas']);
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <DocColQuickPick label="DOCENAS" state={docState} pick={pickLabel(advice['docenas'])} />
-                <DocColQuickPick label="COLUMNAS" state={colState} pick={pickLabel(advice['columnas'])} last />
-              </div>
-            );
-          })()}
-
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '2px 0 10px' }} />
-
-          <span className="text-[10px] text-gray-500" style={{ letterSpacing: '0.2em' }}>
-            GOD · ALTA PRECISIÓN (motor alterno — activa solo con OPTIMAL + Radar ≥7)
-          </span>
-
-          {/* v7: deja de tener microPanel() propio (eso anidaría una caja
-              dentro de la tarjeta DECISIÓN) — pasa a borde + lavado de
-              fondo tenue, sin boxShadow de halo exterior. El glow fuerte
-              sigue siendo el del pick (pick_pretty): es la decisión en
-              curso, el dato más crítico de todo el panel. Blanco neón en
-              vez de ámbar para el estado "override del operador" (antes
-              #fbbf24/#fcd34d/#fde68a). */}
-          {topPick ? (
-            <button
-              onClick={() => handleBetClick(topPick)}
-              disabled={loadingKey === topPick.bet_key}
-              className="w-full text-left transition-all"
-              style={{
-                padding: '15px 16px',
-                marginTop: 8,
-                borderRadius: 8,
-                border: `1px solid ${override?.bet_key === topPick.bet_key ? 'rgba(244,248,255,0.35)' : 'rgba(34,211,238,0.35)'}`,
-                background: override?.bet_key === topPick.bet_key ? 'rgba(244,248,255,0.07)' : 'rgba(34,211,238,0.07)',
-                cursor: 'pointer',
-              }}
-            >
-              <div className="flex justify-between items-center mb-1.5">
-                <span
-                  className="text-[14px] font-bold"
-                  style={{ letterSpacing: '0.2em', color: override?.bet_key === topPick.bet_key ? '#f4f8ff' : '#67e8f9' }}
-                >
-                  {override?.bet_key === topPick.bet_key ? '◉ TU APUESTA' : 'TARGET LOCK'}
-                </span>
-                {verdict?.override_forced_go ? (
-                  <span
-                    className="text-[10.5px] font-bold"
-                    style={{ letterSpacing: '0.15em', color: '#f4f8ff' }}
-                    title="Override forzó GO sobre threshold del Pilot (CCS ≥ 60% en mesa CAUTION)"
-                  >
-                    ⚠ OVERRIDE FORZADO
-                  </span>
-                ) : null}
-                <span
-                  className="text-xl font-black"
-                  style={{
-                    color:
-                      topPick.conf_pct >= 80 ? '#67e8f9'
-                        : topPick.conf_pct >= 60 ? '#22d3ee'
-                        : topPick.conf_pct >= 40 ? '#f4f8ff'
-                        : '#94a3b8',
-                  }}
-                >
-                  {topPick.conf_pct}%
-                </span>
-              </div>
-              <div className="flex justify-between items-end">
-                <span className="text-[15px] text-gray-400" style={{ letterSpacing: '0.2em' }}>
-                  {CAT_LABEL[topPick.bet_key] ?? topPick.bet_key.toUpperCase()}
-                </span>
-                <span
-                  className="text-3xl font-black tracking-wider"
-                  style={{
-                    color: '#ffffff',
-                    textShadow:
-                      override?.bet_key === topPick.bet_key
-                        ? '0 0 16px rgba(244, 248, 255, 0.75)'
-                        : '0 0 14px rgba(34, 211, 238, 0.6)',
-                    letterSpacing: '0.05em',
-                  }}
-                >
-                  {topPick.pick_pretty}
-                </span>
-              </div>
-            </button>
-          ) : (
-            <div style={{ padding: '10px 2px', marginTop: 8 }}>
-              <span className="text-[12.5px] text-gray-500 font-bold" style={{ letterSpacing: '0.2em' }}>
-                GOD SIN TARGET — ESPERANDO
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* ── COLUMNA DERECHA: MARCADOR + GOD TARGET (UNA tarjeta,
-             agrupados por tono — v7, antes 2 micropaneles con línea entre
-             medio) y BANKROLL (tarjeta propia, ya trae su glass). ── */}
-        <div className="flex flex-col gap-3.5">
-          <div style={{ padding: 0, overflow: 'hidden', ...microPanel('#22d3ee', 0.07) }}>
-            <div style={{ padding: '12px 4px 0' }}>
-              <CopilotScoreboard bare />
-            </div>
-            {/* GOD TARGET — mismo contenedor que MARCADOR, separado por un
-                lavado de fondo (tono), no por una línea.
-                FIX (oct 2026) — Gunner: "los contadores de errores estan
-                mal no marca los errores ni aciertos que son". Antes este
-                bloque solo mostraba derivados (CONSEC/MÁX/ERR·HIT) y nunca
-                el conteo real de aciertos/errores de GOD — `hits`/`misses`
-                ya se calculaban arriba (de godTarget.wins/losses) pero no
-                se pintaban en ningún lado. Ahora ACIERTOS/ERRORES van
-                primero, mismo lenguaje visual que MARCADOR (verde/rojo), y
-                CONSEC/MÁX/ERR·HIT quedan como detalle al lado. Mismo grid
-                auto-fit que CopilotScoreboard — nunca corta, envuelve a 2
-                filas si no entra. */}
-            <div style={{ padding: '12px 10px 14px', marginTop: 8, background: 'rgba(255,255,255,0.025)' }}>
-              <span className="text-[10.5px] text-gray-500" style={{ letterSpacing: '0.2em' }}>GOD TARGET</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(58px, 1fr))', gap: '10px 4px', marginTop: 8 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ACIERTOS</div>
-                  <div className="font-bold text-lg" style={{ color: '#00ff9d' }}>{hits}</div>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERRORES</div>
-                  <div className="font-bold text-lg" style={{ color: '#ff3b56' }}>{misses}</div>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>CONSEC</div>
-                  <div className="font-bold text-lg" style={{ color: consecErr > 0 ? '#ff6b7f' : '#94a3b8' }}>{consecErr}</div>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>MÁX</div>
-                  <div className="font-bold text-lg text-white">{maxConsecErr}</div>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div className="text-[10px] text-gray-500" style={{ letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>ERR/HIT</div>
-                  <div className="font-bold text-lg" style={{ color: '#ff6b7f' }}>{errHit.toFixed(1)}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <BankrollLedger bankroll={bankroll} />
-        </div>
-
-        </div>
-        {/* ── fin grilla de 3 columnas ── */}
-
-        {/* ═══ SUGERENCIAS POR CATEGORÍA — ahora franja de ancho completo
-             (antes columna central angosta, 545-600px). Los picks de
-             DOCENAS/COLUMNAS que importan para operar ya están en DECISIÓN;
-             esto es la lectura completa (color, paridad, rango, números,
-             guardianes…), con más aire para leer W/L/SEQ/MAX sin recortes. ═══ */}
-        <div className="flex flex-col gap-1.5">
-          <Band>SUGERENCIAS POR CATEGORÍA (las 9)</Band>
-          <CategoryTable payload={payload} counters={counters} errorHist={errorHist} />
-          <GodBetPanel
-            payload={payload}
-            counters={counters}
-            countersGod={godBet.counters_god ?? {}}
-            errorHist={errorHist}
-            errorHistGod={errorHist}
-            godActive={godBet.active}
-            radarScore={godBet.radar_score}
-          />
-        </div>
-
-        </div>
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pilot-scroll" data-qp="body">
+        <PilotTerminal
+          payload={payload}
+          god={{
+            active: godBet.active,
+            hudState,
+            radar: radarScore,
+            bestKey: godBet.best_p_key,
+            g1: godBet.best_g1, g2: godBet.best_g2,
+            p1: godBet.best_p1, p2: godBet.best_p2, pRaw: godBet.best_p_raw,
+            topPick: topPick ? { bet_key: topPick.bet_key, pick_pretty: topPick.pick_pretty, conf_pct: topPick.conf_pct } : null,
+            catLabel: topPick ? (CAT_LABEL[topPick.bet_key] ?? topPick.bet_key.toUpperCase()) : '',
+            isOverride,
+            loading: lockLoading,
+            forcedGo: !!verdict?.override_forced_go,
+            onLock: () => { if (topPick) handleBetClick(topPick); },
+          }}
+          godTarget={{ hits, misses, consec: consecErr, max: maxConsecErr, errHit }}
+          table={{
+            counters,
+            countersGod: godBet.counters_god ?? {},
+            errorHist,
+            godActive: godBet.active,
+            radarScore,
+          }}
+        />
       </div>
     </div>
   );

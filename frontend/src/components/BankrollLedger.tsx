@@ -54,17 +54,17 @@ interface Props {
   bankroll: Bankroll;
 }
 
-function fmtCOP(v: number): string {
+export function fmtCOP(v: number): string {
   return '$' + Math.round(Math.abs(v)).toLocaleString('es-CO');
 }
 
 // ── Claves de localStorage — puramente informativas, viven solo en este
 // navegador. Ninguna pega a un endpoint.
-const MESA_KEY = 'danna_mesa_nombre';
-const SALDO_INICIAL_KEY = 'danna_saldo_inicial';
-const SALDO_FINAL_KEY = 'danna_saldo_final';
+export const MESA_KEY = 'danna_mesa_nombre';
+export const SALDO_INICIAL_KEY = 'danna_saldo_inicial';
+export const SALDO_FINAL_KEY = 'danna_saldo_final';
 
-function leerNumero(clave: string): number | null {
+export function leerNumero(clave: string): number | null {
   try {
     const raw = window.localStorage.getItem(clave);
     if (!raw) return null;
