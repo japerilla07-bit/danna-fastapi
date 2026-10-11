@@ -14,7 +14,7 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import React from 'react';
-import { C, FONT_UI, PAD_X, W_RIGHT, COL_GAP, LANE_GAP, W_A1, W_A2, laneHeight, bodyHeight, useDensity } from './theme';
+import { C, FONT_UI, GLASS1, glass2, rgba, neon, PAD_X, W_RIGHT, COL_GAP, LANE_GAP, W_A1, W_A2, laneHeight, bodyHeight, useDensity } from './theme';
 import { OrdenTile, RachaTile, GodTile, type GodTileProps } from './CommandRow';
 import { LaneReal, LaneCapa1, LaneEscudo } from './Lanes';
 import { Rail, type GodTargetProps } from './Rail';
@@ -55,7 +55,8 @@ export function PilotTerminal({ payload, god, godTarget, table }: PilotTerminalP
       <style>{CSS}</style>
 
       {/* VEREDICTO — superficie elevada */}
-      <div data-qp="veredicto" style={{ display: 'grid', gridTemplateColumns: `${W_A1}px ${W_A2}px 1fr`, height: t.hA, background: `linear-gradient(180deg, ${C.bg3}, ${C.bg2})`, borderRadius: 4, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.05)`, minWidth: 0 }}>
+      <div data-qp="veredicto" style={{ display: 'grid', gridTemplateColumns: `${W_A1}px ${W_A2}px 1fr`, height: t.hA, position: 'relative', minWidth: 0, ...glass2(C.danna, 0.9), background: `linear-gradient(115deg, ${rgba(C.danna, 0.16)}, ${rgba(C.capa1, 0.07)} 45%, ${rgba(C.escudo, 0.12)})`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.16), ${neon(C.danna, 18, 0.2)}` }}>
+        <span aria-hidden style={{ position: 'absolute', top: -1, left: 16, right: 16, height: 1, background: `linear-gradient(90deg, transparent, ${C.danna}, ${C.escudo}, transparent)`, boxShadow: neon(C.danna, 8, 0.9) }} />
         <OrdenTile />
         <RachaTile />
         <GodTile {...god} />
@@ -71,14 +72,14 @@ export function PilotTerminal({ payload, god, godTarget, table }: PilotTerminalP
           </div>
           <CategoryGod payload={payload} {...table} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: t.gap, minWidth: 0, minHeight: 0, height: hBody }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: t.gap, minWidth: 0, minHeight: 0, height: hBody, boxSizing: 'border-box', padding: '4px 6px 2px 6px', ...GLASS1 }}>
           <ZoneColumn />
           <CalorStrip />
         </div>
       </div>
 
       {/* ACCIONES — superficie elevada */}
-      <div style={{ height: t.hRail, background: C.bg2, borderRadius: 4, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.04)`, minWidth: 0 }}>
+      <div style={{ height: t.hRail, minWidth: 0, ...glass2(C.danna, 0.55) }}>
         <Rail god={god} godTarget={godTarget} />
       </div>
     </div>

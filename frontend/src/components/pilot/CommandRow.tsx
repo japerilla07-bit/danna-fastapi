@@ -6,7 +6,7 @@ import React, { memo } from 'react';
 import { useLiveDecision, useTelemetryStore, useCopLiveStreak, useCopStreak } from '@/store/telemetryStore';
 import { computeJuega, abrevZonas } from '@/domain/juegaEsto';
 import { useOutcomeTape, TAPE_LEN } from '@/domain/outcomeTape';
-import { C, FONT_UI, FONT_NUM, TOPE_ERRORES } from './theme';
+import { C, FONT_UI, FONT_NUM, TOPE_ERRORES, rgba, neon, glowText } from './theme';
 import { Lbl, Txt, Val, Big, StreakGauge } from './ui';
 
 const COLOR_FUENTE = { ESCUDO: C.escudo, 'CAPA 1': C.capa1 } as const;
@@ -23,7 +23,7 @@ export const OrdenTile = memo(function OrdenTile() {
   const nivelColor = d.nivel === 'ok' ? C.ok : d.nivel === 'precaucion' ? C.white : C.err;
 
   return (
-    <section aria-label="Juega esto" data-qp="orden" style={{ ...seg, gap: 'calc(var(--qp-gap) * 0.7)', borderLeft: `3px solid ${j.fuente ? colorF : C.line2}`, background: j.fuente ? `linear-gradient(90deg, ${colorF}14, transparent 70%)` : 'transparent' }}>
+    <section aria-label="Juega esto" data-qp="orden" style={{ ...seg, gap: 'calc(var(--qp-gap) * 0.7)', borderLeft: `3px solid ${j.fuente ? colorF : C.line2}`, boxShadow: j.fuente ? `inset 4px 0 14px -6px ${rgba(colorF, 0.9)}` : undefined, borderRadius: '6px 0 0 6px', background: j.fuente ? `linear-gradient(90deg, ${rgba(colorF, 0.16)}, transparent 70%)` : 'transparent' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
         <span style={{ display: 'flex', gap: 7, alignItems: 'baseline', minWidth: 0 }}>
           <Lbl color={C.ink2}>Juega esto</Lbl>
@@ -48,7 +48,7 @@ export const OrdenTile = memo(function OrdenTile() {
                     <Lbl color={on ? C.ink2 : C.ink4}>{p.etiqueta[0] + p.etiqueta.slice(1).toLowerCase()}</Lbl>
                     {p.pri && <Lbl color={C.warn} style={{ fontWeight: 600 }}>▲ prioridad</Lbl>}
                   </span>
-                  <Big size="var(--qp-fs-hero)" weight={600} color={on ? C.white : C.ink4} style={{ whiteSpace: 'nowrap' }}>
+                  <Big size="var(--qp-fs-hero)" weight={600} color={on ? C.white : C.ink4} glow={on ? 0.55 : 0} glowColor={colorF} style={{ whiteSpace: 'nowrap' }}>
                     {on ? (abrevZonas(p.zonas) || '—') : '—'}
                   </Big>
                 </div>
@@ -56,7 +56,7 @@ export const OrdenTile = memo(function OrdenTile() {
             })}
           </div>
         ) : (
-          <span data-qp="orden-espera" style={{ fontFamily: FONT_NUM, fontSize: 'var(--qp-fs-hero)', fontWeight: 600, color: C.ink2, whiteSpace: 'nowrap', lineHeight: 1 }}>NO APUESTES · ESPERA</span>
+          <span data-qp="orden-espera" style={{ fontFamily: FONT_NUM, fontSize: 'var(--qp-fs-hero)', fontWeight: 600, color: C.ink2, whiteSpace: 'nowrap', lineHeight: 1, textShadow: glowText(C.warn, 0.25) }}>NO APUESTES · ESPERA</span>
         )}
       </div>
     </section>
@@ -78,7 +78,7 @@ export const OutcomeTape = memo(function OutcomeTape({ k }: { k: 'real' | 'capa1
         <span key={`p${i}`} style={{ flex: 1, height: 6, border: `1px solid ${C.line}`, boxSizing: 'border-box', borderRadius: 1 }} />
       ))}
       {tape.map((o, i) => (
-        <span key={i} style={{ flex: 1, height: 6, borderRadius: 1, background: o === 'H' ? C.ok : C.err, opacity: o === 'H' ? 0.5 : 1 }} />
+        <span key={i} style={{ flex: 1, height: 6, borderRadius: 1, background: o === 'H' ? C.ok : C.err, opacity: o === 'H' ? 0.55 : 1, boxShadow: o === 'H' ? undefined : neon(C.err, 6, 0.7) }} />
       ))}
     </div>
   );
@@ -92,7 +92,7 @@ export const RachaTile = memo(function RachaTile() {
     <section aria-label="Errores seguidos D.A.N.N.A." data-qp="racha" style={{ ...seg, gap: 'calc(var(--qp-gap) * 0.6)', borderLeft: `1px solid ${live >= TOPE_ERRORES ? `${C.err}aa` : live === TOPE_ERRORES - 1 ? `${C.warn}88` : C.line2}` }}>
       <Lbl color={C.ink2}>Errores seguidos · D.A.N.N.A.</Lbl>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <Big size="var(--qp-fs-mega)" color={col} weight={700} style={{ minWidth: 34, textAlign: 'center' }}>
+        <Big size="var(--qp-fs-mega)" color={col} weight={700} glow={0.7} style={{ minWidth: 34, textAlign: 'center' }}>
           <span data-qp="racha-live">{live}</span>
         </Big>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
@@ -134,7 +134,7 @@ export const GodTile = memo(function GodTile(p: GodTileProps) {
   const Stat = ({ k, v, c, tid }: { k: string; v: string; c: string; tid: string }) => (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
       <Lbl>{k}</Lbl>
-      <Big size="var(--qp-fs-val)" color={c} weight={700}><span data-qp={tid}>{v}</span></Big>
+      <Big size="var(--qp-fs-val)" color={c} weight={700} glow={0.45}><span data-qp={tid}>{v}</span></Big>
     </span>
   );
   return (

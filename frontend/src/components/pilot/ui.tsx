@@ -1,5 +1,5 @@
 import React from 'react';
-import { C, FONT_NUM, FONT_UI, num, numDisplay } from './theme';
+import { C, FONT_NUM, FONT_UI, num, numDisplay, glowText } from './theme';
 
 /** Rótulo pequeño: condensada, minúscula normal (se lee a distancia sin gritar). */
 export function Lbl({ children, color = C.ink3, style }: { children: React.ReactNode; color?: string; style?: React.CSSProperties }) {
@@ -21,8 +21,8 @@ export function Val({ children, color = C.ink, size, weight = 600, style }: { ch
 }
 
 /** Cifra grande condensada (jugadas, marcadores, racha). */
-export function Big({ children, color = C.ink, size, weight = 600, style }: { children: React.ReactNode; color?: string; size: number | string; weight?: number; style?: React.CSSProperties }) {
-  return <span style={{ ...numDisplay, color, fontSize: size, fontWeight: weight, lineHeight: 1, ...style }}>{children}</span>;
+export function Big({ children, color = C.ink, size, weight = 600, glow = 0, glowColor, style }: { children: React.ReactNode; color?: string; size: number | string; weight?: number; glow?: number; glowColor?: string; style?: React.CSSProperties }) {
+  return <span style={{ ...numDisplay, color, fontSize: size, fontWeight: weight, lineHeight: 1, textShadow: glow && (glowColor ?? color).startsWith('#') ? glowText(glowColor ?? color, glow) : undefined, ...style }}>{children}</span>;
 }
 
 /** Línea fina (solo donde cambia de grupo de información). */
@@ -36,7 +36,7 @@ export function StreakGauge({ live, tope = 4, h = 7 }: { live: number; tope?: nu
   for (let i = 1; i <= tope; i++) {
     const on = live >= i;
     const col = i >= tope ? C.err : i === tope - 1 ? C.warn : C.white;
-    segs.push(<span key={i} style={{ flex: 1, height: h, borderRadius: 1, background: on ? col : C.bg3, boxShadow: on ? `0 0 6px ${col}66` : 'none' }} />);
+    segs.push(<span key={i} style={{ flex: 1, height: h, borderRadius: 1, background: on ? col : 'rgba(255,255,255,0.05)', boxShadow: on ? `0 0 8px ${col}aa, 0 0 2px ${col}` : 'inset 0 0 0 1px rgba(255,255,255,0.07)' }} />);
   }
   return <div role="img" aria-label={`${Math.min(live, tope)} de ${tope} errores seguidos`} style={{ display: 'flex', gap: 3, width: '100%' }}>{segs}</div>;
 }

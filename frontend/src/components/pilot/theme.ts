@@ -34,8 +34,8 @@ export const C = {
   // texto (contraste ≥ 4,5:1 sobre bg1/bg2 salvo ink4, solo para estados apagados)
   ink: '#eaf0f8',
   ink2: '#adb9cc',
-  ink3: '#8190aa',
-  ink4: '#6f7e97',
+  ink3: '#98a7c0',
+  ink4: '#7d8ca6',
   // función
   danna: '#33d0e8',
   capa1: '#4f8bff',
@@ -46,13 +46,42 @@ export const C = {
   white: '#f4f8ff',
 } as const;
 
+// ── Cristal y neón (v10) ─────────────────────────────────────────────────
+// Todo es ESTÁTICO (gradientes, sombras): sin animaciones ni desenfoque por tarjeta,
+// así el panel sigue costando ~0 CPU en reposo. El desenfoque va solo en el cascarón.
+/** '#rrggbb' + alfa 0-1 → 'rgba(...)'. */
+export function rgba(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+/** Resplandor de neón (sombra exterior) de un color. */
+export const neon = (hex: string, r = 12, a = 0.35) => `0 0 ${r}px ${rgba(hex, a)}`;
+/** Resplandor de cifra/letra. */
+export const glowText = (hex: string, a = 0.5) => `0 0 8px ${rgba(hex, a)}, 0 0 20px ${rgba(hex, a * 0.5)}`;
+/** Cristal base (ESTADO): vidrio ahumado con borde de luz arriba. */
+export const GLASS1: React.CSSProperties = {
+  background: 'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018))',
+  border: '1px solid rgba(255,255,255,0.075)',
+  borderRadius: 6,
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), inset 0 0 22px rgba(120,170,255,0.025)',
+};
+/** Cristal elevado (RECOMENDACIÓN / ACCIONES): teñido con el color de la función. */
+export function glass2(hex: string, strength = 1): React.CSSProperties {
+  return {
+    background: `linear-gradient(180deg, ${rgba(hex, 0.16 * strength)}, ${rgba(hex, 0.05 * strength)} 60%, rgba(255,255,255,0.02))`,
+    border: `1px solid ${rgba(hex, 0.42 * strength)}`,
+    borderRadius: 6,
+    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.14), ${neon(hex, 16, 0.16 * strength)}`,
+  };
+}
+
 /** Tope de errores seguidos que Gunner no quiere pasar. */
 export const TOPE_ERRORES = 4;
 
 // ── Retícula horizontal FIJA (el panel mide siempre 1060 px) ─────────────
 // 1060 − borde 2 − relleno 2×10 = 1038 útiles.
 export const PAD_X = 10;
-export const W_RIGHT = 284;       // columna derecha (zonas + calor)
+export const W_RIGHT = 296;       // columna derecha (zonas + calor)
 export const COL_GAP = 14;        // entre columna izquierda y derecha
 export const LANE_GAP = 16;       // entre carriles
 export const W_A1 = 436;          // franja de veredicto: JUEGA ESTO
@@ -98,14 +127,16 @@ export const LANE_STACK_GAP = 3;
 export const SHELL_HEADER = 28;
 /** Respiro inferior de cada carril y de la tabla: el cuadro tipográfico de la última fila (más alto que su fila) cae DENTRO del bloque. */
 export const LANE_PAD_B = 2;
+/** Respiro superior de cada carril/tabla (ahora son tarjetas de cristal). */
+export const LANE_PAD_T = 4;
 
 /** Alto del carril = suma de sus bloques fijos. */
 export function laneHeight(t: Dens): number {
-  return t.laneHead + 2 * t.lanePick + t.laneNote + t.laneScore + (t.ladderHead + 4 * t.ladder + 6 * t.ladderLow) + 4 * LANE_STACK_GAP + LANE_PAD_B;
+  return t.laneHead + 2 * t.lanePick + t.laneNote + t.laneScore + (t.ladderHead + 4 * t.ladder + 6 * t.ladderLow) + 4 * LANE_STACK_GAP + LANE_PAD_T + LANE_PAD_B;
 }
 /** Alto de la tabla de categorías (cabecera + 9 filas). */
 export function catHeight(t: Dens): number {
-  return t.catHead + 9 * t.tRow + 2;
+  return LANE_PAD_T + t.catHead + 9 * t.tRow + 2 + 2;
 }
 /** Alto del cuerpo central = carriles + hueco + categorías (la columna derecha usa el mismo). */
 export function bodyHeight(t: Dens): number {

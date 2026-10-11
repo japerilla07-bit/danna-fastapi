@@ -550,10 +550,17 @@ export function QuantumPilot({
       style={{
         left: pos.x,
         top: pos.y,
-        background: PILOT_C.bg0,
+        // Cristal oscuro: aurora cian/violeta + rejilla de puntos muy tenue sobre obsidiana;
+        // el desenfoque va SOLO aquí (una capa) para que no pese en cada giro.
+        background:
+          'radial-gradient(620px 220px at 8% -8%, rgba(51, 208, 232, 0.13), transparent 70%), ' +
+          'radial-gradient(560px 220px at 100% 0%, rgba(165, 124, 255, 0.13), transparent 70%), ' +
+          'radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 14px 14px, ' +
+          'linear-gradient(180deg, rgba(8, 12, 20, 0.93), rgba(4, 7, 12, 0.96))',
+
         color: PILOT_C.ink,
         border: `1px solid ${borde}`,
-        boxShadow: '0 10px 36px rgba(0, 0, 0, 0.65)',
+        boxShadow: `0 12px 44px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 30px ${borde.replace(/[\d.]+\)$/, '0.22)')}, inset 0 1px 0 rgba(255, 255, 255, 0.1)`,
       }}
     >
       {/* ═══ Header (arrastrable) ═══ */}
@@ -561,7 +568,7 @@ export function QuantumPilot({
         className="flex items-center justify-between px-3 cursor-grab active:cursor-grabbing"
         onMouseDown={onMouseDown}
         onTouchStart={onMouseDown}
-        style={{ height: 28, flexShrink: 0, background: PILOT_C.bg0, borderBottom: `1px solid ${PILOT_C.line}` }}
+        style={{ height: 28, flexShrink: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))', borderBottom: '1px solid rgba(51, 208, 232, 0.22)' }}
       >
         <div className="flex items-center gap-2 shrink-0">
           <span style={{ color: godBet.active ? PILOT_C.white : PILOT_C.danna, fontSize: 14 }} className={godBet.active ? 'animate-pulse' : ''}>⚡</span>

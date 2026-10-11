@@ -11,7 +11,7 @@ import {
 } from '@/store/telemetryStore';
 import { cellKeyOf, cellStats, fusedZone, liveDeviation, type Zone, type Market } from '@/domain/zoneMatrix';
 import { STYLE, INSTRUCCION } from '@/components/MatrixPanel';
-import { C, FONT_UI, num } from './theme';
+import { C, FONT_UI, num, rgba, glowText, neon } from './theme';
 import { Hair } from './ui';
 import { colorRacha } from './CommandRow';
 
@@ -26,7 +26,7 @@ export function luzTermo(hits: number, total: number): string {
 }
 
 const Line = ({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) => (
-  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, fontFamily: FONT_UI, fontSize: 'var(--qp-fs-txt)', color: C.ink2, whiteSpace: 'nowrap', minHeight: 'calc(var(--qp-fs-txt) * 1.4)' }}>
+  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, fontFamily: FONT_UI, fontSize: 'var(--qp-fs-txt)', color: C.ink2, whiteSpace: 'nowrap', minHeight: 'calc(var(--qp-fs-txt) * 1.3)' }}>
     <span>{children}</span>{right}
   </div>
 );
@@ -53,10 +53,10 @@ const MarketCard = memo(function MarketCard({ mkt }: { mkt: Market }) {
   const cur = live?.streak ?? 0;
 
   return (
-    <div data-qp={`zona-${mkt}`} data-estado={estado} style={{ display: 'flex', flexDirection: 'column', gap: 1, borderLeft: `3px solid ${tone}`, paddingLeft: 10, minWidth: 0, flex: 1, justifyContent: 'space-between' }}>
+    <div data-qp={`zona-${mkt}`} data-estado={estado} style={{ display: 'flex', flexDirection: 'column', gap: 1, borderLeft: `3px solid ${tone}`, paddingLeft: 8, paddingRight: 2, borderRadius: 4, minWidth: 0, flex: 1, justifyContent: 'space-between', background: `linear-gradient(90deg, ${rgba(tone, 0.16)}, ${rgba(tone, 0.03)} 75%, transparent)`, boxShadow: `inset 3px 0 12px -5px ${rgba(tone, 0.8)}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 4px)', fontWeight: 700, color: C.ink }}>{title}</span>
-        <span data-qp={`zona-${mkt}-estado`} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 4px)', fontWeight: 700, color: tone, whiteSpace: 'nowrap' }}>
+        <span data-qp={`zona-${mkt}-estado`} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 4px)', fontWeight: 700, color: tone, whiteSpace: 'nowrap', textShadow: glowText(tone.startsWith('#') ? tone : C.ink3, 0.55) }}>
           {STYLE[estado].label}{deviation === 'peor' ? ' ▼' : deviation === 'mejor' ? ' ▲' : ''}
         </span>
       </div>
@@ -83,7 +83,7 @@ const MarketCard = memo(function MarketCard({ mkt }: { mkt: Market }) {
         {' · racha '}<B c={colorRacha(cur)}>{cur}</B>
         {' · peor '}<B c={(live?.maxStreak ?? 0) >= 4 ? C.err : C.ink}>{live?.maxStreak ?? 0}</B>
       </Line>
-      <div data-qp={`zona-${mkt}-instr`} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 3px)', fontWeight: 600, color: tone, lineHeight: 1.15, minHeight: 'calc(var(--qp-fs-txt) * 1.4)' }}>
+      <div data-qp={`zona-${mkt}-instr`} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 3px)', fontWeight: 600, color: tone, lineHeight: 1.15, textShadow: glowText(tone.startsWith('#') ? tone : C.ink3, 0.3), minHeight: 'calc(var(--qp-fs-txt) * 1.4)' }}>
         {INSTRUCCION[estado]}
       </div>
     </div>

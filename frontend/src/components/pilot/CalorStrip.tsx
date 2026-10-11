@@ -4,7 +4,7 @@
 import React, { memo } from 'react';
 import { useCalor } from '@/store/telemetryStore';
 import { leerCalor, resumenVolvio, CALOR_VENTANA, CALOR_VENTANA_DOS, CALOR_VUELTA, type LecturaCalor } from '@/domain/calor';
-import { C, FONT_UI, FONT_NUM } from './theme';
+import { C, FONT_UI, FONT_NUM, neon } from './theme';
 import { Lbl, Val } from './ui';
 
 /** Zonas calientes en poco espacio: "Columna 2"+"Columna 3" → "Col 2+3"; docenas/otros: "13-24 + 25-36". */
@@ -38,7 +38,7 @@ export const CalorStrip = memo(function CalorStrip() {
           return (
             <div key={l.mercado} data-qp={`calor-${l.mercado}`} data-estado={l.estado} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 'calc(var(--qp-tbl-row) + 1px)', borderBottom: `1px solid ${C.line}` }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: c }} />
+                <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: c, boxShadow: caliente || enfria || termino ? neon(c, 7, 0.8) : undefined }} />
                 <Lbl color={C.ink2} style={{ fontSize: 'var(--qp-fs-lbl)', letterSpacing: '0.04em' }}>{l.mercado}</Lbl>
               </span>
               <span data-qp={`calor-${l.mercado}-txt`} style={{ fontFamily: FONT_NUM, fontSize: 'calc(var(--qp-fs-txt) + 0.5px)', fontWeight: 600, letterSpacing: '0.01em', color: c, textAlign: 'right', whiteSpace: 'nowrap' }}>

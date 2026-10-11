@@ -4,7 +4,7 @@
 import React, { memo, useMemo } from 'react';
 import type { BadgeState } from '@/components/CategoryTable';
 import { buildCategoryRows, type CounterView } from '@/domain/categoryRows';
-import { C, FONT_UI, FONT_NUM, LANE_PAD_B, num } from './theme';
+import { C, FONT_UI, FONT_NUM, LANE_PAD_B, LANE_PAD_T, GLASS1, rgba, neon, glowText, num } from './theme';
 import { Lbl } from './ui';
 
 const STATE_COLOR: Record<BadgeState, string> = { bet: C.ok, prb: C.white, wt: C.danna };
@@ -41,7 +41,7 @@ export const CategoryGod = memo(function CategoryGod({ payload, counters, counte
   const H: React.CSSProperties = { textAlign: 'right' };
   const HG: React.CSSProperties = { textAlign: 'right', color: C.white };
   return (
-    <section aria-label="Sugerencias por categoría" data-qp="categorias" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, paddingBottom: LANE_PAD_B, boxSizing: 'border-box', ...num }}>
+    <section aria-label="Sugerencias por categoría" data-qp="categorias" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, padding: `${LANE_PAD_T}px 6px ${LANE_PAD_B}px 6px`, boxSizing: 'border-box', ...GLASS1, ...num }}>
       <div style={{ height: 'var(--qp-cat-head)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderBottom: `1px solid ${C.line2}`, boxSizing: 'border-box', paddingBottom: 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, lineHeight: 1.2 }}>
           <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 1px)', fontWeight: 700, color: C.ink }}>Sugerencias por categoría <span style={{ fontWeight: 400, color: C.ink3 }}>(las 9)</span></span>
@@ -72,12 +72,13 @@ export const CategoryGod = memo(function CategoryGod({ payload, counters, counte
               display: 'grid', gridTemplateColumns: GRID, columnGap: 4, alignItems: 'center',
               height: 'var(--qp-tbl-row)', fontSize: 'var(--qp-fs-tbl)', lineHeight: 1, color: C.ink2, boxSizing: 'border-box',
               borderLeft: `2px solid ${activo ? c : 'transparent'}`, paddingLeft: 2,
-              background: activo ? `${c}16` : i % 2 ? 'rgba(255,255,255,0.025)' : 'transparent',
+              background: activo ? `linear-gradient(90deg, ${rgba(c, 0.22)}, ${rgba(c, 0.04)})` : i % 2 ? 'rgba(255,255,255,0.025)' : 'transparent',
+              boxShadow: activo ? `inset 2px 0 8px -3px ${rgba(c, 0.8)}` : undefined,
             }}
           >
-            <span style={{ fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: c, background: `${c}22`, borderRadius: 2, padding: '0 4px', justifySelf: 'start', lineHeight: '13px' }}>{STATE_TXT[r.state]}</span>
+            <span style={{ fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: c, background: rgba(c, 0.14), border: `1px solid ${rgba(c, 0.45)}`, boxShadow: activo ? neon(c, 6, 0.35) : undefined, borderRadius: 2, padding: '0 3px', justifySelf: 'start', lineHeight: '11px', boxSizing: 'border-box' }}>{STATE_TXT[r.state]}</span>
             <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 0.5px)', color: activo ? C.ink : C.ink2, whiteSpace: 'nowrap' }}>{r.label}</span>
-            <span style={{ fontFamily: FONT_NUM, fontSize: 'calc(var(--qp-fs-tbl) + 2.5px)', color: activo ? C.white : C.danna, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.pick.replace(/,\s+/g, ',')}</span>
+            <span style={{ fontFamily: FONT_NUM, fontSize: 'calc(var(--qp-fs-tbl) + 2.5px)', color: activo ? C.white : C.danna, fontWeight: 600, whiteSpace: 'nowrap', textShadow: glowText(activo ? C.white : C.danna, 0.4) }}>{r.pick.replace(/,\s+/g, ',')}</span>
             <Group c={r.normal} />
             <span />
             <Group c={r.god} dim={!godActive} color={C.white} />

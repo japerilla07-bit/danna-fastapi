@@ -15,7 +15,8 @@ import {
 import { toState, pickLabel, type BadgeState } from '@/components/CategoryTable';
 import { ERR_NORMAL, filasRacha, RACHA_MAX_LEN, type FilaRacha } from '@/domain/rachasFrecuencia';
 import { abrevZonas } from '@/domain/juegaEsto';
-import { C, FONT_UI, LANE_STACK_GAP, LANE_PAD_B, num } from './theme';
+import { C, FONT_UI, LANE_STACK_GAP, LANE_PAD_B, LANE_PAD_T, num, rgba, neon, glowText } from './theme';
+import { computeJuega } from '@/domain/juegaEsto';
 import { Lbl, Txt, Val, Big } from './ui';
 import { colorRacha } from './CommandRow';
 
@@ -31,7 +32,7 @@ function PickRow({ etiqueta, texto, color, tid, pri = false, chip, state }: { et
         {pri && <Lbl color={C.warn} style={{ fontWeight: 600, fontSize: 'calc(var(--qp-fs-lbl) - 1px)' }}>▲ prioridad</Lbl>}
         {chip && <span style={{ alignSelf: 'flex-start', fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: chipColor, background: `${chipColor}22`, borderRadius: 2, padding: '0 4px', lineHeight: '12px' }}>{BADGE_TXT[chip]}</span>}
       </span>
-      <Big size="var(--qp-fs-pick)" weight={600} color={texto ? color : C.ink4} style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{texto ? abrevZonas(texto) || texto : '—'}</Big>
+      <Big size="var(--qp-fs-pick)" weight={600} glow={texto ? 0.55 : 0} color={texto ? color : C.ink4} style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{texto ? abrevZonas(texto) || texto : '—'}</Big>
     </div>
   );
 }
@@ -44,11 +45,11 @@ function Head({ nombre, sub, color, estado, estadoColor, tid }: { nombre: string
   return (
     <div style={{ height: 'var(--qp-lane-head)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
       <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
-        <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 2px)', fontWeight: 700, color, whiteSpace: 'nowrap' }}>{nombre}</span>
+        <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 2px)', fontWeight: 700, color, whiteSpace: 'nowrap', textShadow: glowText(color, 0.55) }}>{nombre}</span>
         <Lbl color={C.ink3}>{sub}</Lbl>
       </span>
-      {estado && (
-        <span data-qp={tid} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-lbl) - 0.5px)', fontWeight: 700, color: estadoColor, background: `${estadoColor}1f`, borderRadius: 3, padding: '1px 7px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{estado}</span>
+      {estado && estadoColor && (
+        <span data-qp={tid} style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-lbl) - 0.5px)', fontWeight: 700, color: estadoColor, background: rgba(estadoColor, 0.14), border: `1px solid ${rgba(estadoColor, 0.5)}`, boxShadow: neon(estadoColor, 8, 0.3), borderRadius: 3, padding: '0 6px', whiteSpace: 'nowrap', lineHeight: 1.3 }}>{estado}</span>
       )}
     </div>
   );
@@ -58,11 +59,11 @@ function Score({ id, hits, misses, wr, live, peor }: { id: LaneId; hits: number;
   const cell = (k: string, tid: string, v: React.ReactNode, c: string) => (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
       <Lbl color={C.ink3}>{k}</Lbl>
-      <Big size="var(--qp-fs-val)" color={c} weight={700}><span data-k={`${id}-${tid}`}>{v}</span></Big>
+      <Big size="var(--qp-fs-val)" color={c} weight={700} glow={c === C.ink ? 0 : 0.4}><span data-k={`${id}-${tid}`}>{v}</span></Big>
     </span>
   );
   return (
-    <div data-qp={`score-${id}`} style={{ height: 'var(--qp-lane-score)', display: 'grid', gridTemplateColumns: '44px 38px 56px 30px 1fr', columnGap: 2, alignItems: 'start' }}>
+    <div data-qp={`score-${id}`} style={{ height: 'var(--qp-lane-score)', display: 'grid', gridTemplateColumns: '38px 34px 52px 28px 1fr', columnGap: 2, alignItems: 'start' }}>
       {cell('aciertos', 'aciertos', hits, C.ok)}
       {cell('errores', 'errores', misses, C.err)}
       {cell('efectividad', 'efectividad', wr !== null ? `${wr.toFixed(0)}%` : '—', C.ink)}
@@ -120,7 +121,18 @@ function Ladder({ id, color, rows }: { id: LaneId; color: string; rows: FilaRach
 
 function Frame({ id, color, children }: { id: LaneId; color: string; children: React.ReactNode }) {
   return (
-    <section data-qp={`lane-${id}`} aria-label={id === 'real' ? 'D.A.N.N.A.' : id === 'capa1' ? 'Capa 1' : 'Escudo 1'} style={{ borderLeft: `2px solid ${color}`, paddingLeft: 10, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: LANE_STACK_GAP, paddingBottom: LANE_PAD_B, boxSizing: 'border-box' }}>
+    <section
+      data-qp={`lane-${id}`}
+      aria-label={id === 'real' ? 'D.A.N.N.A.' : id === 'capa1' ? 'Capa 1' : 'Escudo 1'}
+      style={{
+        position: 'relative', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: LANE_STACK_GAP, boxSizing: 'border-box',
+        padding: `${LANE_PAD_T}px 8px ${LANE_PAD_B}px 10px`, borderRadius: 6,
+        border: `1px solid ${rgba(color, 0.28)}`, borderLeft: `2px solid ${color}`,
+        background: `linear-gradient(180deg, ${rgba(color, 0.15)}, ${rgba(color, 0.045)} 34%, rgba(255,255,255,0.015))`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.10), inset 3px 0 14px -6px ${rgba(color, 0.7)}, ${neon(color, 14, 0.14)}`,
+      }}
+    >
+      <span aria-hidden style={{ position: 'absolute', top: -1, left: 12, right: 12, height: 1, background: `linear-gradient(90deg, transparent, ${color}, transparent)`, boxShadow: neon(color, 6, 0.9) }} />
       {children}
     </section>
   );
@@ -130,35 +142,46 @@ const Note = ({ children, tid }: { children?: React.ReactNode; tid?: string }) =
   <div data-qp={tid} style={{ height: 'var(--qp-lane-note)', fontFamily: FONT_UI, fontSize: 'var(--qp-fs-txt)', color: C.ink2, lineHeight: 1.2, minWidth: 0 }}>{children}</div>
 );
 
-// ── D.A.N.N.A. (motor) ───────────────────────────────────────────────────
+// ── D.A.N.N.A. (la que ELIGE entre Capa 1 y Escudo) ───────────────────────
+// Su jugada es "Juega esto" (la decisión real que puntúa su marcador y su escalera).
+// La sugerencia base del motor (BET/WT de la tabla) va aparte, rotulada "Motor base".
+const FUENTE_COLOR = { ESCUDO: C.escudo, 'CAPA 1': C.capa1 } as const;
+
 export const LaneReal = memo(function LaneReal({ payload }: { payload: any }) {
   const hits = useCopHits(), misses = useCopMisses(), wr = useCopWr(), live = useCopLiveStreak(), peor = useCopStreak();
   const rachas = useCopRachas(), ult = useCopRachasUlt();
+  const d = useLiveDecision();
+  const pend = useTelemetryStore((s) => s.pending);
+  const j = computeJuega(d, pend);
   const advice: Record<string, any> = payload?.decision?.bet_advice ?? {};
   const sd = toState(advice['docenas']), sc = toState(advice['columnas']);
+  const fc = j.fuente ? FUENTE_COLOR[j.fuente] : C.ink2;
+  const doc = j.partes[0], col = j.partes[1];
   return (
     <Frame id="real" color={C.danna}>
-      <Head nombre="D.A.N.N.A." sub="motor" color={C.danna} tid="real-estado" />
+      <Head nombre="D.A.N.N.A." sub="elige la voz" color={C.danna} estado={j.fuente ? `SIGUE ${j.fuente}` : 'ESPERA'} estadoColor={fc} tid="real-estado" />
       <div>
-        <MotorRow label="Docenas" state={sd} pick={pickLabel(advice['docenas'])} tid="motor-doc" />
-        <MotorRow label="Columnas" state={sc} pick={pickLabel(advice['columnas'])} tid="motor-col" />
+        <PickRow etiqueta="Docenas" texto={doc.zonas} color={C.white} tid="real-doc" pri={doc.pri} />
+        <PickRow etiqueta="Columnas" texto={col.zonas} color={C.white} tid="real-col" pri={col.pri} />
       </div>
-      <Note />
+      <Note>
+        <MotorBase label="Docenas" state={sd} pick={pickLabel(advice['docenas'])} tid="motor-doc" />
+        <MotorBase label="Columnas" state={sc} pick={pickLabel(advice['columnas'])} tid="motor-col" />
+      </Note>
       <Score id="real" hits={hits} misses={misses} wr={wr} live={live} peor={peor} />
       <Ladder id="real" color={C.danna} rows={filasRacha(rachas, ult, live, hits + misses, ERR_NORMAL.real)} />
     </Frame>
   );
 });
 
-function MotorRow({ label, state, pick, tid }: { label: string; state: BadgeState; pick: string; tid: string }) {
+/** Sugerencia base del motor (la misma de la tabla de categorías): contexto, NO es la jugada. */
+function MotorBase({ label, state, pick, tid }: { label: string; state: BadgeState; pick: string; tid: string }) {
   const c = BADGE_COLOR[state];
   return (
-    <div data-qp={tid} data-state={state} style={{ display: 'flex', alignItems: 'center', gap: 8, height: 'var(--qp-lane-pick)', minWidth: 0 }}>
-      <span style={{ width: 62, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1, justifyContent: 'center' }}>
-        <Lbl color={C.ink2}>{label}</Lbl>
-        <span style={{ alignSelf: 'flex-start', fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: c, background: `${c}22`, borderRadius: 2, padding: '0 4px', lineHeight: '12px' }}>{BADGE_TXT[state]}</span>
-      </span>
-      <Big size="var(--qp-fs-pick)" weight={600} color={C.white} style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{pick}</Big>
+    <div data-qp={tid} data-state={state} style={{ display: 'flex', alignItems: 'center', gap: 6, height: '50%', minWidth: 0, whiteSpace: 'nowrap' }}>
+      <Lbl color={C.ink3} style={{ minWidth: 88, flexShrink: 0 }}>Motor base · {label.toLowerCase()}</Lbl>
+      <span style={{ fontFamily: FONT_UI, fontSize: 9, fontWeight: 700, color: c, background: rgba(c, 0.14), border: `1px solid ${rgba(c, 0.4)}`, borderRadius: 2, padding: '0 3px', lineHeight: '11px', flexShrink: 0 }}>{BADGE_TXT[state]}</span>
+      <Big size="calc(var(--qp-fs-txt) + 1px)" weight={600} color={C.ink2}>{pick}</Big>
     </div>
   );
 }

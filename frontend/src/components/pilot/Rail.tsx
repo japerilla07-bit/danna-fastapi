@@ -3,7 +3,7 @@
 // Se separa a propósito de lo que recomienda el motor (franja de veredicto).
 
 import React, { memo } from 'react';
-import { C, FONT_UI } from './theme';
+import { C, FONT_UI, rgba, neon } from './theme';
 import { Lbl, Big } from './ui';
 import type { GodTileProps } from './CommandRow';
 
@@ -32,18 +32,19 @@ export const Rail = memo(function Rail({ god, godTarget }: { god: GodTileProps; 
           style={{
             flex: '0 0 456px', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', boxSizing: 'border-box',
             height: 'calc(100% - 8px)', padding: '0 12px', borderRadius: 3, cursor: p.loading ? 'wait' : 'pointer',
-            border: `1px solid ${p.isOverride ? `${C.white}aa` : `${C.danna}88`}`,
-            background: p.isOverride ? `${C.white}1c` : `${C.danna}1a`, color: C.ink,
+            border: `1px solid ${p.isOverride ? rgba(C.white, 0.7) : rgba(C.danna, 0.7)}`,
+            background: `linear-gradient(180deg, ${rgba(p.isOverride ? C.white : C.danna, 0.22)}, ${rgba(p.isOverride ? C.white : C.danna, 0.07)})`,
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), ${neon(p.isOverride ? C.white : C.danna, 14, 0.38)}`, color: C.ink,
           }}
         >
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexShrink: 0 }}>
             <Lbl color={p.isOverride ? C.white : C.danna} style={{ fontWeight: 700 }}>{p.isOverride ? '◉ Tu apuesta' : 'Target lock'}</Lbl>
             <Lbl color={C.ink2}>{p.catLabel}</Lbl>
           </span>
-          <Big size="var(--qp-fs-pick)" color={C.white} weight={700} style={{ flex: 1, minWidth: 0, textAlign: 'right', whiteSpace: 'nowrap' }}>
+          <Big size="var(--qp-fs-pick)" color={C.white} weight={700} glow={0.5} glowColor={C.danna} style={{ flex: 1, minWidth: 0, textAlign: 'right', whiteSpace: 'nowrap' }}>
             <span data-qp="target-pick">{p.topPick.pick_pretty}</span>
           </Big>
-          <Big size="var(--qp-fs-pick)" color={confColor} weight={700}><span data-qp="target-conf">{p.topPick.conf_pct}%</span></Big>
+          <Big size="var(--qp-fs-pick)" color={confColor} weight={700} glow={0.6}><span data-qp="target-conf">{p.topPick.conf_pct}%</span></Big>
         </button>
       ) : (
         <div style={{ flex: '0 0 456px', height: 'calc(100% - 8px)', boxSizing: 'border-box', display: 'flex', alignItems: 'center', padding: '0 12px', border: `1px dashed ${C.line2}`, borderRadius: 3 }}>
