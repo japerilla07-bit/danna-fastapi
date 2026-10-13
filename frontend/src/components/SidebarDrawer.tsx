@@ -1,5 +1,5 @@
 // SidebarDrawer — Drawer izquierdo con:
-//   - Protocolo de inicio (7 pasos onboarding)
+//   - Protocolo de inicio (9 pasos de onboarding)
 //   - Toggles: LIVE MODE FAST / DIAGNOSTIC PANELS
 //   - Admin panel (solo plan=admin)
 //   - Mesa context (user/table)
@@ -19,32 +19,40 @@ interface Props {
 
 const ONBOARDING_STEPS = [
   {
-    n: '01', title: 'CALIBRACIÓN',
-    text: 'Ingresa los primeros 30 spins sin apostar. El motor necesita este histórico mínimo para calibrar sus modelos internos (NB, LSTM, mesa_score).',
+    n: '01', title: 'QUÉ ES D.A.N.N.A.',
+    text: 'D.A.N.N.A. es ingeniería aplicada a la ruleta: un sistema que mide probabilidades y estadística giro a giro. Reúne 5 motores, una ruleta física virtual y capas de decisión (Capa 1 y Escudo), y se apoya en más de 50.000 giros reales. Todo se construyó y se probó en mesa real, con dinero real, ganando y perdiendo. También ofrece una sugerencia de 12 números. Cada quien juega a su manera —docenas, columnas o números, según su capital y los errores que pueda aguantar—: todo es válido. D.A.N.N.A. te entrega la lectura; la decisión es tuya.',
   },
   {
-    n: '02', title: 'VALIDACIÓN DE PATRONES',
-    text: 'Del spin 30 al 80, el motor entra en modo PROBE. Las apuestas deben ser mínimas — el sistema está validando si hay patrones estadísticamente explotables en esta mesa.',
+    n: '02', title: 'INGRESA LOS GIROS',
+    text: 'Cada número que sale en la ruleta lo ingresas como un giro, y con cada giro se actualiza todo: sugerencias, marcadores y rendimiento. Regla de oro: mínimo 80 giros ingresados antes de apostar. En esos 80 solo observas; el sistema está conociendo la mesa.',
   },
   {
-    n: '03', title: 'LECTURA DEL HUD',
-    text: 'El HUD muestra OPTIMAL / CAUTION / ABORT. Solo opera con fuerza cuando dice OPTIMAL. CAUTION = stake reducido a la mitad. ABORT = no operar.',
+    n: '03', title: 'LEE LA PANTALLA',
+    text: 'JUEGA ESTO (arriba a la izquierda del Quantum Pilot) es la línea que manda: te dice qué voz sigues (Escudo o Capa 1), en qué mercado y qué zonas. Si dice NO APUESTES · ESPERA, ese giro no se apuesta. Se juega un solo mercado por giro: docenas o columnas, nunca los dos.',
   },
   {
-    n: '04', title: 'RADAR Y MESA SCORE',
-    text: 'El Radar (X/10) refleja la calidad estadística de la mesa. El GOD BET requiere RADAR ≥ 7 + HUD OPTIMAL + Table Health ≥ 50. Si no se cumplen las 3, NO entres en GOD.',
+    n: '04', title: 'LAS CUATRO VOCES',
+    text: 'Motor: sus sugerencias base, 2 docenas y 2 columnas en cada giro, incluso cuando está en WAIT, PRB o BET; sus celdas DOCENAS y COLUMNAS (a la derecha) muestran sus aciertos, errores y rachas. Capa 1: la guía principal. Escudo: la cobertura cuando hay tendencia clara. D.A.N.N.A.: la voz que elige entre Capa 1 y Escudo. Cada una lleva su propio marcador: aciertos, errores, racha y peor racha.',
   },
   {
-    n: '05', title: 'GESTIÓN DE BANKROLL',
-    text: 'Configura el capital inicial real antes de operar. Los ajustes de stake siguen la progresión L1/L2/L3/L4. Nunca subas de nivel sin que el motor lo indique.',
+    n: '05', title: 'RENDIMIENTO EN VIVO',
+    text: 'La franja de arriba compara las cuatro voces en los últimos 12 giros y te dice cuál va mejor y cuál peor, por ejemplo "Mejor: Motor y Capa 1 · Peor: Escudo y D.A.N.N.A.". Cambia sola mientras juegas; ▲ indica que una voz viene mejorando y ▼ que viene empeorando. "Parejo" significa que ninguna se despega. A veces el Motor solo rinde mejor que las capas: úsala para conocer la mesa. Es una lectura de apoyo; no cambia lo que dice JUEGA ESTO.',
   },
   {
-    n: '06', title: 'DISCIPLINA DE SALIDA',
-    text: 'Si el HUD cae a ABORT: para inmediatamente. Si llegas a L4 con 3+ errores consecutivos: cierra la sesión. El motor te dirá cuándo volver.',
+    n: '06', title: 'CASILLAS Y CALOR',
+    text: 'La casilla donde estás parado tiene un semáforo: Santuario y Verde son zonas tranquilas, Probe pide cuidado, Tóxica y Agujero son para salir. CALOR RECIENTE te muestra qué zona se está calentando en los últimos giros y cuándo se enfría o termina. Lee las señales juntas; ninguna sola es una orden.',
   },
   {
-    n: '07', title: 'REGISTRO DE MESA',
-    text: 'Cada mesa física es una sesión diferente. Usa RESET cuando cambies de mesa. El historial de una mesa no es válido para predecir otra.',
+    n: '07', title: 'GESTIÓN Y DISCIPLINA',
+    text: 'Antes de sentarte define cuánto juegas hoy, cuánto estás dispuesto a perder y cuándo te das por satisfecho. Nunca subas la ficha por instinto. Al 3er error seguido aplica el freno: pausa de 3 giros con la ficha congelada y retomas en el 4.º. Si la mesa no da señales claras, esperar también es jugar bien.',
+  },
+  {
+    n: '08', title: 'LA BITÁCORA',
+    text: 'En BITÁCORA (arriba, junto a SALIR) planeas la jornada antes de empezar: sesiones, horarios, descansos, saldos y meta. En vivo no se llena nada. Al terminar cada sesión dedica unos 5 minutos: saldo inicial y final, si cumpliste la meta, si seguiste las instrucciones del motor (sí, parcial o no), cómo la sentiste y, si te saliste de la mesa, por qué. Se guarda en tu cuenta y la descargas en CSV para tu retroalimentación del día. Solo registra: no decide nada por el motor.',
+  },
+  {
+    n: '09', title: 'CAMBIAR DE MESA Y CERRAR',
+    text: 'Cada mesa física es una sesión distinta. Al cambiar de mesa usa NUEVA MESA (RESET) y vuelve a ingresar 80 giros antes de apostar. Al terminar, exporta el CSV en REGISTRO DE SESIÓN y cierra tu jornada en la Bitácora.',
   },
 ];
 

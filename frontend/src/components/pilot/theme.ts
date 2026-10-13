@@ -125,6 +125,8 @@ export const DENSITY_ROOMY: Dens   = { pad: 10, gap: 10, hA: 108, hRail: 38, lan
 /** Hueco entre los grupos de un carril (cabecera · jugadas · nota · marcador · escalera). */
 export const LANE_STACK_GAP = 3;
 export const SHELL_HEADER = 28;
+/** Franja de RENDIMIENTO EN VIVO (Mejor/Peor de las cuatro voces), arriba del veredicto. Alto fijo. */
+export const H_STRIP = 26;
 /** Respiro inferior de cada carril y de la tabla: el cuadro tipográfico de la última fila (más alto que su fila) cae DENTRO del bloque. */
 export const LANE_PAD_B = 2;
 /** Respiro superior de cada carril/tabla (ahora son tarjetas de cristal). */
@@ -145,7 +147,7 @@ export function bodyHeight(t: Dens): number {
 
 /** Alto del cascarón (encabezado + cuerpo + borde 2) — las MISMAS cifras que usa PilotTerminal. */
 export function shellHeightFor(t: Dens): number {
-  return SHELL_HEADER + 2 * t.pad + t.hA + t.gap + bodyHeight(t) + t.gap + t.hRail + 2;
+  return SHELL_HEADER + 2 * t.pad + H_STRIP + t.gap + t.hA + t.gap + bodyHeight(t) + t.gap + t.hRail + 2;
 }
 
 const KEYS = Object.keys(DENSITY_TIGHT) as (keyof Dens)[];

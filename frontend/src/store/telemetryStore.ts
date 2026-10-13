@@ -27,6 +27,7 @@ import { create } from 'zustand';
 import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, type Zone, type Market } from '@/domain/zoneMatrix';
 import { decidirPiloto, registrarGiroCobertura, resetCobertura, type MarketRead, type DecisionPiloto, type Decision, type EscudoInfo } from '@/domain/copilot';
 import { calorInicial, avanzarCalor, type CalorEstado } from '@/domain/calor';
+import { agregarEntrada, type EntradaRend } from '@/domain/rendimiento';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -159,6 +160,11 @@ interface TelemetryState {
   // Estos dos son marcadores PARALELOS, de solo lectura, para comparar.
   capa1Score: CopScore;
   escudoScore: CopScore;
+  // RENDIMIENTO EN VIVO (oct 2026) — registro giro a giro de aciertos/errores de
+  // las cuatro voces (Motor, Capa 1, Escudo, D.A.N.N.A.), para la franja
+  // "Mejor / Peor" del Quantum Pilot (domain/rendimiento.ts). Solo lectura: ninguna
+  // decisión lo usa. Acotado a CAP_REGISTRO entradas.
+  rendLog: EntradaRend[];
   // FIX (oct 2026) — ver nota completa junto a computeMarketRead() más abajo.
   // La decisión del piloto (Capa1+2) que se usa TANTO para puntuar como para
   // mostrar en pantalla (CopilotOrder la lee de acá en vez de recalcularla).
@@ -273,6 +279,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   escudoRachasUlt: new Array(11).fill(0),
   capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+  rendLog: [],
   liveDecision: decisionInicial(),
 
   ingest: (p) => {
@@ -294,6 +301,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     let escudoRachasUlt = st.escudoRachasUlt;
     let capa1Score = st.capa1Score;
     let escudoScore = st.escudoScore;
+    let rendLog = st.rendLog;
     let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
 
     // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
@@ -403,6 +411,11 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         }
       }
 
+      // ── RENDIMIENTO EN VIVO: una entrada por giro resuelto, con lo que cada
+      //    voz acertó o falló en ESTE giro (null = esa voz no sugirió). Solo
+      //    lectura, no toca ningún marcador de arriba. ──
+      rendLog = agregarEntrada(rendLog, { danna: copHit, capa1: capa1Hit, escudo: escudoHit, motorDoc: docHit, motorCol: colHit });
+
       // ── Alimentar la ventana de COBERTURA DOBLE con el número real de
       //    este giro — independiente de si se jugó o no, de si acertó o
       //    no. Exactamente una vez por giro real resuelto. ──
@@ -489,7 +502,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       escudoPickCol: liveDecision.escudo.col && !suprimirCol ? liveDecision.escudo.col.zonas.join(' / ') : null,
     };
 
-    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, liveDecision });
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, rendLog, liveDecision });
   },
 
   reset: () => {
@@ -509,6 +522,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       escudoRachasUlt: new Array(11).fill(0),
       capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
+      rendLog: [],
       liveDecision: decisionInicial(),
     });
   },
@@ -647,3 +661,6 @@ export function useTermoStreak(mkt: Market, ventana = 10): number {
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
 }
+
+// Registro de rendimiento por giro (solo lectura) — alimenta la franja Mejor/Peor.
+export const useRendLog = (): EntradaRend[] => useTelemetryStore((s) => s.rendLog);

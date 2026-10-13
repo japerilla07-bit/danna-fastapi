@@ -1,7 +1,8 @@
 // ════════════════════════════════════════════════════════════════════════
 // PilotTerminal — cuerpo del Quantum Pilot (v9 · "tres carriles").
 //
-//   ┌ VEREDICTO (elevado) ─ JUEGA ESTO · ERRORES SEGUIDOS · GOD ─────────────┐
+//   ┌ RENDIMIENTO (franja) ─ Mejor / Peor de las cuatro voces, últimos 12 giros ─┐
+//   ├ VEREDICTO (elevado) ─ JUEGA ESTO · ERRORES SEGUIDOS · GOD ─────────────┐
 //   ├ ESTADO (base) ─────────────────────────────────┬────────────────────────┤
 //   │  carril D.A.N.N.A. │ carril Capa 1 │ carril Escudo │  casilla: docenas      │
 //   │  jugada·marcador·escalera cada uno             │  casilla: columnas     │
@@ -14,13 +15,14 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import React from 'react';
-import { C, FONT_UI, GLASS1, glass2, rgba, neon, PAD_X, W_RIGHT, COL_GAP, LANE_GAP, W_A1, W_A2, laneHeight, bodyHeight, useDensity } from './theme';
+import { C, FONT_UI, GLASS1, glass2, rgba, neon, PAD_X, W_RIGHT, COL_GAP, LANE_GAP, W_A1, W_A2, laneHeight, bodyHeight, H_STRIP, useDensity } from './theme';
 import { OrdenTile, RachaTile, GodTile, type GodTileProps } from './CommandRow';
 import { LaneReal, LaneCapa1, LaneEscudo } from './Lanes';
 import { Rail, type GodTargetProps } from './Rail';
 import { ZoneColumn } from './ZoneColumn';
 import { CategoryGod, type CategoryGodProps } from './CategoryGod';
 import { CalorStrip } from './CalorStrip';
+import { RendimientoStrip } from './RendimientoStrip';
 
 export type { GodTargetProps };
 
@@ -60,6 +62,9 @@ export function PilotTerminal({ payload, god, godTarget, table }: PilotTerminalP
   return (
     <div className="qp-t" style={{ ...vars, display: 'flex', flexDirection: 'column', gap: t.gap, padding: `${t.pad}px ${PAD_X}px`, fontFamily: FONT_UI, color: C.ink, minHeight: 0 }}>
       <style>{CSS}</style>
+
+      {/* RENDIMIENTO EN VIVO — quién va mejor/peor en los últimos 12 giros (solo lectura) */}
+      <RendimientoStrip height={H_STRIP} />
 
       {/* VEREDICTO — superficie elevada */}
       <div data-qp="veredicto" style={{ display: 'grid', gridTemplateColumns: `${W_A1}px ${W_A2}px 1fr`, height: t.hA, position: 'relative', minWidth: 0, ...glass2(C.danna, 1), background: `linear-gradient(115deg, ${rgba(C.danna, 0.27)}, ${rgba(C.capa1, 0.12)} 45%, ${rgba(C.escudo, 0.24)})`, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.2), ${neon(C.danna, 22, 0.32)}` }}>
