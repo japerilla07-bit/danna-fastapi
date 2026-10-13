@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { borrarBorradorDoc, guardarBorradorDoc, leerBorradorDoc, PREFIJO_BORRADOR_DOC } from '../../src/bitacora/borrador';
+import { docInicial, normalizarDoc } from '../../src/bitacora/documento';
 import { aplicarOps, borrarBorrador, borradorInicial, CLAVE_BORRADOR, guardarBorrador, leerBorrador, normalizarCfg } from '../../src/bitacora/borrador';
 import type { Almacen, OpPlan } from '../../src/bitacora/borrador';
 import { cfgPorDefecto, fmtHM } from '../../src/bitacora/planner';
@@ -117,4 +119,30 @@ test('borrar y reiniciar', () => {
 
 test('normalizarCfg rechaza lo que no es objeto', () => {
   for (const x of [null, undefined, 3, 'x', []]) assert.equal(normalizarCfg(x), null);
+});
+
+test('borrador de la jornada completa: ida y vuelta por fecha, con su estado de sincronización', () => {
+  const a = memoria(); const d = { ...docInicial('2026-10-13'), notasDia: 'x', registros: { '1': { n: 1, estado: 'cumplida' as const, horaInicioReal: '09:00', horaFinReal: '10:30', saldoInicial: 1, saldoFinal: 2, siguioMotor: 'si' as const, sensacion: 3, saliMesa: false, motivoSalida: '', detalleSalida: '', notas: 'n', actualizadoEn: TS } } };
+  assert.deepEqual(guardarBorradorDoc(a, '2026-10-13', d, 4, false, TS), { ok: true });
+  const l = leerBorradorDoc(a, '2026-10-13', normalizarDoc);
+  assert.equal(l.aviso, undefined); assert.equal(l.borrador?.baseVersion, 4); assert.equal(l.borrador?.sincronizado, false); assert.equal(l.borrador?.doc.registros['1'].saldoFinal, 2); assert.equal(l.borrador?.doc.notasDia, 'x');
+  assert.equal(leerBorradorDoc(a, '2026-10-14', normalizarDoc).borrador, null, 'otro día: otra clave');
+  borrarBorradorDoc(a, '2026-10-13'); assert.equal(a.getItem(PREFIJO_BORRADOR_DOC + '2026-10-13'), null);
+});
+
+test('borrador de la jornada completa: dañado, ajeno o de otra fecha se ignora con aviso; nunca afirma guardado si falla', () => {
+  const a = memoria(); const k = PREFIJO_BORRADOR_DOC + '2026-10-13';
+  a.d.set(k, '{roto'); assert.match(leerBorradorDoc(a, '2026-10-13', normalizarDoc).aviso ?? '', /dañado/);
+  a.d.set(k, JSON.stringify({ v: 99 })); assert.match(leerBorradorDoc(a, '2026-10-13', normalizarDoc).aviso ?? '', /otra versión/);
+  a.d.set(k, JSON.stringify({ v: 2, fecha: '2026-10-20', doc: docInicial('2026-10-20') })); assert.match(leerBorradorDoc(a, '2026-10-13', normalizarDoc).aviso ?? '', /otra versión/);
+  a.d.set(k, JSON.stringify({ v: 2, fecha: '2026-10-13', doc: 5 })); assert.match(leerBorradorDoc(a, '2026-10-13', normalizarDoc).aviso ?? '', /incompleto/);
+  for (const falla of ['set', 'cuota', 'olvida'] as const) assert.equal(guardarBorradorDoc(memoria({ falla }), '2026-10-13', docInicial('2026-10-13'), 0, false, TS).ok, false, falla);
+  assert.equal(guardarBorradorDoc(null, '2026-10-13', docInicial('2026-10-13'), 0, false, TS).ok, false);
+  assert.match(leerBorradorDoc(null, '2026-10-13', normalizarDoc).aviso ?? '', /no permite/);
+});
+
+test('normalizarDoc acepta documentos antiguos sin cierres y rechaza lo que no es documento', () => {
+  const viejo = normalizarDoc({ cfg: docInicial('2026-10-13').cfg, ops: [] });
+  assert.deepEqual(viejo?.registros, {}); assert.equal(viejo?.notasDia, '');
+  for (const x of [null, 3, 'x', [], {}, { cfg: 5 }]) assert.equal(normalizarDoc(x), null);
 });

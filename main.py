@@ -171,6 +171,13 @@ try:
 except Exception as e:
     log.error(f"No pude montar api_v2.admin_routes: {e}")
 
+try:
+    from api_v2.bitacora_routes import router as bitacora_router
+    app.include_router(bitacora_router)
+    log.info("api_v2.bitacora_routes montado (/api/bitacora/jornadas)")
+except Exception as e:
+    log.error(f"No pude montar api_v2.bitacora_routes: {e}")
+
 # ── Maintenance del session_manager ─────────────────────────────
 try:
     from core.session_manager import session_manager

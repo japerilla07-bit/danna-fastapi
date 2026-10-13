@@ -133,3 +133,33 @@ export interface ResultadoOp {
   plan: Plan;
   hallazgos: Hallazgo[];
 }
+
+// ── Cierre de cada sesión (se llena DESPUÉS de jugar, nunca en vivo) ─────────────
+
+/** Cómo terminó la sesión, según tú. 'pendiente' = todavía no registrada. */
+export type EstadoCierre = 'pendiente' | 'cumplida' | 'parcial' | 'no_cumplida';
+
+/** ¿Seguiste las instrucciones del motor? '' = sin responder. */
+export type SiguioMotor = '' | 'si' | 'parcial' | 'no';
+
+export interface RegistroSesion {
+  /** Número de la sesión del plan a la que pertenece. */
+  n: number;
+  estado: EstadoCierre;
+  /** Hora real "HH:MM" ('' = sin dato). */
+  horaInicioReal: string;
+  horaFinReal: string;
+  /** Saldos que TÚ escribes (el del motor es solo referencia y no se toca). null = sin dato. */
+  saldoInicial: number | null;
+  saldoFinal: number | null;
+  siguioMotor: SiguioMotor;
+  /** 0 = sin responder; 1 (muy mal) … 5 (muy bien). */
+  sensacion: number;
+  /** null = sin responder. */
+  saliMesa: boolean | null;
+  motivoSalida: string;
+  detalleSalida: string;
+  notas: string;
+  /** ISO de la última vez que se guardó este cierre. */
+  actualizadoEn: string;
+}

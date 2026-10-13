@@ -1,7 +1,9 @@
 // BITÁCORA — borrador local del plan de jornada.
 //
-// Mientras la persistencia en el servidor no esté conectada (siguiente fase), el plan
-// que editas se conserva como BORRADOR en este navegador. Reglas:
+// El plan que editas se conserva también como BORRADOR en este navegador, como red de
+// seguridad por si el servidor no responde. (La copia de verdad vive en el servidor, ver
+// servicio.ts / sincronizador.ts; las funciones "...Doc" de abajo guardan la jornada completa
+// con su estado de sincronización, y las de v1 solo se leen para migrar un borrador anterior.) Reglas:
 //   · nunca se dice "guardado" si el almacenamiento falló (se devuelve el error);
 //   · el borrador lleva versión de esquema; si no se reconoce, se ignora y se avisa;
 //   · lo que se lee del almacenamiento se sanea: un borrador dañado no rompe la pantalla.
@@ -10,6 +12,7 @@
 // reaplican sobre la configuración, de modo que editar la configuración no las pierde.
 
 import { cancelarSesion, cfgPorDefecto, construirPlan, reprogramarSesion } from './planner';
+import type { DocJornada } from './documento';
 import type { BloqueCfg, LimitesRef, Modalidad, Plan, PlanCfg } from './types';
 
 export const CLAVE_BORRADOR = 'danna_bitacora_borrador_v1';
@@ -65,7 +68,7 @@ export function normalizarCfg(raw: unknown): PlanCfg | null {
   };
 }
 
-function normalizarOps(raw: unknown): OpPlan[] {
+export function normalizarOps(raw: unknown): OpPlan[] {
   if (!Array.isArray(raw)) return [];
   const out: OpPlan[] = [];
   for (const o of raw) {
@@ -110,3 +113,47 @@ export function guardarBorrador(a: Almacen | null, cfg: PlanCfg, ops: ReadonlyAr
 export function borrarBorrador(a: Almacen | null): void { try { a?.removeItem(CLAVE_BORRADOR); } catch { /* sin almacenamiento */ } }
 
 export const borradorInicial = (fecha: string): { cfg: PlanCfg; ops: OpPlan[] } => ({ cfg: cfgPorDefecto(fecha), ops: [] });
+
+
+// ── Borrador de la jornada completa (v2): una clave por fecha ────────────────────────
+export const PREFIJO_BORRADOR_DOC = 'danna_bitacora_doc_v2:';
+export const VERSION_BORRADOR_DOC = 2;
+
+export interface BorradorDoc {
+  v: number;
+  guardadoEn: string;
+  fecha: string;
+  /** Versión del servidor sobre la que se partió (0 = la jornada no existía allá). */
+  baseVersion: number;
+  /** true = esta copia ya está en el servidor; false = hay cambios que aún no llegaron. */
+  sincronizado: boolean;
+  doc: DocJornada;
+}
+
+export function leerBorradorDoc(a: Almacen | null, fecha: string, normalizar: (raw: unknown) => DocJornada | null): { borrador: BorradorDoc | null; aviso?: string } {
+  if (!a) return { borrador: null, aviso: 'Este navegador no permite guardar un borrador.' };
+  let t: string | null;
+  try { t = a.getItem(PREFIJO_BORRADOR_DOC + fecha); } catch { return { borrador: null, aviso: 'No se pudo leer el borrador guardado.' }; }
+  if (t === null) return { borrador: null };
+  let o: unknown;
+  try { o = JSON.parse(t); } catch { return { borrador: null, aviso: 'El borrador de este navegador estaba dañado y se ignoró.' }; }
+  if (!esObj(o) || o.v !== VERSION_BORRADOR_DOC || o.fecha !== fecha) return { borrador: null, aviso: 'El borrador de este navegador era de otra versión y se ignoró.' };
+  const doc = normalizar(o.doc);
+  if (!doc) return { borrador: null, aviso: 'El borrador de este navegador estaba incompleto y se ignoró.' };
+  const bv = typeof o.baseVersion === 'number' && Number.isInteger(o.baseVersion) && o.baseVersion >= 0 ? o.baseVersion : 0;
+  return { borrador: { v: VERSION_BORRADOR_DOC, guardadoEn: str(o.guardadoEn), fecha, baseVersion: bv, sincronizado: o.sincronizado === true, doc } };
+}
+
+export function guardarBorradorDoc(a: Almacen | null, fecha: string, doc: DocJornada, baseVersion: number, sincronizado: boolean, ahora: string): { ok: true } | { ok: false; error: string } {
+  if (!a) return { ok: false, error: 'Este navegador no permite guardar un borrador.' };
+  try {
+    const b: BorradorDoc = { v: VERSION_BORRADOR_DOC, guardadoEn: ahora, fecha, baseVersion, sincronizado, doc };
+    a.setItem(PREFIJO_BORRADOR_DOC + fecha, JSON.stringify(b));
+    if (a.getItem(PREFIJO_BORRADOR_DOC + fecha) === null) return { ok: false, error: 'El navegador no conservó el borrador.' };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && /quota/i.test(e.name + e.message) ? 'No hay espacio en el almacenamiento del navegador.' : 'No se pudo escribir en el almacenamiento del navegador.' };
+  }
+}
+
+export function borrarBorradorDoc(a: Almacen | null, fecha: string): void { try { a?.removeItem(PREFIJO_BORRADOR_DOC + fecha); } catch { /* sin almacenamiento */ } }
