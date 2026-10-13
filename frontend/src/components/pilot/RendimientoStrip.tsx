@@ -6,7 +6,7 @@
 
 import React, { memo, useMemo } from 'react';
 import { useRendLog } from '@/store/telemetryStore';
-import { leerRendimiento, unir, FUENTES, NOMBRE, VENTANA, type Fuente, type Medida } from '@/domain/rendimiento';
+import { leerRendimiento, lineaTendencia, fmtDelta, unir, FUENTES, NOMBRE, VENTANA, type Fuente, type ItemTendencia, type Medida } from '@/domain/rendimiento';
 import { C, FONT_UI, FONT_NUM, glowText, rgba } from './theme';
 
 /** Un color por voz. El Motor va en plata para no confundirse con D.A.N.N.A. (cian). */
@@ -53,26 +53,49 @@ export const RendimientoStrip = memo(function RendimientoStrip({ height }: { hei
     <span style={{ color: lec.veredicto === 'parejo' ? C.ink2 : C.ink3, fontWeight: 600 }}>{lec.texto}</span>
   );
 
+  const tend = useMemo(() => lineaTendencia(lec), [lec]);
+  const items = (xs: ItemTendencia[]) => xs.map((x) => `${NOMBRE[x.fuente]} (${fmtDelta(x.delta)})`).join(', ');
+  const tendencia = tend.estado === 'hay' ? (
+    <>
+      {tend.ascenso.length > 0 && <span style={{ color: C.ok, textShadow: glowText(C.ok, 0.7), fontWeight: 700 }}>▲ En ascenso: {items(tend.ascenso)}</span>}
+      {tend.ascenso.length > 0 && tend.descenso.length > 0 && <span style={{ color: C.ink4 }}> · </span>}
+      {tend.descenso.length > 0 && <span style={{ color: C.err, textShadow: glowText(C.err, 0.7), fontWeight: 700 }}>▼ En descenso: {items(tend.descenso)}</span>}
+    </>
+  ) : (
+    <span style={{ color: C.ink3, fontWeight: 600 }}>{tend.texto}</span>
+  );
+  const fila: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 };
+
   return (
     <section
-      aria-label={`Rendimiento de las cuatro voces en los últimos ${VENTANA} giros`} data-qp="rendimiento" data-veredicto={lec.veredicto}
-      style={{ height, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px', minWidth: 0, overflow: 'hidden', border: '1px solid rgba(120,170,255,0.2)', borderRadius: 6, background: 'linear-gradient(90deg, rgba(120,170,255,0.09), rgba(255,255,255,0.02))', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09)', boxSizing: 'border-box' }}
+      aria-label={`Rendimiento de las cuatro voces en los últimos ${VENTANA} giros`} data-qp="rendimiento" data-veredicto={lec.veredicto} data-tendencia={tend.estado}
+      style={{ height, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, padding: '0 8px', minWidth: 0, overflow: 'hidden', border: '1px solid rgba(120,170,255,0.2)', borderRadius: 6, background: 'linear-gradient(90deg, rgba(120,170,255,0.09), rgba(255,255,255,0.02))', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09)', boxSizing: 'border-box' }}
     >
       <style>{CSS}</style>
-      <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 0.5px)', color: C.ink3, whiteSpace: 'nowrap', flexShrink: 0 }}>{VENTANA} giros</span>
-      <span style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-        {FUENTES.map((f) => {
-          const m = lec.medidas.find((x) => x.fuente === f)!;
-          return <Chip key={f} m={m} rol={lec.mejores.includes(f) ? 'mejor' : lec.peores.includes(f) ? 'peor' : null} />;
-        })}
-      </span>
-      <span
-        key={lec.texto} className="qp-rend-pulso" data-qp="rend-veredicto" role="status" aria-live="polite"
-        style={{ marginLeft: 'auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right', fontFamily: FONT_UI, fontSize: 'var(--qp-fs-txt)' }}
-      >
-        {veredicto}
-      </span>
+      <div style={{ ...fila, height: 22 }}>
+        <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 0.5px)', color: C.ink3, whiteSpace: 'nowrap', flexShrink: 0 }}>{VENTANA} giros</span>
+        <span style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+          {FUENTES.map((f) => {
+            const m = lec.medidas.find((x) => x.fuente === f)!;
+            return <Chip key={f} m={m} rol={lec.mejores.includes(f) ? 'mejor' : lec.peores.includes(f) ? 'peor' : null} />;
+          })}
+        </span>
+        <span
+          key={lec.texto} className="qp-rend-pulso" data-qp="rend-veredicto" role="status" aria-live="polite"
+          style={{ marginLeft: 'auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right', fontFamily: FONT_UI, fontSize: 'var(--qp-fs-txt)' }}
+        >
+          {veredicto}
+        </span>
+      </div>
+      <div style={{ ...fila, height: 14 }}>
+        <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 1px)', color: C.ink3, whiteSpace: 'nowrap', flexShrink: 0 }}>Viene</span>
+        <span
+          key={tend.texto} className="qp-rend-pulso" data-qp="rend-tendencia" aria-label={tend.texto}
+          style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 0.5px)' }}
+        >
+          {tendencia}
+        </span>
+      </div>
     </section>
   );
 });
-

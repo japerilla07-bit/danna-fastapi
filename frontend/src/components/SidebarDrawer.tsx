@@ -36,7 +36,7 @@ const ONBOARDING_STEPS = [
   },
   {
     n: '05', title: 'RENDIMIENTO EN VIVO',
-    text: 'La franja de arriba compara las cuatro voces en los últimos 12 giros y te dice cuál va mejor y cuál peor, por ejemplo "Mejor: Motor y Capa 1 · Peor: Escudo y D.A.N.N.A.". Cambia sola mientras juegas; ▲ indica que una voz viene mejorando y ▼ que viene empeorando. "Parejo" significa que ninguna se despega. A veces el Motor solo rinde mejor que las capas: úsala para conocer la mesa. Es una lectura de apoyo; no cambia lo que dice JUEGA ESTO.',
+    text: 'La franja de arriba compara las cuatro voces en los últimos 12 giros y te dice cuál va mejor y cuál peor, por ejemplo "Mejor: Motor y Capa 1 · Peor: Escudo y D.A.N.N.A.". Cambia sola mientras juegas. Debajo, una segunda línea dice quién viene en ascenso y quién en descenso frente a los 12 giros anteriores, con los puntos de cambio. "Parejo" significa que ninguna se despega. A veces el Motor solo rinde mejor que las capas: úsala para conocer la mesa. Es una lectura de apoyo; no cambia lo que dice JUEGA ESTO.',
   },
   {
     n: '06', title: 'CASILLAS Y CALOR',

@@ -125,8 +125,8 @@ export const DENSITY_ROOMY: Dens   = { pad: 10, gap: 10, hA: 108, hRail: 38, lan
 /** Hueco entre los grupos de un carril (cabecera · jugadas · nota · marcador · escalera). */
 export const LANE_STACK_GAP = 3;
 export const SHELL_HEADER = 28;
-/** Franja de RENDIMIENTO EN VIVO (Mejor/Peor de las cuatro voces), arriba del veredicto. Alto fijo. */
-export const H_STRIP = 26;
+/** Franja de RENDIMIENTO EN VIVO, arriba del veredicto: fila 1 Mejor/Peor de las cuatro voces, fila 2 En ascenso/En descenso. Alto fijo. */
+export const H_STRIP = 40;
 /** Respiro inferior de cada carril y de la tabla: el cuadro tipográfico de la última fila (más alto que su fila) cae DENTRO del bloque. */
 export const LANE_PAD_B = 2;
 /** Respiro superior de cada carril/tabla (ahora son tarjetas de cristal). */

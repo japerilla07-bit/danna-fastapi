@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { agregarEntrada, CAP_REGISTRO, leerRendimiento, unir, VENTANA } from '../../src/domain/rendimiento';
+import { agregarEntrada, CAP_REGISTRO, fmtDelta, leerRendimiento, lineaTendencia, unir, VENTANA } from '../../src/domain/rendimiento';
 import type { EntradaRend } from '../../src/domain/rendimiento';
 import { useTelemetryStore } from '../../src/store/telemetryStore';
 
@@ -93,6 +93,57 @@ test('empate técnico arriba: la voz que está a 4 puntos de la mejor también v
   const log2 = Array.from({ length: 12 }, (_, i) => g({ capa1: true, escudo: i !== 0, danna: i < 6 }));
   const l2 = leerRendimiento(log2);
   assert.deepEqual(l2.mejores, ['capa1']);
+});
+
+test('ascenso / descenso: dice quién viene subiendo y quién bajando, con los puntos de cambio', () => {
+  const antes = rep(12, g({ capa1: false, escudo: true, motorDoc: true, motorCol: true }));
+  const ahora = rep(12, g({ capa1: true, escudo: false, motorDoc: true, motorCol: true }));
+  const l = leerRendimiento([...antes, ...ahora]);
+  assert.deepEqual(l.ascenso, ['capa1']);
+  assert.deepEqual(l.descenso, ['escudo']);
+  assert.equal(l.conPrevia, true);
+  const t = lineaTendencia(l);
+  assert.equal(t.estado, 'hay');
+  assert.equal(t.texto, 'En ascenso: Capa 1 (+100 pts) · En descenso: Escudo (−100 pts)');
+  assert.deepEqual(t.ascenso, [{ fuente: 'capa1', delta: 100 }]);
+  // el Motor no se movió: no aparece en ninguna lista
+  assert.ok(![...t.ascenso, ...t.descenso].some((x) => x.fuente === 'motor'));
+});
+
+test('solo ascenso o solo descenso: la frase trae solo lo que hay', () => {
+  const antes = rep(12, g({ capa1: false }));
+  const arriba = lineaTendencia(leerRendimiento([...antes, ...rep(12, g({ capa1: true }))]));
+  assert.equal(arriba.texto, 'En ascenso: Capa 1 (+100 pts)');
+  const abajo = lineaTendencia(leerRendimiento([...rep(12, g({ danna: true })), ...rep(12, g({ danna: false }))]));
+  assert.equal(abajo.texto, 'En descenso: D.A.N.N.A. (−100 pts)');
+});
+
+test('sin ventana anterior (menos de 24 giros): avisa desde cuándo hay tendencia, sin inventarla', () => {
+  const l = leerRendimiento(rep(18, g({ capa1: true, escudo: false })));
+  assert.equal(l.conPrevia, false);
+  assert.equal(l.total, 18);
+  const t = lineaTendencia(l);
+  assert.equal(t.estado, 'sin_previa');
+  assert.equal(t.texto, 'Tendencia desde el giro 24 (van 18)');
+  assert.deepEqual([t.ascenso, t.descenso], [[], []]);
+});
+
+test('cambio chico: "sin cambios marcados", pero el delta sí se calcula', () => {
+  const l = leerRendimiento([...Array.from({ length: 12 }, (_, i) => g({ capa1: i < 7 })), ...Array.from({ length: 12 }, (_, i) => g({ capa1: i < 8 }))]);
+  const t = lineaTendencia(l);
+  assert.equal(t.estado, 'quieta');
+  assert.match(t.texto, /Sin cambios marcados/);
+  assert.equal(l.medidas.find((m) => m.fuente === 'capa1')!.delta, 8); // 7/12 → 8/12 = +8 pts
+  assert.equal(fmtDelta(8), '+8 pts'); assert.equal(fmtDelta(-17), '−17 pts'); assert.equal(fmtDelta(0), '+0 pts');
+});
+
+test('una voz con muestra insuficiente en alguna ventana no entra en ascenso/descenso', () => {
+  // Escudo habló 3 veces antes (no califica) y 12 ahora: sin ventana comparable
+  const antes = Array.from({ length: 12 }, (_, i) => g({ escudo: i < 3 ? false : null, capa1: true }));
+  const ahora = rep(12, g({ escudo: true, capa1: true }));
+  const l = leerRendimiento([...antes, ...ahora]);
+  assert.ok(!l.ascenso.includes('escudo') && !l.descenso.includes('escudo'));
+  assert.equal(l.medidas.find((m) => m.fuente === 'escudo')!.delta, null);
 });
 
 test('es pura: no muta el registro y agregarEntrada lo acota', () => {

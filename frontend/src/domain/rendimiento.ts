@@ -52,6 +52,8 @@ export interface Medida {
   /** 0..1, o null si no llega a MIN_EVENTOS */
   tasa: number | null;
   tendencia: Tendencia;
+  /** cambio de la tasa contra los 12 giros anteriores, en puntos porcentuales enteros (null si no hay con qué comparar) */
+  delta: number | null;
 }
 
 export type Veredicto = 'juntando' | 'parejo' | 'hay';
@@ -59,10 +61,17 @@ export type Veredicto = 'juntando' | 'parejo' | 'hay';
 export interface Lectura {
   /** giros disponibles en el registro (tope VENTANA para mostrar el avance) */
   giros: number;
+  /** giros totales registrados (tope CAP_REGISTRO) */
+  total: number;
   veredicto: Veredicto;
   medidas: Medida[];
   mejores: Fuente[];
   peores: Fuente[];
+  /** voces que vienen mejorando / empeorando contra los 12 giros anteriores */
+  ascenso: Fuente[];
+  descenso: Fuente[];
+  /** hay 2 ventanas completas (24 giros) para poder hablar de tendencia */
+  conPrevia: boolean;
   /** frase lista para mostrar */
   texto: string;
 }
@@ -94,18 +103,22 @@ export function leerRendimiento(log: readonly EntradaRend[]): Lectura {
     const c = contar(fuente, actual);
     const tasa = tasaDe(c);
     let tendencia: Tendencia = null;
+    let delta: number | null = null;
     if (previa && tasa !== null) {
       const t0 = tasaDe(contar(fuente, previa));
       if (t0 !== null) {
         const d = tasa - t0;
+        delta = Math.round(d * 100);
         tendencia = d >= UMBRAL_TENDENCIA ? 'sube' : d <= -UMBRAL_TENDENCIA ? 'baja' : null;
       }
     }
-    return { fuente, hits: c.hits, n: c.n, tasa, tendencia };
+    return { fuente, hits: c.hits, n: c.n, tasa, tendencia, delta };
   });
+  const ascenso = medidas.filter((m) => m.tendencia === 'sube').map((m) => m.fuente);
+  const descenso = medidas.filter((m) => m.tendencia === 'baja').map((m) => m.fuente);
 
   const giros = Math.min(log.length, VENTANA);
-  const base = { giros, medidas };
+  const base = { giros, total: log.length, medidas, ascenso, descenso, conPrevia: previa !== null };
   if (log.length < VENTANA) {
     return { ...base, veredicto: 'juntando', mejores: [], peores: [], texto: `Juntando giros ${log.length}/${VENTANA}` };
   }
@@ -121,6 +134,38 @@ export function leerRendimiento(log: readonly EntradaRend[]): Lectura {
   const mejores = calificadas.filter((m) => m.tasa >= maxT - TOL_GRUPO).map((m) => m.fuente);
   const peores = calificadas.filter((m) => m.tasa <= minT + TOL_GRUPO && !mejores.includes(m.fuente)).map((m) => m.fuente);
   return { ...base, veredicto: 'hay', mejores, peores, texto: `Mejor: ${unir(mejores)} · Peor: ${unir(peores)}` };
+}
+
+export interface ItemTendencia { fuente: Fuente; delta: number }
+export interface LineaTendencia {
+  estado: 'sin_previa' | 'quieta' | 'hay';
+  ascenso: ItemTendencia[];
+  descenso: ItemTendencia[];
+  /** frase completa (para lectores de pantalla y para los estados sin cambio) */
+  texto: string;
+}
+
+/** "+25 pts" / "−17 pts" (signo menos tipográfico). */
+export const fmtDelta = (d: number): string => `${d >= 0 ? '+' : '−'}${Math.abs(d)} pts`;
+
+const lista = (xs: ItemTendencia[]): string => {
+  const n = xs.map((x) => `${NOMBRE[x.fuente]} (${fmtDelta(x.delta)})`);
+  return n.length <= 1 ? (n[0] ?? '') : `${n.slice(0, -1).join(', ')} y ${n[n.length - 1]}`;
+};
+
+/** Segunda línea de la franja: qué voces vienen en ascenso y cuáles en descenso frente a los 12 giros anteriores. */
+export function lineaTendencia(lec: Lectura): LineaTendencia {
+  const item = (f: Fuente): ItemTendencia => ({ fuente: f, delta: lec.medidas.find((m) => m.fuente === f)?.delta ?? 0 });
+  const ascenso = lec.ascenso.map(item);
+  const descenso = lec.descenso.map(item);
+  if (!lec.conPrevia) {
+    return { estado: 'sin_previa', ascenso, descenso, texto: `Tendencia desde el giro ${VENTANA * 2} (van ${lec.total})` };
+  }
+  if (!ascenso.length && !descenso.length) {
+    return { estado: 'quieta', ascenso, descenso, texto: `Sin cambios marcados frente a los ${VENTANA} giros anteriores` };
+  }
+  const partes = [ascenso.length ? `En ascenso: ${lista(ascenso)}` : '', descenso.length ? `En descenso: ${lista(descenso)}` : ''].filter(Boolean);
+  return { estado: 'hay', ascenso, descenso, texto: partes.join(' · ') };
 }
 
 /** Entrada nueva del registro, acotada a CAP_REGISTRO (inmutable). */
