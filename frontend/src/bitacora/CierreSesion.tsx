@@ -4,8 +4,9 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { C, FONT_NUM, rgba } from '@/components/pilot/theme';
+import { CampoSaldo } from './CampoSaldo';
 import { fmtHM } from './planner';
-import { ESTADOS_CIERRE, MOTIVOS_SALIDA, SENSACIONES, SIGUIO_MOTOR, duracionRealMin, resultadoSesion, validarRegistro } from './registro';
+import { ESTADOS_CIERRE, MOTIVOS_SALIDA, SENSACIONES, SIGUIO_MOTOR, compararMeta, duracionRealMin, resultadoSesion, validarRegistro } from './registro';
 import type { RegistroSesion, SesionPlan, SiguioMotor } from './types';
 
 const sinDia = (m: number) => fmtHM(m).replace(/ \(\+\d\)/, '');
@@ -18,6 +19,8 @@ interface Props {
   /** Saldo final de la sesión anterior ya registrada: se ofrece como saldo inicial, no se pone solo. */
   saldoFinalAnterior: number | null;
   numAnterior: number | null;
+  /** Meta por sesión de referencia (si la configuraste en el plan). */
+  metaRef: number | null;
   onGuardar: (r: RegistroSesion) => void;
   onQuitar: () => void;
   onCancelar: () => void;
@@ -26,19 +29,15 @@ interface Props {
 const grupo: CSSProperties = { display: 'grid', gap: 6 };
 const fila: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' };
 
-export function CierreSesion({ sesion, inicial, saldoFinalAnterior, numAnterior, onGuardar, onQuitar, onCancelar }: Props) {
+export function CierreSesion({ sesion, inicial, saldoFinalAnterior, numAnterior, metaRef, onGuardar, onQuitar, onCancelar }: Props) {
   const [r, setR] = useState<RegistroSesion>(inicial);
   const [confirmarQuitar, setConfirmarQuitar] = useState(false);
   const set = (p: Partial<RegistroSesion>) => setR((x) => ({ ...x, ...p }));
-  const hallazgos = useMemo(() => validarRegistro(r, sesion), [r, sesion]);
+  const hallazgos = useMemo(() => validarRegistro(r, sesion, metaRef), [r, sesion, metaRef]);
   const errores = hallazgos.filter((h) => h.nivel === 'error'), avisos = hallazgos.filter((h) => h.nivel === 'aviso');
   const res = resultadoSesion(r), dur = duracionRealMin(r);
   const existe = inicial.estado !== 'pendiente';
   const puede = r.estado !== 'pendiente' && errores.length === 0;
-  const saldo = (v: number | null, onChange: (n: number | null) => void, etq: string) => (
-    <input className="bt-in" type="number" inputMode="decimal" min={0} step="any" placeholder="Ej. 100000" aria-label={etq} value={v === null ? '' : v}
-      onChange={(e) => onChange(e.target.value === '' || Number.isNaN(Number(e.target.value)) ? null : Number(e.target.value))} />
-  );
   const chip = (activo: boolean, color: string): CSSProperties => ({ borderColor: activo ? color : undefined, background: activo ? rgba(color, 0.14) : undefined, color: activo ? color : undefined });
 
   return (
@@ -61,16 +60,26 @@ export function CierreSesion({ sesion, inicial, saldoFinalAnterior, numAnterior,
         <label className="bt-lbl"><span>Hora real de fin</span>
           <input className="bt-in" type="time" value={r.horaFinReal} onChange={(e) => set({ horaFinReal: e.target.value })} />
           <button type="button" className="bt-link" onClick={() => set({ horaFinReal: sinDia(sesion.fin) })}>Usar la del plan ({sinDia(sesion.fin)})</button></label>
-        <label className="bt-lbl"><span>Saldo con el que empecé</span>
-          {saldo(r.saldoInicial, (n) => set({ saldoInicial: n }), 'Saldo inicial')}
-          {saldoFinalAnterior !== null && numAnterior !== null && <button type="button" className="bt-link" onClick={() => set({ saldoInicial: saldoFinalAnterior })}>Usar el final de S{numAnterior} ({fmtCOP(saldoFinalAnterior)})</button>}</label>
-        <label className="bt-lbl"><span>Saldo con el que terminé</span>{saldo(r.saldoFinal, (n) => set({ saldoFinal: n }), 'Saldo final')}</label>
+        <div style={{ display: 'grid', gap: 5, alignContent: 'start' }}>
+          <label className="bt-lbl"><span>Saldo con el que empecé</span><CampoSaldo valor={r.saldoInicial} onChange={(n) => set({ saldoInicial: n })} etiqueta="Saldo inicial" /></label>
+          {saldoFinalAnterior !== null && numAnterior !== null && r.saldoInicial !== saldoFinalAnterior && <button type="button" className="bt-link" onClick={() => set({ saldoInicial: saldoFinalAnterior })}>Usar el final de S{numAnterior} ({fmtCOP(saldoFinalAnterior)})</button>}
+        </div>
+        <label className="bt-lbl"><span>Saldo con el que terminé</span><CampoSaldo valor={r.saldoFinal} onChange={(n) => set({ saldoFinal: n })} etiqueta="Saldo final" /></label>
       </div>
       <div style={{ ...fila, fontSize: 13.5, color: C.ink2 }} aria-live="polite">
         <span>Resultado: <strong style={{ fontFamily: FONT_NUM, fontSize: 20, color: res === null ? C.ink4 : res > 0 ? C.ok : res < 0 ? C.err : C.ink }}>{res === null ? '—' : fmtRes(res)}</strong></span>
         <span style={{ color: C.ink4 }}>·</span>
         <span>Duración real: <strong>{dur === null ? '—' : `${dur} min`}</strong></span>
       </div>
+
+      <fieldset style={{ ...grupo, border: 0, padding: 0, margin: 0 }}>
+        <legend className="bt-q">¿Se cumplió la meta de la sesión?</legend>
+        <div style={fila} role="radiogroup" aria-label="Se cumplió la meta">
+          <button type="button" role="radio" aria-checked={r.metaCumplida === true} className="bt-btn" style={chip(r.metaCumplida === true, C.ok)} onClick={() => set({ metaCumplida: r.metaCumplida === true ? null : true })}>Sí</button>
+          <button type="button" role="radio" aria-checked={r.metaCumplida === false} className="bt-btn" style={chip(r.metaCumplida === false, C.err)} onClick={() => set({ metaCumplida: r.metaCumplida === false ? null : false })}>No</button>
+          {metaRef !== null && <span style={{ fontSize: 12.5, color: C.ink4 }}>Tu meta de referencia por sesión: {fmtCOP(metaRef)}{compararMeta(res, metaRef) ? ` · con este resultado ${compararMeta(res, metaRef) === 'cumple' ? 'sí se alcanza' : 'no se alcanza'}` : ''}</span>}
+        </div>
+      </fieldset>
 
       <fieldset style={{ ...grupo, border: 0, padding: 0, margin: 0 }}>
         <legend className="bt-q">¿Seguiste las instrucciones del motor?</legend>

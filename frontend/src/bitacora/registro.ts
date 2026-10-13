@@ -28,7 +28,7 @@ export const etiquetaEstado = (e: EstadoCierre): string => ETQ_ESTADO[e] ?? ETQ_
 
 export const registroVacio = (n: number): RegistroSesion => ({
   n, estado: 'pendiente', horaInicioReal: '', horaFinReal: '', saldoInicial: null, saldoFinal: null,
-  siguioMotor: '', sensacion: 0, saliMesa: null, motivoSalida: '', detalleSalida: '', notas: '', actualizadoEn: '',
+  siguioMotor: '', metaCumplida: null, sensacion: 0, saliMesa: null, motivoSalida: '', detalleSalida: '', notas: '', actualizadoEn: '',
 });
 
 // ── Lectura defensiva (lo que viene del servidor o del navegador no se da por bueno) ─────
@@ -44,7 +44,7 @@ export function normalizarRegistro(raw: unknown, n: number): RegistroSesion {
   const sens = typeof raw.sensacion === 'number' && Number.isInteger(raw.sensacion) && raw.sensacion >= 1 && raw.sensacion <= 5 ? raw.sensacion : 0;
   return {
     n, estado, horaInicioReal: txt(raw.horaInicioReal, 5), horaFinReal: txt(raw.horaFinReal, 5),
-    saldoInicial: numONull(raw.saldoInicial), saldoFinal: numONull(raw.saldoFinal), siguioMotor: motor, sensacion: sens,
+    saldoInicial: numONull(raw.saldoInicial), saldoFinal: numONull(raw.saldoFinal), siguioMotor: motor, metaCumplida: typeof raw.metaCumplida === 'boolean' ? raw.metaCumplida : null, sensacion: sens,
     saliMesa: typeof raw.saliMesa === 'boolean' ? raw.saliMesa : null, motivoSalida: txt(raw.motivoSalida, 120),
     detalleSalida: txt(raw.detalleSalida), notas: txt(raw.notas, 5000), actualizadoEn: txt(raw.actualizadoEn, 40),
   };
@@ -60,6 +60,43 @@ export function normalizarRegistros(raw: unknown): Record<string, RegistroSesion
   return out;
 }
 
+// ── Montos (saldos) ──────────────────────────────────────────────────────────────────
+/**
+ * Lee un monto escrito a mano. Acepta "100000", "100.000", "142,500", "100,5", "1.234.567,50", "1,234,567.50", "$ 100 000".
+ * '' → null (sin dato). Texto que no es un monto → undefined (no se toca el valor guardado).
+ */
+export function parsearMonto(texto: string): number | null | undefined {
+  const t = texto.replace(/[\s$]/g, '');
+  if (t === '') return null;
+  if (!/^-?[\d.,]+$/.test(t)) return undefined;
+  const nPuntos = (t.match(/\./g) ?? []).length, nComas = (t.match(/,/g) ?? []).length;
+  const miles = (sep: string) => new RegExp(`^-?\\d{1,3}(\\${sep}\\d{3})+$`).test(t);   // 1.234.567 · 142,500
+  let n: string;
+  if (nPuntos && nComas) {
+    // Con los dos signos, el último es el decimal y el otro separa miles: 1.234.567,50 · 1,234,567.50
+    const dec = t.lastIndexOf(',') > t.lastIndexOf('.') ? ',' : '.';
+    const mil = dec === ',' ? '.' : ',';
+    if (t.split(dec).length !== 2) return undefined;
+    n = t.split(mil).join('').replace(dec, '.');
+  } else if (nComas) {
+    // Una coma seguida de exactamente 3 dígitos se lee como separador de miles (142,500 = 142500): en pesos casi nunca hay 3 decimales.
+    n = miles(',') ? t.replace(/,/g, '') : nComas === 1 ? t.replace(',', '.') : '';
+  } else if (nPuntos) {
+    n = miles('.') ? t.replace(/\./g, '') : nPuntos === 1 ? t : '';
+  } else n = t;
+  if (!/^-?\d+(\.\d+)?$/.test(n)) return undefined;
+  const v = Number(n);
+  return isFinite(v) ? v : undefined;
+}
+/** 112500 → "112.500" (formato colombiano). */
+export const formatearMonto = (v: number | null): string => (v === null ? '' : v.toLocaleString('es-CO', { maximumFractionDigits: 2 }));
+
+/** Compara el resultado de la sesión con la meta de referencia (si la hay). null = no se puede comparar. */
+export function compararMeta(resultado: number | null, meta: number | null | undefined): 'cumple' | 'no_cumple' | null {
+  if (resultado === null || meta === null || meta === undefined || !isFinite(meta) || meta <= 0) return null;
+  return resultado >= meta ? 'cumple' : 'no_cumple';
+}
+
 // ── Cálculos ─────────────────────────────────────────────────────────────────────────
 /** Duración real en minutos; si la hora de fin es menor que la de inicio se entiende que cruzó la medianoche. null si falta algún dato. */
 export function duracionRealMin(r: Pick<RegistroSesion, 'horaInicioReal' | 'horaFinReal'>): number | null {
@@ -73,7 +110,7 @@ export function resultadoSesion(r: Pick<RegistroSesion, 'saldoInicial' | 'saldoF
 }
 
 /** Avisos sobre un cierre. Nunca impiden guardarlo. */
-export function validarRegistro(r: RegistroSesion, s?: Pick<SesionPlan, 'duracionMin'>): Hallazgo[] {
+export function validarRegistro(r: RegistroSesion, s?: Pick<SesionPlan, 'duracionMin'>, metaRef?: number | null): Hallazgo[] {
   const h: Hallazgo[] = [];
   const add = (codigo: string, nivel: 'error' | 'aviso', mensaje: string) => h.push({ codigo, nivel, mensaje, sesion: r.n });
   if (r.horaInicioReal && parseHM(r.horaInicioReal) === null) add('HORA_INICIO_INVALIDA', 'error', 'La hora real de inicio no es válida.');
@@ -84,6 +121,9 @@ export function validarRegistro(r: RegistroSesion, s?: Pick<SesionPlan, 'duracio
   const d = duracionRealMin(r);
   if (d !== null && d === 0) add('DURACION_CERO', 'aviso', 'La hora de inicio y la de fin son iguales: la sesión dura 0 min.');
   if (d !== null && d > 12 * 60) add('DURACION_LARGA', 'aviso', 'La sesión real dura más de 12 horas; revisa las horas.');
+  const cmp = compararMeta(resultadoSesion(r), metaRef);
+  if (r.metaCumplida === true && cmp === 'no_cumple') add('META_NO_COINCIDE', 'aviso', `Marcaste que cumpliste la meta, pero el resultado (${formatearMonto(resultadoSesion(r))}) está por debajo de tu meta de referencia (${formatearMonto(metaRef ?? null)}).`);
+  if (r.metaCumplida === false && cmp === 'cumple') add('META_NO_COINCIDE', 'aviso', `Marcaste que no cumpliste la meta, pero el resultado (${formatearMonto(resultadoSesion(r))}) alcanza tu meta de referencia (${formatearMonto(metaRef ?? null)}).`);
   if (r.estado !== 'pendiente') {
     const falta: string[] = [];
     if (r.saldoInicial === null) falta.push('saldo inicial');
@@ -111,6 +151,8 @@ export interface ResumenJornada {
   siguioMotor: { si: number; parcial: number; no: number; sinResponder: number };
   salidasDeMesa: number;
   sensacionPromedio: number | null;
+  /** Metas por sesión: cumplidas / no cumplidas / sin responder (solo sesiones activas). */
+  metas: { si: number; no: number; sinResponder: number };
 }
 
 export function resumenJornada(plan: Plan, registros: Record<string, RegistroSesion>): ResumenJornada {
@@ -118,17 +160,21 @@ export function resumenJornada(plan: Plan, registros: Record<string, RegistroSes
   const r: ResumenJornada = {
     sesionesActivas: activas.length, registradas: 0, cumplidas: 0, parciales: 0, noCumplidas: 0, pendientes: 0,
     resultadoTotal: null, sesionesConResultado: 0, tiempoRealMin: 0, siguioMotor: { si: 0, parcial: 0, no: 0, sinResponder: 0 },
-    salidasDeMesa: 0, sensacionPromedio: null,
+    salidasDeMesa: 0, sensacionPromedio: null, metas: { si: 0, no: 0, sinResponder: 0 },
   };
   let sumaSens = 0, nSens = 0;
   for (const s of activas) {
     const g = registros[String(s.n)];
+    // Saldos, horas y meta son datos por sí mismos: cuentan aunque el cierre aún no esté marcado.
+    if (g) {
+      const res = resultadoSesion(g);
+      if (res !== null) { r.resultadoTotal = (r.resultadoTotal ?? 0) + res; r.sesionesConResultado++; }
+      const d = duracionRealMin(g); if (d !== null) r.tiempoRealMin += d;
+    }
+    if (g && g.metaCumplida !== null) { if (g.metaCumplida) r.metas.si++; else r.metas.no++; } else r.metas.sinResponder++;
     if (!g || g.estado === 'pendiente') { r.pendientes++; continue; }
     r.registradas++;
     if (g.estado === 'cumplida') r.cumplidas++; else if (g.estado === 'parcial') r.parciales++; else r.noCumplidas++;
-    const res = resultadoSesion(g);
-    if (res !== null) { r.resultadoTotal = (r.resultadoTotal ?? 0) + res; r.sesionesConResultado++; }
-    const d = duracionRealMin(g); if (d !== null) r.tiempoRealMin += d;
     if (g.siguioMotor) r.siguioMotor[g.siguioMotor]++; else r.siguioMotor.sinResponder++;
     if (g.saliMesa === true) r.salidasDeMesa++;
     if (g.sensacion >= 1) { sumaSens += g.sensacion; nSens++; }
@@ -143,7 +189,7 @@ export function resumenJornada(plan: Plan, registros: Record<string, RegistroSes
 const SEP = ';';
 export const COLUMNAS_CSV = [
   'fecha', 'sesion', 'estado_plan', 'inicio_plan', 'fin_plan', 'duracion_plan_min', 'reprogramada_desde', 'motivo_cancelacion',
-  'cierre', 'inicio_real', 'fin_real', 'duracion_real_min', 'saldo_inicial', 'saldo_final', 'resultado',
+  'cierre', 'inicio_real', 'fin_real', 'duracion_real_min', 'saldo_inicial', 'saldo_final', 'resultado', 'meta_cumplida',
   'siguio_motor', 'sensacion_1a5', 'salio_de_mesa', 'motivo_salida', 'detalle_salida', 'notas_sesion',
   'cierre_actualizado', 'limite_perdida_sesion', 'meta_sesion', 'notas_del_dia',
 ] as const;
@@ -179,7 +225,7 @@ export function filasJornada(j: JornadaExport): string[][] {
       s.inicio === undefined ? '' : csvCampo(fmtHM(s.inicio)), s.fin === undefined ? '' : csvCampo(fmtHM(s.fin)), s.fuera ? '' : csvCampo(s.duracionMin),
       s.reprogramadaDesde !== undefined ? csvCampo(fmtHM(s.reprogramadaDesde)) : '', t(s.motivoCancelacion ?? ''),
       csvCampo(g.estado === 'pendiente' ? 'sin registrar' : ETQ_ESTADO[g.estado]), csvCampo(g.horaInicioReal), csvCampo(g.horaFinReal), csvCampo(dur),
-      csvCampo(g.saldoInicial), csvCampo(g.saldoFinal), csvCampo(res),
+      csvCampo(g.saldoInicial), csvCampo(g.saldoFinal), csvCampo(res), g.metaCumplida === null ? '' : g.metaCumplida ? 'sí' : 'no',
       csvCampo(ETQ_MOTOR[g.siguioMotor]), csvCampo(g.sensacion || null),
       g.saliMesa === null ? '' : g.saliMesa ? 'sí' : 'no', t(g.motivoSalida), t(g.detalleSalida), t(g.notas),
       csvCampo(g.actualizadoEn), csvCampo(lim.perdidaPorSesion ?? null), csvCampo(lim.metaPorSesion ?? null), t(j.notasDia),

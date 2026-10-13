@@ -40,6 +40,7 @@ export function ResumenDia({ resumen: r, huerfanos, notasDia, onNotas, onDescarg
         {dato('Sesiones registradas', `${r.registradas} de ${r.sesionesActivas}`, C.danna, r.pendientes ? `${r.pendientes} sin registrar` : 'todas registradas')}
         {dato('Cumplidas', `${r.cumplidas}`, C.ok, `${r.parciales} a medias · ${r.noCumplidas} no cumplidas`)}
         {dato('Resultado del día', res === null ? '—' : `${res > 0 ? '+' : ''}${fmtCOP(res)}`, res === null ? C.ink4 : res > 0 ? C.ok : res < 0 ? C.err : C.ink, res === null ? 'faltan saldos' : `suma de ${r.sesionesConResultado} sesión(es) con ambos saldos`)}
+        {dato('Meta cumplida', `${r.metas.si} de ${r.sesionesActivas}`, C.ok, `${r.metas.no} no · ${r.metas.sinResponder} sin responder`)}
         {dato('Tiempo real jugado', fmtDur(r.tiempoRealMin), C.ink)}
         {dato('Seguiste el motor', `${r.siguioMotor.si}/${r.registradas}`, C.danna, `${r.siguioMotor.parcial} en parte · ${r.siguioMotor.no} no · ${r.siguioMotor.sinResponder} sin responder`)}
         {dato('Salidas de la mesa', `${r.salidasDeMesa}`, r.salidasDeMesa ? C.warn : C.ink)}

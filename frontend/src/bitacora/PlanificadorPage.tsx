@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { C, FONT_NUM, FONT_UI, rgba } from '@/components/pilot/theme';
+import { CampoSaldo } from './CampoSaldo';
 import { CierreSesion, fmtCOP } from './CierreSesion';
 import { LineaDeTiempo } from './LineaDeTiempo';
 import { MisJornadas, ResumenDia } from './PanelesJornada';
@@ -18,11 +19,11 @@ import { docPlan, normalizarDoc } from './documento';
 import type { DocJornada } from './documento';
 import type { OpPlan } from './borrador';
 import { cfgPorDefecto, construirPlan, fmtHM, GIRO_OBSERVACION_DEFECTO, reprogramarSesion } from './planner';
-import { cierresHuerfanos, csvJornadas, etiquetaEstado, registroVacio, resultadoSesion, resumenJornada } from './registro';
+import { cierresHuerfanos, compararMeta, csvJornadas, etiquetaEstado, registroVacio, resultadoSesion, resumenJornada, validarRegistro } from './registro';
 import { crearServicio } from './servicio';
 import type { JornadaServidor } from './servicio';
 import type { EstadoSync } from './sincronizador';
-import type { BloqueCfg, Modalidad, PlanCfg } from './types';
+import type { BloqueCfg, Modalidad, PlanCfg, RegistroSesion } from './types';
 import { useJornada } from './useJornada';
 
 const MODALIDADES: Array<{ id: Modalidad; titulo: string; ayuda: string }> = [
@@ -63,6 +64,8 @@ table.bt-t td{padding:8px;border-bottom:1px solid ${C.line};vertical-align:top}
 .bt-q{font-size:13.5px;color:${C.ink2};padding:0}
 .bt-link{background:none;border:0;padding:0;margin:0;font:inherit;font-size:12px;color:${C.danna};cursor:pointer;text-align:left;text-decoration:underline}
 .bt-link:focus-visible{outline:2px solid ${C.danna};outline-offset:2px}
+.bt-fila-sesion td{border-bottom:0}
+.bt-fila-saldos td{padding:2px 8px 14px;border-bottom:1px solid ${C.line}}
 .bt-banner{margin:0 0 14px;padding:12px 14px;border-radius:10px;border:1px solid ${C.line2};background:${C.bg1};font-size:13.5px;display:grid;gap:8px}
 .bt-btn[role="radio"][aria-checked="true"]{font-weight:600}
 `;
@@ -147,6 +150,9 @@ export function PlanificadorPage() {
 
   // ── Cierre por sesión ──
   const guardarCierre = (n: number, r: ReturnType<typeof registroVacio>) => { editar((d) => ({ ...d, registros: { ...d.registros, [String(n)]: { ...r, n, actualizadoEn: ahora() } } })); setAccion(null); };
+  /** Cambios directos desde la fila de la sesión (saldos y meta): se guardan sin abrir el formulario de cierre. */
+  const guardarCampos = (n: number, patch: Partial<RegistroSesion>) => editar((d) => ({ ...d, registros: { ...d.registros, [String(n)]: { ...(d.registros[String(n)] ?? registroVacio(n)), ...patch, n, actualizadoEn: ahora() } } }));
+  const metaRef = typeof cfg.limites?.metaPorSesion === 'number' && cfg.limites.metaPorSesion > 0 ? cfg.limites.metaPorSesion : null;
   const quitarCierre = (n: number) => { editar((d) => { const { [String(n)]: _x, ...resto } = d.registros; return { ...d, registros: resto }; }); setAccion(null); };
   const saldoAnterior = (n: number): { saldo: number | null; num: number | null } => {
     for (let i = plan.sesiones.length - 1; i >= 0; i--) {
@@ -333,7 +339,7 @@ export function PlanificadorPage() {
                         const g = doc.registros[String(s.n)], cerrada = !!g && g.estado !== 'pendiente';
                         const res = g ? resultadoSesion(g) : null;
                         return [
-                          <tr key={s.n}>
+                          <tr key={s.n} className={cancel ? undefined : 'bt-fila-sesion'}>
                             <td style={{ fontFamily: FONT_NUM, fontSize: 18, fontWeight: 600 }}>S{s.n}</td>
                             <td style={{ textDecoration: cancel ? 'line-through' : 'none', color: cancel ? C.ink4 : C.ink }}>{fmtHM(s.inicio)} – {fmtHM(s.fin)}{s.reprogramadaDesde !== undefined && <div style={{ fontSize: 11.5, color: C.ink4 }}>antes {fmtHM(s.reprogramadaDesde)}</div>}</td>
                             <td>{s.duracionMin} min</td>
@@ -366,9 +372,36 @@ export function PlanificadorPage() {
                               {abierta && errorOp && <div role="alert" style={{ color: C.err, fontSize: 12.5, marginTop: 6, maxWidth: 360 }}>✕ {errorOp}</div>}
                             </td>
                           </tr>,
+                          !cancel && !(abierta && accion!.tipo === 'cierre') && (() => {
+                            const reg = g ?? registroVacio(s.n), ant = saldoAnterior(s.n), cmp = compararMeta(res, metaRef);
+                            const aviso = validarRegistro(reg, s, metaRef).filter((h) => h.nivel === 'error' || h.codigo === 'META_NO_COINCIDE');
+                            const chipMeta = (activo: boolean, color: string): CSSProperties => ({ borderColor: activo ? color : undefined, background: activo ? rgba(color, 0.14) : undefined, color: activo ? color : undefined, fontWeight: activo ? 600 : undefined });
+                            return (
+                              <tr key={`i${s.n}`} className="bt-fila-saldos"><td colSpan={5}>
+                                <div role="group" aria-label={`Saldos y meta de la sesión ${s.n}`} style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px', alignItems: 'flex-end' }}>
+                                  <div style={{ width: 150, display: 'grid', gap: 5 }}>
+                                    <label className="bt-lbl"><span>Saldo inicial</span><CampoSaldo valor={reg.saldoInicial} etiqueta={`Saldo inicial de la sesión ${s.n}`} onChange={(v) => guardarCampos(s.n, { saldoInicial: v })} /></label>
+                                    {ant.saldo !== null && ant.num !== null && reg.saldoInicial !== ant.saldo && <button type="button" className="bt-link" onClick={() => guardarCampos(s.n, { saldoInicial: ant.saldo })}>Usar el final de S{ant.num} ({fmtCOP(ant.saldo)})</button>}
+                                  </div>
+                                  <label className="bt-lbl" style={{ width: 150 }}><span>Saldo final</span><CampoSaldo valor={reg.saldoFinal} etiqueta={`Saldo final de la sesión ${s.n}`} onChange={(v) => guardarCampos(s.n, { saldoFinal: v })} /></label>
+                                  <div style={{ minWidth: 110 }} aria-live="polite"><div style={{ fontSize: 12.5, color: C.ink3 }}>Resultado</div>
+                                    <strong style={{ fontFamily: FONT_NUM, fontSize: 22, color: res === null ? C.ink4 : res > 0 ? C.ok : res < 0 ? C.err : C.ink }}>{res === null ? '—' : `${res > 0 ? '+' : ''}${fmtCOP(res)}`}</strong></div>
+                                  <div role="radiogroup" aria-label={`¿Se cumplió la meta de la sesión ${s.n}?`} style={{ display: 'grid', gap: 5 }}>
+                                    <span style={{ fontSize: 12.5, color: C.ink3 }}>¿Se cumplió la meta?</span>
+                                    <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                      <button type="button" role="radio" aria-checked={reg.metaCumplida === true} className="bt-btn" style={chipMeta(reg.metaCumplida === true, C.ok)} onClick={() => guardarCampos(s.n, { metaCumplida: reg.metaCumplida === true ? null : true })}>Sí</button>
+                                      <button type="button" role="radio" aria-checked={reg.metaCumplida === false} className="bt-btn" style={chipMeta(reg.metaCumplida === false, C.err)} onClick={() => guardarCampos(s.n, { metaCumplida: reg.metaCumplida === false ? null : false })}>No</button>
+                                      {metaRef !== null && <span style={{ fontSize: 12, color: C.ink4 }}>Meta {fmtCOP(metaRef)}{cmp ? ` · con este resultado ${cmp === 'cumple' ? 'sí se alcanza' : 'no se alcanza'}` : ''}</span>}
+                                    </span>
+                                  </div>
+                                </div>
+                                {aviso.map((h, i) => <div key={i} role="status" style={{ color: h.nivel === 'error' ? C.err : C.warn, fontSize: 12.5, marginTop: 6 }}>{h.nivel === 'error' ? '✕' : '⚠'} {h.mensaje}</div>)}
+                              </td></tr>
+                            );
+                          })(),
                           abierta && accion!.tipo === 'cierre' && (
                             <tr key={`c${s.n}`}><td colSpan={5} style={{ padding: '4px 0 12px' }}>
-                              <CierreSesion key={`${cfg.fecha}-${s.n}`} sesion={s} inicial={g ?? registroVacio(s.n)} saldoFinalAnterior={saldoAnterior(s.n).saldo} numAnterior={saldoAnterior(s.n).num}
+                              <CierreSesion key={`${cfg.fecha}-${s.n}`} sesion={s} inicial={g ?? registroVacio(s.n)} saldoFinalAnterior={saldoAnterior(s.n).saldo} numAnterior={saldoAnterior(s.n).num} metaRef={metaRef}
                                 onGuardar={(r) => guardarCierre(s.n, r)} onQuitar={() => quitarCierre(s.n)} onCancelar={() => setAccion(null)} />
                             </td></tr>
                           ),

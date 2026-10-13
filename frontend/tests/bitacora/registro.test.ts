@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { COLUMNAS_CSV, cierresHuerfanos, csvCampo, csvJornadas, duracionRealMin, filasJornada, normalizarRegistro, normalizarRegistros, registroVacio, resultadoSesion, resumenJornada, validarRegistro } from '../../src/bitacora/registro';
+import { COLUMNAS_CSV, cierresHuerfanos, compararMeta, csvCampo, formatearMonto, parsearMonto, csvJornadas, duracionRealMin, filasJornada, normalizarRegistro, normalizarRegistros, registroVacio, resultadoSesion, resumenJornada, validarRegistro } from '../../src/bitacora/registro';
 import { cancelarSesion, cfgPorDefecto, construirPlan } from '../../src/bitacora/planner';
 import type { RegistroSesion } from '../../src/bitacora/types';
 
 const reg = (n: number, o: Partial<RegistroSesion> = {}): RegistroSesion => ({ ...registroVacio(n), ...o });
 const plan = () => construirPlan(cfgPorDefecto('2026-10-13'));
-const completo = (n: number, o: Partial<RegistroSesion> = {}) => reg(n, { estado: 'cumplida', horaInicioReal: '09:00', horaFinReal: '10:30', saldoInicial: 100000, saldoFinal: 112000, siguioMotor: 'si', sensacion: 4, saliMesa: false, ...o });
+const completo = (n: number, o: Partial<RegistroSesion> = {}) => reg(n, { estado: 'cumplida', metaCumplida: true, horaInicioReal: '09:00', horaFinReal: '10:30', saldoInicial: 100000, saldoFinal: 112000, siguioMotor: 'si', sensacion: 4, saliMesa: false, ...o });
 
 test('duración real y resultado', () => {
   assert.equal(duracionRealMin({ horaInicioReal: '09:00', horaFinReal: '10:30' }), 90);
@@ -20,9 +20,9 @@ test('duración real y resultado', () => {
 
 test('lectura defensiva: basura se convierte en cierre vacío válido', () => {
   for (const x of [null, undefined, 5, 'x', [], {}]) assert.deepEqual(normalizarRegistro(x, 3), registroVacio(3));
-  const r = normalizarRegistro({ estado: 'hackeado', siguioMotor: 9, sensacion: 7, saldoInicial: '5', saldoFinal: NaN, saliMesa: 'si', notas: 5, horaInicioReal: 'abcdefgh' }, 2);
+  const r = normalizarRegistro({ metaCumplida: 'si', estado: 'hackeado', siguioMotor: 9, sensacion: 7, saldoInicial: '5', saldoFinal: NaN, saliMesa: 'si', notas: 5, horaInicioReal: 'abcdefgh' }, 2);
   assert.equal(r.estado, 'pendiente'); assert.equal(r.siguioMotor, ''); assert.equal(r.sensacion, 0); assert.equal(r.saldoInicial, null);
-  assert.equal(r.saldoFinal, null); assert.equal(r.saliMesa, null); assert.equal(r.notas, ''); assert.equal(r.horaInicioReal, 'abcde');
+  assert.equal(r.saldoFinal, null); assert.equal(r.metaCumplida, null); assert.equal(r.saliMesa, null); assert.equal(r.notas, ''); assert.equal(r.horaInicioReal, 'abcde');
   const ok = normalizarRegistro(completo(1), 1); assert.deepEqual(ok, completo(1));
   const m = normalizarRegistros({ '1': completo(1), '0': {}, 'x': {}, '2.5': {}, '100': {}, '3': { estado: 'no_cumplida' } });
   assert.deepEqual(Object.keys(m).sort(), ['1', '3']); assert.equal(m['3'].n, 3);
@@ -97,9 +97,9 @@ test('CSV: cabecera, una fila por sesión, columnas siempre alineadas, cancelada
   assert.equal(filas.length, 1 + 4); assert.ok(filas.every((f) => f.length === COLUMNAS_CSV.length), JSON.stringify(filas.map((f) => f.length)));
   assert.deepEqual(filas[0], [...COLUMNAS_CSV]);
   const h = (f: string[], c: (typeof COLUMNAS_CSV)[number]) => f[COLUMNAS_CSV.indexOf(c)];
-  assert.equal(h(filas[1], 'sesion'), '1'); assert.equal(h(filas[1], 'resultado'), '12000'); assert.equal(h(filas[1], 'duracion_real_min'), '90');
+  assert.equal(h(filas[1], 'sesion'), '1'); assert.equal(h(filas[1], 'resultado'), '12000'); assert.equal(h(filas[1], 'meta_cumplida'), 'sí'); assert.equal(h(filas[1], 'duracion_real_min'), '90');
   assert.equal(h(filas[1], 'notas_sesion'), 'buena; con "comillas"\ny salto'); assert.equal(h(filas[1], 'siguio_motor'), 'Sí'); assert.equal(h(filas[1], 'salio_de_mesa'), 'no');
-  assert.equal(h(filas[2], 'cierre'), 'No cumplida'); assert.equal(h(filas[2], 'salio_de_mesa'), 'sí'); assert.equal(h(filas[2], 'resultado'), '');
+  assert.equal(h(filas[2], 'cierre'), 'No cumplida'); assert.equal(h(filas[2], 'meta_cumplida'), ''); assert.equal(h(filas[2], 'salio_de_mesa'), 'sí'); assert.equal(h(filas[2], 'resultado'), '');
   assert.equal(h(filas[3], 'estado_plan'), 'cancelada'); assert.equal(h(filas[3], 'motivo_cancelacion'), 'Imprevisto; "grave"'); assert.equal(h(filas[3], 'cierre'), 'sin registrar');
   assert.equal(h(filas[4], 'cierre'), 'sin registrar'); assert.equal(h(filas[1], 'notas_del_dia'), 'día regular'); assert.equal(h(filas[1], 'fecha'), '2026-10-13');
 });
@@ -121,4 +121,41 @@ test('cierres de sesiones que ya no están en el plan: se avisan y NO se pierden
   assert.equal(f.length, 3); const col = (fila: string[], c: (typeof COLUMNAS_CSV)[number]) => fila[COLUMNAS_CSV.indexOf(c)];
   assert.equal(col(f[2], 'sesion'), '4'); assert.equal(col(f[2], 'estado_plan'), 'fuera_del_plan'); assert.equal(col(f[2], 'saldo_final'), '5'); assert.equal(col(f[2], 'inicio_plan'), '');
   assert.deepEqual(cierresHuerfanos(p, { '1': completo(1) }), []);
+});
+
+test('montos: se leen como se escriben en Colombia, sin adivinar mal', () => {
+  const casos: Array<[string, number | null | undefined]> = [
+    ['100000', 100000], ['100.000', 100000], ['1.234.567', 1234567], ['$ 100 000', 100000], ['100,5', 100.5], ['1.234.567,50', 1234567.5],
+    ['100.5', 100.5], ['142,500', 142500], ['1,234,567', 1234567], ['1,234,567.50', 1234567.5], ['100.500', 100500], ['2,5', 2.5], ['0,50', 0.5], ['12,34,567', undefined], ['1.234,567,8', undefined], ['1,5.5,5', undefined], ['0', 0], ['', null], ['   ', null], ['-500', -500], ['abc', undefined], ['1,2,3', undefined], ['12a', undefined], ['1..2', undefined], ['--5', undefined], ['.', undefined], [',', undefined],
+  ];
+  for (const [t, esp] of casos) assert.equal(parsearMonto(t), esp, JSON.stringify(t));
+  assert.equal(formatearMonto(112500), '112.500'); assert.equal(formatearMonto(0), '0'); assert.equal(formatearMonto(null), ''); assert.equal(formatearMonto(1234.5), '1.234,5');
+  for (const v of [0, 5, 999, 1000, 100000, 1234567, 2500.25]) assert.equal(parsearMonto(formatearMonto(v)), v, `ida y vuelta ${v}`);
+});
+
+test('meta: se compara con la referencia pero la decisión sigue siendo tuya', () => {
+  assert.equal(compararMeta(50000, 50000), 'cumple'); assert.equal(compararMeta(49999, 50000), 'no_cumple'); assert.equal(compararMeta(-1, 50000), 'no_cumple');
+  assert.equal(compararMeta(null, 50000), null); assert.equal(compararMeta(100, null), null); assert.equal(compararMeta(100, undefined), null); assert.equal(compararMeta(100, 0), null); assert.equal(compararMeta(100, NaN), null);
+  const cod = (r: RegistroSesion, meta?: number | null) => validarRegistro(r, undefined, meta).map((h) => h.codigo);
+  assert.ok(cod(completo(1, { saldoInicial: 100000, saldoFinal: 120000, metaCumplida: true }), 50000).includes('META_NO_COINCIDE'));
+  assert.ok(cod(completo(1, { saldoInicial: 100000, saldoFinal: 180000, metaCumplida: false }), 50000).includes('META_NO_COINCIDE'));
+  assert.ok(!cod(completo(1, { saldoInicial: 100000, saldoFinal: 180000, metaCumplida: true }), 50000).includes('META_NO_COINCIDE'));
+  assert.ok(!cod(completo(1, { metaCumplida: true }), null).includes('META_NO_COINCIDE'), 'sin meta de referencia no hay nada que comparar');
+  assert.equal(validarRegistro(completo(1, { saldoInicial: 100000, saldoFinal: 120000, metaCumplida: true }), undefined, 50000).filter((h) => h.nivel === 'error').length, 0, 'es un aviso, nunca bloquea');
+});
+
+test('saldos y meta anotados directo en la fila cuentan aunque el cierre siga sin marcar', () => {
+  const p0 = plan();
+  const regs = {
+    '1': reg(1, { saldoInicial: 100000, saldoFinal: 112500, metaCumplida: true }),                // solo saldos y meta: estado pendiente
+    '2': reg(2, { saldoInicial: 112500, saldoFinal: 100000, metaCumplida: false, horaInicioReal: '11:00', horaFinReal: '12:00' }),
+    '3': completo(3, { metaCumplida: null }),
+  };
+  const r = resumenJornada(p0, regs);
+  assert.equal(r.resultadoTotal, 12500 - 12500 + 12000); assert.equal(r.sesionesConResultado, 3);
+  assert.equal(r.registradas, 1, 'solo la 3 tiene el cierre marcado'); assert.equal(r.pendientes, 3);
+  assert.deepEqual(r.metas, { si: 1, no: 1, sinResponder: 2 }); assert.equal(r.tiempoRealMin, 60 + 90);
+  const v = resumenJornada(p0, {}); assert.deepEqual(v.metas, { si: 0, no: 0, sinResponder: 4 });
+  const pc = cancelarSesion(p0, 1, 'T', 'x').plan;
+  assert.deepEqual(resumenJornada(pc, { '1': reg(1, { metaCumplida: true }) }).metas, { si: 0, no: 0, sinResponder: 3 }, 'una sesión cancelada no cuenta para la meta');
 });

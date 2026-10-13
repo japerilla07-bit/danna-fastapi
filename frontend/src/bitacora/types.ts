@@ -153,6 +153,8 @@ export interface RegistroSesion {
   saldoInicial: number | null;
   saldoFinal: number | null;
   siguioMotor: SiguioMotor;
+  /** ¿Se cumplió la meta de la sesión? null = sin responder. Lo decides tú; la meta de referencia (si la pusiste) solo se compara y se muestra. */
+  metaCumplida: boolean | null;
   /** 0 = sin responder; 1 (muy mal) … 5 (muy bien). */
   sensacion: number;
   /** null = sin responder. */
