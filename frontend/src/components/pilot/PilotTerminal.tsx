@@ -36,13 +36,6 @@ const CSS = `
 .qp-t{line-height:1.2}
 .qp-t button:focus-visible,.qp-t input:focus-visible{outline:2px solid ${C.danna};outline-offset:1px}
 .qp-t button:not([aria-disabled="true"]):hover{filter:brightness(1.2)}
-@keyframes qpTickOk{0%{transform:scale(1.45);text-shadow:0 0 16px ${C.ok},0 0 4px ${C.ok}}}
-@keyframes qpTickErr{0%{transform:scale(1.45);text-shadow:0 0 16px ${C.err},0 0 4px ${C.err}}}
-.qp-tick{display:inline-block;transform-origin:50% 60%}
-.qp-tick-ok{animation:qpTickOk .75s cubic-bezier(.2,.8,.3,1)}
-.qp-tick-err{animation:qpTickErr .75s cubic-bezier(.2,.8,.3,1)}
-[data-fx="off"] .qp-tick{animation:none}
-@media (prefers-reduced-motion:reduce){.qp-tick{animation:none}}
 `;
 
 export function PilotTerminal({ payload, god, godTarget, table }: PilotTerminalProps) {

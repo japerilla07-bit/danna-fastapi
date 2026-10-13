@@ -85,7 +85,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
 import { PilotTerminal } from '@/components/pilot/PilotTerminal';
-import { NodeField } from '@/components/pilot/NodeField';
+import { NeuralStage } from '@/neural/NeuralStage';
+import { useFxPref } from '@/neural/prefs';
 import { BankrollBar } from '@/components/pilot/BankrollBar';
 import { C as PILOT_C, densityForHeight, shellHeightFor } from '@/components/pilot/theme';
 import { useCopLiveStreak } from '@/store/telemetryStore';
@@ -373,9 +374,9 @@ export function QuantumPilot({
   const { pos, onMouseDown } = useDrag({ x: 20, y: initialY() });
   const [minimized, setMinimized] = useState(false);
   const copLive = useCopLiveStreak();   // solo para el color del borde (lectura del store)
-  // Efectos visuales (red de nodos viva, destellos): preferencia local de este navegador, nada más.
-  const [fx, setFx] = useState<boolean>(() => { try { return localStorage.getItem('qp_fx') !== '0'; } catch { return true; } });
-  const toggleFx = () => setFx((v) => { const n = !v; try { localStorage.setItem('qp_fx', n ? '1' : '0'); } catch { /* sin almacenamiento */ } return n; });
+  // Efectos visuales (capa neural): preferencia local de este navegador, nada más.
+  const [fx, setFx] = useFxPref();
+  const toggleFx = () => setFx(!fx);
 
   const [override, setOverride] = useState<OverrideState | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
@@ -551,7 +552,6 @@ export function QuantumPilot({
     <div
       className="fixed z-50 w-[1060px] max-w-[95vw] max-h-[96vh] rounded-lg overflow-hidden select-none flex flex-col"
       data-qp="shell"
-      data-fx={fx ? 'on' : 'off'}
       style={{
         left: pos.x,
         top: pos.y,
@@ -568,7 +568,7 @@ export function QuantumPilot({
         boxShadow: `0 12px 44px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 30px ${borde.replace(/[\d.]+\)$/, '0.22)')}, inset 0 1px 0 rgba(255, 255, 255, 0.1)`,
       }}
     >
-      <NodeField fx={fx} godActivo={!!godBet.active} copLive={copLive} />
+      <NeuralStage godActivo={!!godBet.active} />
       {/* ═══ Header (arrastrable) ═══ */}
       <div
         className="relative flex items-center justify-between px-3 cursor-grab active:cursor-grabbing"

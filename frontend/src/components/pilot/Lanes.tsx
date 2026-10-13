@@ -5,7 +5,7 @@
 // El riel de color a la izquierda recorre el carril entero: es la identidad del panel.
 // Mismos selectores del store y mismas fórmulas (domain/rachasFrecuencia) que la v8.
 
-import React, { memo, useEffect, useRef, useState } from 'react';
+import React, { memo } from 'react';
 import {
   useCopHits, useCopMisses, useCopWr, useCopLiveStreak, useCopStreak, useCopRachas, useCopRachasUlt,
   useCapa1Hits, useCapa1Misses, useCapa1Wr, useCapa1LiveStreak, useCapa1Streak, useCapa1Rachas, useCapa1RachasUlt,
@@ -55,24 +55,17 @@ function Head({ nombre, sub, color, estado, estadoColor, tid }: { nombre: string
   );
 }
 
-/** Destello corto cuando el contador cambia (acierto verde / error rojo). No anima al montar. */
-function Tick({ v, kind, children }: { v: unknown; kind?: 'ok' | 'err'; children: React.ReactNode }) {
-  const prev = useRef(v); const [k, setK] = useState(0);
-  useEffect(() => { if (prev.current !== v) { prev.current = v; setK((x) => x + 1); } }, [v]);
-  return <span key={k} className={k && kind ? `qp-tick qp-tick-${kind}` : 'qp-tick'}>{children}</span>;
-}
-
 function Score({ id, hits, misses, wr, live, peor }: { id: LaneId; hits: number; misses: number; wr: number | null; live: number; peor: number }) {
-  const cell = (k: string, tid: string, v: React.ReactNode, c: string, kind?: 'ok' | 'err') => (
+  const cell = (k: string, tid: string, v: React.ReactNode, c: string) => (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
       <Lbl color={C.ink3}>{k}</Lbl>
-      <Big size="var(--qp-fs-val)" color={c} weight={700} glow={c === C.ink ? 0 : 0.6}><span data-k={`${id}-${tid}`}><Tick v={v} kind={kind}>{v}</Tick></span></Big>
+      <Big size="var(--qp-fs-val)" color={c} weight={700} glow={c === C.ink ? 0 : 0.6}><span data-k={`${id}-${tid}`}>{v}</span></Big>
     </span>
   );
   return (
     <div data-qp={`score-${id}`} style={{ height: 'var(--qp-lane-score)', display: 'grid', gridTemplateColumns: '38px 34px 52px 28px 1fr', columnGap: 2, alignItems: 'start' }}>
-      {cell('aciertos', 'aciertos', hits, C.ok, 'ok')}
-      {cell('errores', 'errores', misses, C.err, 'err')}
+      {cell('aciertos', 'aciertos', hits, C.ok)}
+      {cell('errores', 'errores', misses, C.err)}
       {cell('efectividad', 'efectividad', wr !== null ? `${wr.toFixed(0)}%` : '—', C.ink)}
       {cell('racha', 'racha', live, colorRacha(live))}
       {cell('peor racha', 'peor', peor, peor >= 4 ? C.err : C.ink)}

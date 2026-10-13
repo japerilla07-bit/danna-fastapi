@@ -27,7 +27,7 @@ import { LiveBetStrip } from '@/components/LiveBetStrip';
 import { RouletteBoard } from '@/components/RouletteBoard';
 import { TableEntropy } from '@/components/TableEntropy';
 import { RadarCard } from '@/components/RadarCard';
-import { NeuralBackground } from '@/components/NeuralBackground';
+import { NeuralLayer } from '@/neural/NeuralLayer';
 import { ChaosPanel } from '@/components/ChaosPanel';
 import { SessionRecorder } from '@/components/SessionRecorder';
 
@@ -142,7 +142,7 @@ export function AppPage() {
   if (stateQuery.isLoading) {
     return (
       <>
-        <NeuralBackground />
+        <NeuralLayer />
         <div className="app-loading">
           <div className="app-loading-text">CARGANDO CYBER-GLASS HUD...</div>
         </div>
@@ -153,7 +153,7 @@ export function AppPage() {
   if (stateQuery.isError || !stateQuery.data) {
     return (
       <>
-        <NeuralBackground />
+        <NeuralLayer />
         <div className="app-loading">
           <div className="app-error-text">Error cargando estado del motor</div>
         </div>
@@ -221,7 +221,7 @@ export function AppPage() {
 
   return (
     <>
-      <NeuralBackground />
+      <NeuralLayer />
 
       {/* Sidebar drawer (botón hamburguesa) */}
       <SidebarDrawer
