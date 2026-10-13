@@ -6,7 +6,7 @@
 //   · aciertos/errores de una voz suben       → hit / miss (esmeralda / rojo) en el carril de esa voz
 //   · racha viva de D.A.N.N.A. llega a 3 / ≥4  → streak (ámbar / rojo); se rompe → streak-clear (esmeralda)
 //   · un mercado del calor cambia de estado   → calor (ámbar caliente, cian enfriando, rojo terminó)
-//   · la voz que sigue D.A.N.N.A. cambia      → voz (cian)
+//   · la voz que sigue D.A.N.N.A. cambia      → voz (cian) + señal (color de la voz) del carril al veredicto
 //   · Capa 1 pasa a entrar / dejar de entrar  → voz (cian)
 // GOD BET no vive en el store (llega por props): lo publica NeuralStage.
 //
@@ -72,7 +72,12 @@ function diff(p: Estado, s: Estado): void {
   // voz que sigue D.A.N.N.A. y entrada de Capa 1 (lo que muestran los chips de los carriles)
   if (s.liveDecision !== p.liveDecision) {
     const f0 = computeJuega(p.liveDecision, p.pending).fuente, f1 = computeJuega(s.liveDecision, s.pending).fuente;
-    if (f0 !== f1) emitNeural({ kind: 'voz', tone: 'cian', target: CARRIL.danna, detail: `${f0}→${f1}` });
+    if (f0 !== f1) {
+      emitNeural({ kind: 'voz', tone: 'cian', target: CARRIL.danna, detail: `${f0}→${f1}` });
+      // D.A.N.N.A. pasa a seguir a Capa 1 / Escudo: una señal sale de ESE carril hacia la banda de veredicto
+      if (f1 === 'CAPA 1') emitNeural({ kind: 'senal', tone: 'capa1', target: CARRIL.capa1, detail: 'veredicto' });
+      else if (f1 === 'ESCUDO') emitNeural({ kind: 'senal', tone: 'escudo', target: CARRIL.escudo, detail: 'veredicto' });
+    }
     if (capa1Entra(p) !== capa1Entra(s)) emitNeural({ kind: 'voz', tone: 'cian', target: CARRIL.capa1, detail: capa1Entra(s) ? 'entra' : 'sale' });
   }
 }

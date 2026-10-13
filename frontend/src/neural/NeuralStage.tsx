@@ -2,7 +2,7 @@
 // Coordenadas relativas al panel: al arrastrarlo, la red y los bordes se mueven con él.
 
 import React, { memo, useEffect, useRef } from 'react';
-import { createStage } from './engine';
+import { createStage, type EstadoRed, type Stage } from './engine';
 import { retainNeuralBridge } from './bridge';
 import { emitNeural } from './bus';
 
@@ -11,9 +11,13 @@ const DENSAS = [
   '[data-qp="categorias"]', '[data-qp="zona"]', '[data-qp="calor"]', '[data-qp="riel"]',
 ];
 
-export const NeuralStage = memo(function NeuralStage({ godActivo }: { godActivo: boolean }) {
+export const NeuralStage = memo(function NeuralStage({ godActivo, copLive }: { godActivo: boolean; copLive: number }) {
   const back = useRef<HTMLDivElement>(null);
   const front = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<Stage | null>(null);
+  // Estado real de D.A.N.N.A. (misma prioridad que el borde del panel): racha 4 > racha 3 > GOD BET > espera.
+  const estado: EstadoRed = copLive >= 4 ? 'alerta4' : copLive === 3 ? 'alerta3' : godActivo ? 'god' : 'espera';
+  const estadoRef = useRef(estado); estadoRef.current = estado;
 
   useEffect(() => {
     const b = back.current, f = front.current, shell = b?.parentElement;
@@ -23,8 +27,12 @@ export const NeuralStage = memo(function NeuralStage({ godActivo }: { godActivo:
       scope: 'pilot', back: b, front: f, root: () => shell, dense: DENSAS,
       resolve: (t, root) => root.querySelector(`[data-qp="${t.slice(6)}"]`),
     });
-    return () => { stage.destroy(); soltar(); };
+    stageRef.current = stage; stage.setEstado(estadoRef.current);
+    return () => { stageRef.current = null; stage.destroy(); soltar(); };
   }, []);
+
+  // El tinte de la red sigue al estado real (racha / GOD BET); la transición es de 1,2 s.
+  useEffect(() => { stageRef.current?.setEstado(estado); }, [estado]);
 
   // GOD BET no vive en el store (llega por props): su cambio real se publica aquí.
   const prev = useRef(godActivo);

@@ -569,7 +569,7 @@ export function QuantumPilot({
         boxShadow: `0 12px 44px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 30px ${borde.replace(/[\d.]+\)$/, '0.22)')}, inset 0 1px 0 rgba(255, 255, 255, 0.1)`,
       }}
     >
-      <NeuralStage godActivo={!!godBet.active} />
+      <NeuralStage godActivo={!!godBet.active} copLive={copLive} />
       {/* ═══ Header (arrastrable) ═══ */}
       <div
         className="relative flex items-center justify-between px-3 cursor-grab active:cursor-grabbing"

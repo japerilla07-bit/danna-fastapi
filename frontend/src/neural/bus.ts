@@ -8,15 +8,17 @@
  *  la voz, esmeralda = acierto o GOD activo, ámbar = alerta (racha 3, calor),
  *  rojo = error / racha 4 / calor terminado. */
 export type Tone = 'cian' | 'esmeralda' | 'ambar' | 'rojo';
+/** Colores de voz (ya existen en la app): solo viajan en las señales carril → veredicto. */
+export type ToneVoz = Tone | 'capa1' | 'escudo';
 
-export type NeuralKind = 'spin' | 'hit' | 'miss' | 'streak' | 'streak-clear' | 'calor' | 'voz' | 'god';
+export type NeuralKind = 'spin' | 'hit' | 'miss' | 'streak' | 'streak-clear' | 'calor' | 'voz' | 'god' | 'senal';
 
 export interface NeuralEvent {
   kind: NeuralKind;
-  tone: Tone;
+  tone: ToneVoz;
   /** Componente que se actualizó: "pilot:<data-qp>" (dentro del Quantum Pilot) o "app:<clave>". */
   target: string;
-  /** Texto corto, solo para diagnóstico. */
+  /** Texto corto. En 'senal' es el destino ("veredicto"); en 'god' es 'activo' | 'inactivo'. */
   detail?: string;
 }
 
