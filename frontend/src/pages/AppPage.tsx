@@ -10,7 +10,7 @@
 //               categorías, zona, bankroll — ver Quantumpilot.tsx v2)
 
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -256,10 +256,16 @@ export function AppPage() {
               {user?.plan?.toUpperCase()} · {user?.spins_remaining?.toLocaleString()} spins
             </div>
           </div>
-          <button onClick={handleLogout} className="app-logout-btn">
-            <span className="app-logout-k">SESIÓN</span>
-            <span className="app-logout-v">SALIR</span>
-          </button>
+          <div className="app-userbar-actions">
+            <Link to="/app/bitacora" className="app-logout-btn app-bitacora-btn">
+              <span className="app-logout-k">JORNADA</span>
+              <span className="app-logout-v">BITÁCORA</span>
+            </Link>
+            <button onClick={handleLogout} className="app-logout-btn">
+              <span className="app-logout-k">SESIÓN</span>
+              <span className="app-logout-v">SALIR</span>
+            </button>
+          </div>
         </div>
 
         {/* ═══ PIEZA 1: HUD ═══ */}
