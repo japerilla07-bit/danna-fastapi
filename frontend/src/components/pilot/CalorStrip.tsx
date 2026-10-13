@@ -25,13 +25,26 @@ function zonasPegadas(zonas: string[]): string {
   return zonasCorto(zonas).replace(/ \+ /g, '+');
 }
 
+/** Zonas de cada mercado de 3 zonas (mismos nombres que domain/calor.ts). */
+const ZONAS_DE: Record<string, string[] | undefined> = { DOCENAS: ['1-12', '13-24', '25-36'], COLUMNAS: ['Columna 1', 'Columna 2', 'Columna 3'] };
+
 /** Segunda línea de cada mercado, en lenguaje llano (solo presentación; los números salen de leerCalor). */
 function explicacion(l: LecturaCalor): string {
   const n = l.duracion ?? 0;
   const h = l.aciertos ?? 0;
   switch (l.estado) {
     case 'CALIENTE': {
-      if (n === 0) { const m = /^(\d+) de (\d+)$/.exec(l.detalle); return m ? `Caliente · salió ${m[1]} de los últimos ${m[2]} giros` : `Caliente · ${l.detalle}`; }
+      if (n === 0) {
+        const m = /^(\d+) de (\d+)$/.exec(l.detalle);
+        // Dos zonas calientes (docenas/columnas): lo que define el calor es que la TERCERA zona no salió.
+        // Se dice así porque "salió 9 de 9" entre dos de tres zonas suena a trivial.
+        const todas = ZONAS_DE[l.mercado];
+        if (m && todas && l.zonas.length === 2) {
+          const falta = todas.filter((z) => !l.zonas.includes(z));
+          if (falta.length === 1) return `Caliente · ${zonasCorto(falta)} no salió en los últimos ${m[2]} giros`;
+        }
+        return m ? `Caliente · salió ${m[1]} de los últimos ${m[2]} giros` : `Caliente · ${l.detalle}`;
+      }
       return n < CALOR_MIN_CONFIRMA ? `Por confirmar · desde entonces cayó ${h} de ${n}` : `Caliente · desde entonces cayó ${h} de ${n} giros`;
     }
     case 'ENFRIANDO': return `Enfriándose · desde entonces cayó ${h} de ${n} ${n === 1 ? 'giro' : 'giros'}`;
@@ -51,7 +64,7 @@ export const CalorStrip = memo(function CalorStrip() {
     <section aria-label="Calor reciente" data-qp="calor" style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, flex: '0 0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, borderBottom: `1px solid ${C.line2}`, paddingBottom: 2 }}>
         <span style={{ fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) + 1px)', fontWeight: 700, color: C.ink }}>Calor reciente</span>
-        <Lbl color={C.ink3}>zonas que salen de más · últimos {CALOR_VENTANA} giros</Lbl>
+        <Lbl color={C.ink3}>zonas que salen de más · últimos {CALOR_VENTANA}-{CALOR_VENTANA_DOS} giros</Lbl>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {lecturas.map((l) => {
