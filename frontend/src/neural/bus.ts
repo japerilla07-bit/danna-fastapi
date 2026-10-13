@@ -11,14 +11,14 @@ export type Tone = 'cian' | 'esmeralda' | 'ambar' | 'rojo';
 /** Colores de voz (ya existen en la app): solo viajan en las señales carril → veredicto. */
 export type ToneVoz = Tone | 'capa1' | 'escudo';
 
-export type NeuralKind = 'spin' | 'hit' | 'miss' | 'streak' | 'streak-clear' | 'calor' | 'voz' | 'god' | 'senal';
+export type NeuralKind = 'spin' | 'hit' | 'miss' | 'streak' | 'streak-clear' | 'calor' | 'voz' | 'god';
 
 export interface NeuralEvent {
   kind: NeuralKind;
   tone: ToneVoz;
   /** Componente que se actualizó: "pilot:<data-qp>" (dentro del Quantum Pilot) o "app:<clave>". */
   target: string;
-  /** Texto corto. En 'senal' es el destino ("veredicto"); en 'god' es 'activo' | 'inactivo'. */
+  /** Texto corto. En 'god' es 'activo' | 'inactivo'. */
   detail?: string;
 }
 

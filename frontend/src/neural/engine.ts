@@ -30,9 +30,11 @@ const rgba = (c: C3, a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)}
 
 export type Scope = 'page' | 'pilot';
 /** Estado REAL de D.A.N.N.A. que tiñe la red (misma prioridad que el borde del panel): racha 4 > racha 3 > GOD BET > espera. */
-export type EstadoRed = 'espera' | 'god' | 'alerta3' | 'alerta4';
-const LOOK: Record<EstadoRed, { c: C3; sprite: Tone; bri: number }> = {
+export type EstadoRed = 'espera' | 'sigue-capa1' | 'sigue-escudo' | 'god' | 'alerta3' | 'alerta4';
+const LOOK: Record<EstadoRed, { c: C3; sprite: ToneVoz; bri: number }> = {
   espera: { c: RGB.cian, sprite: 'cian', bri: 1 },
+  'sigue-capa1': { c: RGB.capa1, sprite: 'capa1', bri: 1.35 },
+  'sigue-escudo': { c: RGB.escudo, sprite: 'escudo', bri: 1.35 },
   god: { c: RGB.cian, sprite: 'cian', bri: 1.5 },
   alerta3: { c: RGB.ambar, sprite: 'ambar', bri: 1.5 },
   alerta4: { c: RGB.rojo, sprite: 'rojo', bri: 1.6 },
@@ -218,12 +220,6 @@ export class Stage {
     if (!e.target.startsWith(pre)) return;
     const root = this.o.root(); if (!root) return;
     const now = performance.now();
-    if (e.kind === 'senal') {                                   // señal carril → veredicto (D.A.N.N.A. pasó a seguir esa voz)
-      if (this.reducir || now - (this.ultimoGlow.get('senal:' + e.target) ?? -1e9) < 700) { stats.ignorados++; return; }
-      this.ultimoGlow.set('senal:' + e.target, now);
-      this.senal(e.tone, e.target, 'pilot:' + (e.detail ?? 'veredicto'), 2);
-      return;
-    }
     const el = this.o.resolve(e.target, root); if (!el) return;
     if (now - (this.ultimoGlow.get(e.target) ?? -1e9) < 700) { stats.ignorados++; return; }    // sin ráfagas sobre el mismo componente
     this.ultimoGlow.set(e.target, now);
@@ -235,6 +231,18 @@ export class Stage {
       this.barrido();
       CARRILES.forEach((c, i) => this.later(() => this.senal('cian', c, 'pilot:veredicto', 1), 160 + i * 220));
     }
+  }
+
+  /** Borde luminoso sobre un componente por su target ("pilot:lane-escudo"), con la misma coalescencia que los eventos. */
+  private brillarEn(target: string, tone: Tone) {
+    const root = this.o.root(); if (!root) return;
+    const el = this.o.resolve(target, root); if (!el) return;
+    const now = performance.now();
+    if (now - (this.ultimoGlow.get(target) ?? -1e9) < 700) { stats.ignorados++; return; }
+    this.ultimoGlow.set(target, now);
+    const hr = this.o.back.getBoundingClientRect(), r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return;
+    this.glow(tone, r.left - hr.left, r.top - hr.top, r.width, r.height, getComputedStyle(el).borderTopLeftRadius || '6px');
   }
 
   private later(fn: () => void, ms: number) {
@@ -257,17 +265,26 @@ export class Stage {
     a.onfinish = fin; a.oncancel = fin; stats.glows++;
   }
 
-  /** Estado real de D.A.N.N.A.: tiñe la red (ámbar racha 3, rojo racha 4, más brillo en GOD BET) y, mientras dura una racha de alerta, repite una señal desde cada carril al veredicto. */
+  /** Estado real de D.A.N.N.A.: tiñe la red (voz que sigue, ámbar racha 3, rojo racha 4, más brillo en GOD BET) y, mientras el estado dura, repite la activación de las cards y las señales hacia el veredicto. */
   setEstado(est: EstadoRed) {
     if (this.destroyed || est === this.estado) return;
     this.tFrom = this.estado; this.estado = est; this.tT0 = performance.now();
     this.tp = (this.reducir || !this.enabled) ? 1 : 0;
     clearTimeout(this.alertaId); this.alertaId = 0;
-    if ((est === 'alerta3' || est === 'alerta4') && this.o.scope === 'pilot') {
-      const cada = est === 'alerta4' ? 3000 : 4200; const tono: ToneVoz = est === 'alerta4' ? 'rojo' : 'ambar';
+    if (this.o.scope === 'pilot' && est !== 'espera' && est !== 'god') {
+      // Mientras el estado dure, la activación se repite (alerta: tres carriles; sigue X: la card de esa voz y la de D.A.N.N.A.)
+      const sigue = est === 'sigue-capa1' || est === 'sigue-escudo';
+      const cada = est === 'alerta4' ? 3000 : est === 'alerta3' ? 4200 : 3400;
+      const tono: ToneVoz = est === 'alerta4' ? 'rojo' : est === 'alerta3' ? 'ambar' : est === 'sigue-capa1' ? 'capa1' : 'escudo';
+      const lane = est === 'sigue-capa1' ? 'pilot:lane-capa1' : 'pilot:lane-escudo';
       const ciclo = () => {
         if (this.destroyed) return;
-        if (this.enabled && !document.hidden && !this.reducir) CARRILES.forEach((c, i) => this.later(() => this.senal(tono, c, 'pilot:veredicto', 1), i * 240));
+        if (this.enabled && !document.hidden && !this.reducir) {
+          if (sigue) {
+            this.brillarEn(lane, tono as Tone); this.later(() => this.brillarEn('pilot:lane-real', tono as Tone), 180);
+            this.later(() => this.senal(tono, lane, 'pilot:veredicto', 2), 120);
+          } else CARRILES.forEach((c, i) => this.later(() => this.senal(tono, c, 'pilot:veredicto', 1), i * 240));
+        }
         this.alertaId = window.setTimeout(ciclo, cada);
       };
       this.alertaId = window.setTimeout(ciclo, 350);
