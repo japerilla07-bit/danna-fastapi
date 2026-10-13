@@ -85,6 +85,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { EnginePayload } from '@/types/api';
 import { PilotTerminal } from '@/components/pilot/PilotTerminal';
+import { NodeField } from '@/components/pilot/NodeField';
 import { NeuralStage } from '@/neural/NeuralStage';
 import { useFxPref } from '@/neural/prefs';
 import { BankrollBar } from '@/components/pilot/BankrollBar';
@@ -569,6 +570,7 @@ export function QuantumPilot({
         boxShadow: `0 12px 44px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 30px ${borde.replace(/[\d.]+\)$/, '0.22)')}, inset 0 1px 0 rgba(255, 255, 255, 0.1)`,
       }}
     >
+      <NodeField fx={fx} godActivo={!!godBet.active} copLive={copLive} />
       <NeuralStage godActivo={!!godBet.active} copLive={copLive} />
       {/* ═══ Header (arrastrable) ═══ */}
       <div

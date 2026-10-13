@@ -54,6 +54,8 @@ export interface StageOptions {
   dense: string[];
   /** Resuelve el target del evento ("pilot:lane-real", "app:seqlog") a un elemento, o null. */
   resolve: (target: string, root: ParentNode) => Element | null;
+  /** Solo bordes luminosos: sin canvas, sin red, sin pulsos/señales/barrido (la red del escenario la dibuja otro componente). */
+  soloBordes?: boolean;
 }
 
 interface Pulso { pts: number[]; seg: number; x: number; tone: ToneVoz; t0: number; last: number; life: number; piso: number; }
@@ -105,33 +107,37 @@ export class Stage {
   // Tinte de la red según el estado real (transición suave de 1,2 s; sin transición con movimiento reducido)
   private estado: EstadoRed = 'espera'; private tFrom: EstadoRed = 'espera'; private tp = 1; private tT0 = 0;
   private alertaId = 0; private timers = new Set<number>(); private barridos = new Set<HTMLElement>();
+  private solo: boolean;
 
   constructor(private o: StageOptions) {
+    this.solo = !!o.soloBordes;
     const pilot = o.scope === 'pilot';
     this.maxD = pilot ? 118 : 190; this.ampMax = pilot ? 9 : 14;
     this.baseLine = pilot ? 0.52 : 0.46; this.baseNode = pilot ? 1.0 : 0.95; this.minPres = pilot ? 0.10 : 0.07;
     this.cv = document.createElement('canvas');
     this.cv.setAttribute('aria-hidden', 'true');
     this.cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
-    o.back.appendChild(this.cv);
+    if (!this.solo) o.back.appendChild(this.cv);
     this.cx = this.cv.getContext('2d', { alpha: true })!;
     this.mq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     this.reducir = !!this.mq?.matches;
     const onMq = () => { this.reducir = !!this.mq?.matches; this.pulsos = []; this.forzar(); };
     this.mq?.addEventListener?.('change', onMq); this.offs.push(() => this.mq?.removeEventListener?.('change', onMq));
 
-    const ro = new ResizeObserver(() => { this.layout(); });
-    ro.observe(o.back); this.offs.push(() => ro.disconnect());
-    const onScroll = () => { this.maskDirty = true; this.forzar(); };
-    const scrollTarget: EventTarget = o.scope === 'page' ? window : ((o.root() as Element | null) ?? window);
-    scrollTarget.addEventListener('scroll', onScroll, { capture: true, passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-    this.offs.push(() => { scrollTarget.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions); window.removeEventListener('resize', onScroll); });
+    if (!this.solo) {
+      const ro = new ResizeObserver(() => { this.layout(); });
+      ro.observe(o.back); this.offs.push(() => ro.disconnect());
+      const onScroll = () => { this.maskDirty = true; this.forzar(); };
+      const scrollTarget: EventTarget = o.scope === 'page' ? window : ((o.root() as Element | null) ?? window);
+      scrollTarget.addEventListener('scroll', onScroll, { capture: true, passive: true });
+      window.addEventListener('resize', onScroll, { passive: true });
+      this.offs.push(() => { scrollTarget.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions); window.removeEventListener('resize', onScroll); });
+    }
 
     this.offs.push(onNeural((e) => this.onEvent(e)));
     this.offs.push(subscribeFx(() => { this.enabled = fxEnabled(); if (!this.enabled) { this.pulsos = []; this.cx.clearRect(0, 0, this.W, this.H); } this.forzar(); }));
 
-    stages.add(this); this.layout(); kick();
+    if (!this.solo) { stages.add(this); this.layout(); kick(); }
   }
 
   destroy() {
@@ -226,8 +232,8 @@ export class Stage {
     const hr = this.o.back.getBoundingClientRect(); const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) return;
     this.glow(e.tone as Tone, r.left - hr.left, r.top - hr.top, r.width, r.height, getComputedStyle(el).borderTopLeftRadius || '6px');
-    if (!this.reducir) this.lanzar(e.tone, r.left - hr.left, r.top - hr.top, r.width, r.height, now);
-    if (e.kind === 'god' && e.detail === 'activo' && !this.reducir) {       // GOD BET se activó: un barrido + una señal desde cada carril
+    if (!this.reducir && !this.solo) this.lanzar(e.tone, r.left - hr.left, r.top - hr.top, r.width, r.height, now);
+    if (e.kind === 'god' && e.detail === 'activo' && !this.reducir && !this.solo) {       // GOD BET se activó: un barrido + una señal desde cada carril
       this.barrido();
       CARRILES.forEach((c, i) => this.later(() => this.senal('cian', c, 'pilot:veredicto', 1), 160 + i * 220));
     }
@@ -271,9 +277,10 @@ export class Stage {
     this.tFrom = this.estado; this.estado = est; this.tT0 = performance.now();
     this.tp = (this.reducir || !this.enabled) ? 1 : 0;
     clearTimeout(this.alertaId); this.alertaId = 0;
-    if (this.o.scope === 'pilot' && est !== 'espera' && est !== 'god') {
+    const sigue = est === 'sigue-capa1' || est === 'sigue-escudo';
+    if (this.o.scope === 'pilot' && est !== 'espera' && est !== 'god' && (!this.solo || sigue)) {
       // Mientras el estado dure, la activación se repite (alerta: tres carriles; sigue X: la card de esa voz y la de D.A.N.N.A.)
-      const sigue = est === 'sigue-capa1' || est === 'sigue-escudo';
+      // En modo solo bordes únicamente se repite el brillo de las cards (las señales por la red las dibuja el otro componente).
       const cada = est === 'alerta4' ? 3000 : est === 'alerta3' ? 4200 : 3400;
       const tono: ToneVoz = est === 'alerta4' ? 'rojo' : est === 'alerta3' ? 'ambar' : est === 'sigue-capa1' ? 'capa1' : 'escudo';
       const lane = est === 'sigue-capa1' ? 'pilot:lane-capa1' : 'pilot:lane-escudo';
@@ -282,7 +289,7 @@ export class Stage {
         if (this.enabled && !document.hidden && !this.reducir) {
           if (sigue) {
             this.brillarEn(lane, tono as Tone); this.later(() => this.brillarEn('pilot:lane-real', tono as Tone), 180);
-            this.later(() => this.senal(tono, lane, 'pilot:veredicto', 2), 120);
+            if (!this.solo) this.later(() => this.senal(tono, lane, 'pilot:veredicto', 2), 120);
           } else CARRILES.forEach((c, i) => this.later(() => this.senal(tono, c, 'pilot:veredicto', 1), i * 240));
         }
         this.alertaId = window.setTimeout(ciclo, cada);

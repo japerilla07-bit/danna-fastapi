@@ -1,5 +1,7 @@
-// Escenario de la capa neural DENTRO del Quantum Pilot (detrás de su contenido).
-// Coordenadas relativas al panel: al arrastrarlo, la red y los bordes se mueven con él.
+// Escenario de la capa neural DENTRO del Quantum Pilot, en modo "solo bordes":
+// la red viva del panel (nodos, señales, barrido GOD, tinte por estado) la dibuja NodeField;
+// aquí solo se publican los bordes luminosos de acierto / error / racha / calor / GOD / voz.
+// Coordenadas relativas al panel: al arrastrarlo, los bordes se mueven con él.
 
 import React, { memo, useEffect, useRef } from 'react';
 import { createStage, type EstadoRed, type Stage } from './engine';
@@ -31,7 +33,7 @@ export const NeuralStage = memo(function NeuralStage({ godActivo, copLive }: { g
     if (!b || !f || !shell) return;
     const soltar = retainNeuralBridge();
     const stage = createStage({
-      scope: 'pilot', back: b, front: f, root: () => shell, dense: DENSAS,
+      scope: 'pilot', soloBordes: true, back: b, front: f, root: () => shell, dense: DENSAS,
       resolve: (t, root) => root.querySelector(`[data-qp="${t.slice(6)}"]`),
     });
     stageRef.current = stage; stage.setEstado(estadoRef.current);
