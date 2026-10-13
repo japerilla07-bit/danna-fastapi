@@ -92,7 +92,7 @@ export class Stage {
   constructor(private o: StageOptions) {
     const pilot = o.scope === 'pilot';
     this.maxD = pilot ? 118 : 190; this.ampMax = pilot ? 9 : 14;
-    this.baseLine = pilot ? 0.20 : 0.15; this.baseNode = pilot ? 0.55 : 0.42; this.minPres = pilot ? 0.16 : 0.10;
+    this.baseLine = pilot ? 0.52 : 0.46; this.baseNode = pilot ? 1.0 : 0.95; this.minPres = pilot ? 0.10 : 0.07;
     this.cv = document.createElement('canvas');
     this.cv.setAttribute('aria-hidden', 'true');
     this.cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
@@ -215,7 +215,7 @@ export class Stage {
     if (this.glowsVivos >= 6) return;
     const c = RGB[tone]; const d = document.createElement('div');
     d.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;box-sizing:border-box;border-radius:${radius};` +
-      `border:1px solid ${rgba(c, 0.85)};box-shadow:0 0 9px ${rgba(c, 0.32)},inset 0 0 12px ${rgba(c, 0.12)};opacity:0;pointer-events:none;will-change:opacity`;
+      `border:1px solid ${rgba(c, 0.85)};box-shadow:0 0 12px ${rgba(c, 0.5)},inset 0 0 14px ${rgba(c, 0.18)};opacity:0;pointer-events:none;will-change:opacity`;
     this.o.front.appendChild(d); this.glowsVivos++; stats.glows++;
     const fin = () => { d.remove(); this.glowsVivos = Math.max(0, this.glowsVivos - 1); };
     if (typeof d.animate !== 'function') { d.style.opacity = '0.7'; setTimeout(fin, 1400); return; }
@@ -324,13 +324,13 @@ export class Stage {
     const nb: number[][] = [[], [], []];
     for (let i = 0; i < this.px.length; i++) { const f = this.presencia(this.px[i], this.py[i]); nb[f < 0.34 ? 0 : f < 0.75 ? 1 : 2].push(i); }
     for (let lv = 0; lv < 3; lv++) {
-      if (!nb[lv].length) continue; cx.fillStyle = rgba(cian, this.baseNode * [0.35, 0.65, 1][lv]); cx.beginPath();
-      for (const i of nb[lv]) { cx.moveTo(this.px[i] + 1.3, this.py[i]); cx.arc(this.px[i], this.py[i], 1.3, 0, 6.283); }
+      if (!nb[lv].length) continue; cx.fillStyle = rgba(cian, this.baseNode * [0.07, 0.5, 1][lv]); cx.beginPath();
+      for (const i of nb[lv]) { cx.moveTo(this.px[i] + 1.7, this.py[i]); cx.arc(this.px[i], this.py[i], 1.7, 0, 6.283); }
       cx.fill();
     }
     // Nodos centrales: un halo muy suave (sprite precalculado, sin gradientes por cuadro)
     const sp = this.sprite('cian');
-    for (const i of this.hubs) { const f = this.presencia(this.px[i], this.py[i]); cx.globalAlpha = 0.28 * f; cx.drawImage(sp, this.px[i] - 10, this.py[i] - 10, 20, 20); }
+    for (const i of this.hubs) { const f = this.presencia(this.px[i], this.py[i]); cx.globalAlpha = 0.5 * f * f; cx.drawImage(sp, this.px[i] - 12, this.py[i] - 12, 24, 24); }
     cx.globalAlpha = 1;
     // Pulsos (solo existen si hubo un evento real)
     for (let k = this.pulsos.length - 1; k >= 0; k--) {

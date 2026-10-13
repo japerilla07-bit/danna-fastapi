@@ -552,6 +552,7 @@ export function QuantumPilot({
     <div
       className="fixed z-50 w-[1060px] max-w-[95vw] max-h-[96vh] rounded-lg overflow-hidden select-none flex flex-col"
       data-qp="shell"
+      data-fx={fx ? 'on' : 'off'}
       style={{
         left: pos.x,
         top: pos.y,
