@@ -357,12 +357,36 @@ export interface EscudoInfo {
 //     la débil).
 //   - Si el par top2 es el mismo de siempre → sigue activa, sin tocar nada.
 // Esto reemplaza por completo las reglas viejas de "subió ≥2" / "volvió 2 de
-// 3" — ya no hacen falta: distribucionMarcada() aplicada giro a giro hace lo
-// mismo pero sin el punto ciego.
+// 3" — ya no hacen falta: la evaluación de la ventana aplicada giro a giro
+// hace lo mismo pero sin el punto ciego.
+//
+// ESCUDO MÁS SENSIBLE (oct 2026) — pedido de Gunner: "debe ser dominio de
+// verdad … más sensible a los cambios". Auditado con las 52 sesiones (18.419
+// filas reproducidas con el store real). Dos defectos medidos del Escudo:
+//   · Los 7 giros pesaban igual y los empates se resolvían por orden fijo
+//     (d1, d2, d3), no por lo que salió más tarde.
+//   · En COBERTURA DOBLE, `principal` lo decidía seguridad() de la Capa 1:
+//     cambiaba 2.668 veces, el 90% con los dos pares a ≤1 giro de diferencia,
+//     y el mercado que marcaba acertaba igual que el otro (66,5% vs 66,7%).
+// Cambio (solo el Escudo; la Capa 1 no se toca):
+//   1. Cada zona suma con peso según qué tan reciente es el giro
+//      (COBERTURA_PESOS, 1-1-1-1-2-3-4 de viejo a nuevo). El par son las 2
+//      zonas de mayor puntaje; si empatan, gana la que salió más tarde.
+//      La activación y la salida siguen usando el conteo simple (gap ≥ 2).
+//   2. `principal` (solo en cobertura doble) = el mercado cuyo par cubre la
+//      mayor parte de la ventana ponderada; se queda mientras el otro no lo
+//      supere. Si no hay diferencia, queda la regla de siempre (seguridad()).
+// Resultado sobre las 52 sesiones (cero = acierto, mismas 17.962 apuestas):
+//   rachas de 4+ errores 121→97, de 5+ 41→27, de 6+ 13→6; acierto 68,0%
+//   igual; racha máxima sigue en 8. La mejora aparece en las dos mitades.
+// Probado y DESCARTADO: persistencia de 2 apuestas (par o mercado),
+// histéresis, detector de cambio, mínimo de apariciones en la 2ª zona.
 // ════════════════════════════════════════════════════════════════════════
 
 const COBERTURA_WINDOW = 7;
 const COBERTURA_GAP_MIN = 2; // top1 − top3 ≥ esto, en la ventana, para considerar la distribución "marcada"
+// Peso de cada giro de la ventana, del más viejo al más nuevo (suma = COBERTURA_WINDOW).
+const COBERTURA_PESOS: readonly number[] = [1, 1, 1, 1, 2, 3, 4].map((w) => (w * COBERTURA_WINDOW) / 13);
 
 type ZonaDoc = 'd1' | 'd2' | 'd3';
 type ZonaCol = 'c1' | 'c2' | 'c3';
@@ -383,19 +407,55 @@ function columnaDeNumero(n: number): ZonaCol | null {
   return 'c3';
 }
 
-function conteoPorZona<T extends string>(ventana: number[], de: (n: number) => T | null, zonas: readonly T[]): Map<T, number> {
-  const m = new Map<T, number>(zonas.map((z) => [z, 0] as [T, number]));
-  for (const n of ventana) {
+// Lee la ventana de UN mercado: conteo simple (para saber si la distribución
+// está "marcada"), puntaje ponderado por recencia (para elegir el par) y el par
+// top-2. Orden: mayor puntaje; si empatan, la zona que salió más tarde; si
+// aún empatan, el orden fijo de `zs`. Determinista.
+function evaluarMercado<T extends string>(ventana: number[], de: (n: number) => T | null, zs: readonly T[]): {
+  zonas: T[]; excl: T; score: Map<T, number>; marcada: boolean;
+} {
+  const len = ventana.length;
+  const cnt = new Map<T, number>(zs.map((z) => [z, 0] as [T, number]));
+  const score = new Map<T, number>(zs.map((z) => [z, 0] as [T, number]));
+  const last = new Map<T, number>(zs.map((z) => [z, -1] as [T, number]));
+  ventana.forEach((n, i) => {
     const z = de(n);
-    if (z) m.set(z, (m.get(z) ?? 0) + 1);
-  }
-  return m;
+    if (!z) return;
+    cnt.set(z, (cnt.get(z) ?? 0) + 1);
+    score.set(z, (score.get(z) ?? 0) + (COBERTURA_PESOS[COBERTURA_PESOS.length - len + i] ?? 1));
+    last.set(z, i);
+  });
+  const orden = [...zs].sort((a, b) => {
+    const d = (score.get(b) ?? 0) - (score.get(a) ?? 0);
+    if (Math.abs(d) > 1e-9) return d;
+    const r = (last.get(b) ?? -1) - (last.get(a) ?? -1);
+    if (r !== 0) return r;
+    return zs.indexOf(a) - zs.indexOf(b);
+  });
+  const cs = [...cnt.values()];
+  const gap = Math.max(...cs) - Math.min(...cs);
+  return { zonas: [orden[0], orden[1]], excl: orden[2], score, marcada: gap >= COBERTURA_GAP_MIN };
 }
 
-function distribucionMarcada<T extends string>(conteo: Map<T, number>): { marcada: boolean; top2: T[]; excluida: T } {
-  const ordenado = Array.from(conteo.entries()).sort((a, b) => b[1] - a[1]);
-  const gap = ordenado[0][1] - ordenado[2][1];
-  return { marcada: gap >= COBERTURA_GAP_MIN, top2: [ordenado[0][0], ordenado[1][0]], excluida: ordenado[2][0] };
+function puntajePar<T extends string>(score: Map<T, number>, par: T[]): number {
+  return par.reduce((s, z) => s + (score.get(z) ?? 0), 0);
+}
+
+// Un mercado, un giro: devuelve su estado nuevo (activa, par, excluida).
+//   - Inactivo: se prende si la ventana está completa y la distribución es marcada.
+//   - Activo: se apaga si ya no hay distribución marcada; si el par top-2 cambió
+//     y el candidato no puntúa menos que el vigente, pasa al candidato; si no, se queda.
+function procesarMercado<T extends string>(
+  e: { zonas: T[]; excl: T; score: Map<T, number>; marcada: boolean },
+  activa: boolean, zonas: T[], completa: boolean,
+): { activa: boolean; zonas: T[]; excl: T | null } {
+  const apagada = { activa: false, zonas: [] as T[], excl: null };
+  if (!activa) return completa && e.marcada ? { activa: true, zonas: e.zonas, excl: e.excl } : apagada;
+  if (!e.marcada) return apagada;
+  const excluidaDe = (z: T[]): T => ([...e.score.keys()] as T[]).find((x) => !z.includes(x))!;
+  if (mismoPar(e.zonas, zonas)) return { activa: true, zonas, excl: excluidaDe(zonas) };
+  if (puntajePar(e.score, e.zonas) - puntajePar(e.score, zonas) >= 0) return { activa: true, zonas: e.zonas, excl: e.excl };
+  return { activa: true, zonas, excl: excluidaDe(zonas) };
 }
 
 // Estado propio de esta regla (separado de ultimoMercadoJugado de la Capa 1).
@@ -411,7 +471,13 @@ let coberturaColActiva = false;
 let coberturaZonasCol: ZonaCol[] = [];
 let coberturaColExcluida: ZonaCol | null = null;
 
-// top2 de distribucionMarcada() viene ordenado por conteo, no por nombre de
+// Mercado prioritario según la fuerza de los dos pares (solo tiene sentido con
+// los dos mercados activos). Se calcula UNA vez por giro real, en
+// registrarGiroCobertura(), no en cada render. null = sin diferencia → decide
+// la regla de siempre en decidirPiloto().
+let principalPorFuerza: Market | null = null;
+
+// `zonas` de evaluarMercado() viene ordenado por puntaje, no por nombre de
 // zona — para comparar "es el mismo par de antes" hay que ordenar por zona.
 function mismoPar<T extends string>(a: T[], b: T[]): boolean {
   if (a.length !== b.length) return false;
@@ -427,55 +493,33 @@ function mismoPar<T extends string>(a: T[], b: T[]): boolean {
 export function registrarGiroCobertura(numero: number): void {
   coberturaVentana.push(numero);
   if (coberturaVentana.length > COBERTURA_WINDOW) coberturaVentana.shift();
+  const completa = coberturaVentana.length >= COBERTURA_WINDOW;
 
   // ── DOCENAS ──
-  if (coberturaDocActiva) {
-    const conteoDoc = conteoPorZona(coberturaVentana, docenaDeNumero, ['d1', 'd2', 'd3'] as const);
-    const d = distribucionMarcada(conteoDoc);
-    if (!d.marcada) {
-      // Ya no hay distribución marcada en la ventana real → se apaga.
-      coberturaDocActiva = false; coberturaZonasDoc = []; coberturaDocExcluida = null;
-    } else if (!mismoPar(d.top2, coberturaZonasDoc)) {
-      // Sigue marcada, pero el par top2 real CAMBIÓ (una cubierta se debilitó
-      // y/o la excluida volvió con fuerza) → se apaga la vieja y se prende
-      // la nueva ya mismo, con el par y la excluida que diga la ventana ahora.
-      coberturaZonasDoc = d.top2;
-      coberturaDocExcluida = d.excluida;
-    }
-    // si sigue marcada y el par es el mismo, no se toca nada.
-  } else if (coberturaVentana.length >= COBERTURA_WINDOW) {
-    const conteoDoc = conteoPorZona(coberturaVentana, docenaDeNumero, ['d1', 'd2', 'd3'] as const);
-    const d = distribucionMarcada(conteoDoc);
-    if (d.marcada) {
-      coberturaDocActiva = true;
-      coberturaZonasDoc = d.top2;
-      coberturaDocExcluida = d.excluida;
-    }
-  }
+  const ed = evaluarMercado(coberturaVentana, docenaDeNumero, ['d1', 'd2', 'd3'] as const);
+  const rd = procesarMercado(ed, coberturaDocActiva, coberturaZonasDoc, completa);
+  coberturaDocActiva = rd.activa; coberturaZonasDoc = rd.zonas; coberturaDocExcluida = rd.excl;
 
   // ── COLUMNAS (mismo patrón, totalmente aparte) ──
-  if (coberturaColActiva) {
-    const conteoCol = conteoPorZona(coberturaVentana, columnaDeNumero, ['c1', 'c2', 'c3'] as const);
-    const c = distribucionMarcada(conteoCol);
-    if (!c.marcada) {
-      coberturaColActiva = false; coberturaZonasCol = []; coberturaColExcluida = null;
-    } else if (!mismoPar(c.top2, coberturaZonasCol)) {
-      coberturaZonasCol = c.top2;
-      coberturaColExcluida = c.excluida;
-    }
-  } else if (coberturaVentana.length >= COBERTURA_WINDOW) {
-    const conteoCol = conteoPorZona(coberturaVentana, columnaDeNumero, ['c1', 'c2', 'c3'] as const);
-    const c = distribucionMarcada(conteoCol);
-    if (c.marcada) {
-      coberturaColActiva = true;
-      coberturaZonasCol = c.top2;
-      coberturaColExcluida = c.excluida;
-    }
+  const ec = evaluarMercado(coberturaVentana, columnaDeNumero, ['c1', 'c2', 'c3'] as const);
+  const rc = procesarMercado(ec, coberturaColActiva, coberturaZonasCol, completa);
+  coberturaColActiva = rc.activa; coberturaZonasCol = rc.zonas; coberturaColExcluida = rc.excl;
+
+  // ── Prioridad en cobertura doble: fuerza = qué parte de la ventana ponderada cubre el par vigente ──
+  if (coberturaDocActiva && coberturaColActiva) {
+    const total = (s: Map<string, number>) => [...s.values()].reduce((a, b) => a + b, 0) || 1;
+    const diff = puntajePar(ed.score, coberturaZonasDoc) / total(ed.score) - puntajePar(ec.score, coberturaZonasCol) / total(ec.score);
+    if (principalPorFuerza === null) principalPorFuerza = Math.abs(diff) > 1e-9 ? (diff > 0 ? 'doc' : 'col') : null;
+    else if (principalPorFuerza === 'doc' && diff < -1e-9) principalPorFuerza = 'col';
+    else if (principalPorFuerza === 'col' && diff > 1e-9) principalPorFuerza = 'doc';
+  } else {
+    principalPorFuerza = null;
   }
 }
 
 // ── Reiniciar al empezar una sesión nueva. ──
 export function resetCobertura(): void {
+  principalPorFuerza = null;
   coberturaVentana = [];
   coberturaDocActiva = false;
   coberturaZonasDoc = [];
@@ -514,14 +558,15 @@ export function decidirPiloto(doc: MarketRead, col: MarketRead): DecisionPiloto 
   let principal: Market | undefined;
   if (coberturaDocActiva && coberturaColActiva) {
     capa = 'COBERTURA_DOBLE';
-    // Mejor rendimiento AHORA entre los dos — mismo puntaje que decide la
-    // Capa 1 (seguridad()), mismo desempate (WR de celda). Pedido de Gunner
-    // en vivo: "va a marcar la de mejor rendimiento entre docenas y
-    // columnas" — las dos se siguen cubriendo (4 fichas), esto es solo para
-    // saber cuál priorizar si tenés que elegir una.
+    // Prioridad: el mercado cuyo par cubre más de la ventana ponderada
+    // (principalPorFuerza, ver registrarGiroCobertura). Si los dos pares tienen
+    // la misma fuerza todavía, queda la regla de siempre: mejor seguridad() de
+    // la Capa 1, y de ahí el WR de celda. Las dos se siguen cubriendo (4
+    // fichas); esto es solo para saber cuál priorizar si tenés que elegir una.
     const sDoc = seguridad(doc);
     const sCol = seguridad(col);
-    principal = sDoc > sCol || (sDoc === sCol && (doc.cellWr ?? 0) >= (col.cellWr ?? 0)) ? 'doc' : 'col';
+    principal = principalPorFuerza
+      ?? (sDoc > sCol || (sDoc === sCol && (doc.cellWr ?? 0) >= (col.cellWr ?? 0)) ? 'doc' : 'col');
     // El aviso de cuál priorizar NO va metido en esta frase — Gunner en vivo:
     // "ese aviso no sirve, toca que diga solo y que se note". Pasa a ser un
     // elemento propio y grande en la UI (MatrixPanel.tsx, CopilotOrder),
