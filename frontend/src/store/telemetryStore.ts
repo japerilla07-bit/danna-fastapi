@@ -28,6 +28,8 @@ import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, t
 import { decidirPiloto, registrarGiroCobertura, resetCobertura, type MarketRead, type DecisionPiloto, type Decision, type EscudoInfo } from '@/domain/copilot';
 import { calorInicial, avanzarCalor, type CalorEstado } from '@/domain/calor';
 import { agregarEntrada, type EntradaRend } from '@/domain/rendimiento';
+import { sombraHistVacia, sombraAvanzar, sombraElegir, picksSombra, aciertoConCero, type SombraHist, type SombraPicks, type VozSombra, type ResSombra } from '@/domain/sombra';
+import { zonaDe, regimenAvanzar, clasificarRegimen, type DiagRegimen } from '@/domain/regimen';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -99,6 +101,54 @@ interface Pending {
   capa1Sug: 'doc' | 'col' | null;
   escudoPickDoc: string | null;
   escudoPickCol: string | null;
+  // ── MODO SOMBRA (oct 2026, ver domain/sombra.ts) — qué jugaba cada voz
+  //    este giro y cuál habría elegido la regla "seguir al peor, 12 giros".
+  //    Solo lectura: no cambia nada de lo que D.A.N.N.A. juega.
+  sombraPicks: SombraPicks;
+  sombraVoz: VozSombra | null;
+}
+
+/** Una fila del registro de la sombra: una por giro, con el resultado cuando llega el siguiente. */
+export interface SombraFila {
+  n: number;                     // giro en que se decidió (mismo n que spin_index del CSV)
+  voz: VozSombra | null;         // voz que eligió la sombra (null = D.A.N.N.A. esperaba)
+  pickSombra: string | null;     // zonas que habría jugado la sombra
+  pickD: string | null;          // lo que jugaba D.A.N.N.A.
+  pickE: string | null;          // lo que jugaba Escudo solo
+  pickC: string | null;          // lo que jugaba Capa 1 sola
+  resSombra: ResSombra;          // 1 acierto · 0 error · null sin resolver / sin jugada (cero = acierto)
+  resD: ResSombra;
+  resE: ResSombra;
+  resC: ResSombra;
+}
+
+export interface SombraState {
+  hist: SombraHist;              // últimos 12 giros de cada voz
+  score: CopScore;               // aciertos/errores/racha de la sombra
+  rachas: number[];              // veces que la sombra llegó a N errores seguidos (10 = "10 o más")
+  log: SombraFila[];
+}
+
+function sombraInicial(): SombraState {
+  return { hist: sombraHistVacia(), score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 }, rachas: new Array(11).fill(0), log: [] };
+}
+
+/** Una fila del registro del DETECTOR DE RÉGIMEN (modo sombra): el estado de la mesa tras el giro `n`. */
+export interface RegimenFila {
+  n: number;                     // mismo n que spin_index del CSV
+  doc: DiagRegimen;
+  col: DiagRegimen;
+  transDoc: boolean;             // el estado de docenas cambió respecto al giro anterior
+  transCol: boolean;
+}
+
+export interface RegimenState {
+  zonas: { doc: number[]; col: number[] };   // últimos 24 giros sin cero por mercado
+  log: RegimenFila[];
+}
+
+function regimenInicial(): RegimenState {
+  return { zonas: { doc: [], col: [] }, log: [] };
 }
 
 export interface CellRec {
@@ -165,6 +215,11 @@ interface TelemetryState {
   // "Mejor / Peor" del Quantum Pilot (domain/rendimiento.ts). Solo lectura: ninguna
   // decisión lo usa. Acotado a CAP_REGISTRO entradas.
   rendLog: EntradaRend[];
+  // MODO SOMBRA (oct 2026) — "seguir a la voz de peor rendimiento, 12 giros".
+  // Marcador PARALELO de solo lectura; ver domain/sombra.ts.
+  sombra: SombraState;
+  // DETECTOR DE RÉGIMEN (oct 2026) — solo observa y registra; ver domain/regimen.ts.
+  regimen: RegimenState;
   // FIX (oct 2026) — ver nota completa junto a computeMarketRead() más abajo.
   // La decisión del piloto (Capa1+2) que se usa TANTO para puntuar como para
   // mostrar en pantalla (CopilotOrder la lee de acá en vez de recalcularla).
@@ -280,6 +335,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   rendLog: [],
+  sombra: sombraInicial(),
+  regimen: regimenInicial(),
   liveDecision: decisionInicial(),
 
   ingest: (p) => {
@@ -302,6 +359,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     let capa1Score = st.capa1Score;
     let escudoScore = st.escudoScore;
     let rendLog = st.rendLog;
+    let sombra = st.sombra;
     let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
 
     // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
@@ -411,6 +469,32 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         }
       }
 
+      // ── MODO SOMBRA (oct 2026): resolver las jugadas del giro anterior con
+      //    el número de ESTE giro (cero = acierto), puntuar lo que habría
+      //    jugado la sombra y anotar el resultado virtual de cada voz. ──
+      if (pend.sombraPicks) {
+        const sp = pend.sombraPicks;
+        const resSombra: ResSombra = pend.sombraVoz ? aciertoConCero(sp[pend.sombraVoz], spin) : null;
+        const sc = { ...sombra.score };
+        let rachasS = sombra.rachas;
+        if (resSombra !== null) {
+          if (resSombra === 1) { sc.hits += 1; sc.streak = 0; }
+          else {
+            sc.misses += 1; sc.streak += 1; if (sc.streak > sc.maxStreak) sc.maxStreak = sc.streak;
+            if (sc.streak <= 10) { rachasS = [...rachasS]; rachasS[sc.streak] += 1; }
+          }
+        }
+        const log = sombra.log.slice();
+        const ult = log[log.length - 1];
+        if (ult && ult.n === pend.n) {
+          log[log.length - 1] = {
+            ...ult, resSombra,
+            resD: aciertoConCero(sp.D, spin), resE: aciertoConCero(sp.E, spin), resC: aciertoConCero(sp.C, spin),
+          };
+        }
+        sombra = { hist: sombraAvanzar(sombra.hist, sp, spin), score: sc, rachas: rachasS, log };
+      }
+
       // ── RENDIMIENTO EN VIVO: una entrada por giro resuelto, con lo que cada
       //    voz acertó o falló en ESTE giro (null = esa voz no sugirió). Solo
       //    lectura, no toca ningún marcador de arriba. ──
@@ -478,7 +562,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     // dos le hace caso el marcador.
     const suprimirDoc = liveDecision.capa === 'COBERTURA_DOBLE' && liveDecision.principal === 'col';
     const suprimirCol = liveDecision.capa === 'COBERTURA_DOBLE' && liveDecision.principal === 'doc';
-    const pending: Pending = {
+    const pendingBase = {
       n: p.n, hud: p.hud, ent: p.ent, docPick: p.docPick, colPick: p.colPick,
       copSug: liveDecision.mercado,
       copPickDocOverride: suprimirDoc ? null : (liveDecision.pickDoc ?? null),
@@ -502,7 +586,41 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       escudoPickCol: liveDecision.escudo.col && !suprimirCol ? liveDecision.escudo.col.zonas.join(' / ') : null,
     };
 
-    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, rendLog, liveDecision });
+    // ── MODO SOMBRA: qué juega cada voz este giro y a cuál seguiría la regla.
+    //    Usa los mismos campos que puntúan los marcadores reales (arriba). ──
+    const sombraPicks = picksSombra(pendingBase, p.docPick, p.colPick);
+    const sombraVoz = sombraElegir(sombra.hist, sombraPicks);
+    const pending: Pending = { ...pendingBase, sombraPicks, sombraVoz };
+    sombra = {
+      ...sombra,
+      log: [...sombra.log, {
+        n: p.n, voz: sombraVoz, pickSombra: sombraVoz ? sombraPicks[sombraVoz] : null,
+        pickD: sombraPicks.D, pickE: sombraPicks.E, pickC: sombraPicks.C,
+        resSombra: null, resD: null, resE: null, resC: null,
+      }].slice(-HISTORY_CAP),
+    };
+
+    // ── DETECTOR DE RÉGIMEN (solo registro): estado de docenas y columnas tras
+    //    este giro. El cero no entra en la ventana. No lo lee ninguna decisión. ──
+    let regimen = st.regimen;
+    if (p.spin !== null && Number.isFinite(p.spin)) {
+      const sp = Number(p.spin);
+      const zd = regimenAvanzar(regimen.zonas.doc, zonaDe(sp, 'doc'));
+      const zc = regimenAvanzar(regimen.zonas.col, zonaDe(sp, 'col'));
+      const dDoc = clasificarRegimen(zd);
+      const dCol = clasificarRegimen(zc);
+      const ult = regimen.log[regimen.log.length - 1];
+      regimen = {
+        zonas: { doc: zd, col: zc },
+        log: [...regimen.log, {
+          n: p.n, doc: dDoc, col: dCol,
+          transDoc: !!ult && ult.doc.estado !== dDoc.estado,
+          transCol: !!ult && ult.col.estado !== dCol.estado,
+        }].slice(-HISTORY_CAP),
+      };
+    }
+
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, rendLog, sombra, regimen, liveDecision });
   },
 
   reset: () => {
@@ -523,6 +641,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       rendLog: [],
+      sombra: sombraInicial(),
+      regimen: regimenInicial(),
       liveDecision: decisionInicial(),
     });
   },
@@ -575,6 +695,11 @@ export const useHistory = (): TelemetrySpin[] => useTelemetryStore((s) => s.hist
 //    puntuar (ver FIX (oct 2026) junto a computeMarketRead() más arriba).
 //    CopilotOrder (MatrixPanel.tsx) la lee de acá en vez de recalcularla. ──
 export const useLiveDecision = (): DecisionPiloto => useTelemetryStore((s) => s.liveDecision);
+
+// ── MODO SOMBRA (oct 2026) — ver domain/sombra.ts ──
+export const useSombra = (): SombraState => useTelemetryStore((s) => s.sombra);
+// ── DETECTOR DE RÉGIMEN (oct 2026) — ver domain/regimen.ts ──
+export const useRegimen = (): RegimenState => useTelemetryStore((s) => s.regimen);
 
 // ── Marcador del COPILOTO (lo que sugiere D.A.N.N.A.) ──
 export const useCopHits = (): number => useTelemetryStore((s) => s.copScore.hits);
