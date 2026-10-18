@@ -3,7 +3,8 @@
 // Mismos selectores y mismos cálculos que la v8; solo cambia la composición.
 
 import React, { memo } from 'react';
-import { useLiveDecision, useTelemetryStore, useCopLiveStreak, useCopStreak } from '@/store/telemetryStore';
+import { useLiveDecision, useTelemetryStore, useCopLiveStreak, useCopStreak, useSombra } from '@/store/telemetryStore';
+import { NOMBRE_VOZ, SOMBRA_VENTANA } from '@/domain/sombra';
 import { computeJuega, abrevZonas } from '@/domain/juegaEsto';
 import { useOutcomeTape, TAPE_LEN } from '@/domain/outcomeTape';
 import { C, FONT_UI, FONT_NUM, TOPE_ERRORES, rgba, neon, glowText } from './theme';
@@ -14,6 +15,27 @@ const NOMBRE_FUENTE = { ESCUDO: 'Escudo', 'CAPA 1': 'Capa 1' } as const;
 
 const seg: React.CSSProperties = { minWidth: 0, minHeight: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 14px' };
 
+// ── SOMBRA (oct 2026) ────────────────────────────────────────────────────
+// Qué habría jugado "seguir al peor, 12 giros" este giro, con su racha y las
+// veces que llegó a 4 errores. Va en UNA línea pequeña pegada al borde inferior
+// de la tile (posición absoluta, sobre el margen libre): no suma ninguna altura
+// ni mueve nada del panel, y se recorta con "…" si no cabe. Solo lectura.
+const SombraLinea = memo(function SombraLinea() {
+  const sb = useSombra();
+  const pend = useTelemetryStore((s) => s.pending);
+  const voz = pend?.sombraVoz ?? null;
+  const zonas = voz && pend ? abrevZonas(pend.sombraPicks[voz]) : '';
+  const lleg4 = sb.rachas[4] ?? 0;
+  const txt = voz
+    ? `Sombra ▸ ${NOMBRE_VOZ[voz]} ${zonas} · racha ${sb.score.streak} · 4+: ${lleg4}`
+    : `Sombra ▸ espera · racha ${sb.score.streak} · 4+: ${lleg4}`;
+  return (
+    <Txt color={C.ink3} size="calc(var(--qp-fs-txt) - 1.5px)" style={{ position: 'absolute', left: 14, right: 14, bottom: 1, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+      <span data-qp="sombra" title={`Sombra: seguir a la voz de peor rendimiento en los últimos ${SOMBRA_VENTANA} giros (D.A.N.N.A., Escudo, Capa 1). Solo muestra y registra; no cambia lo que juega D.A.N.N.A.`}>{txt}</span>
+    </Txt>
+  );
+});
+
 // ── JUEGA ESTO ───────────────────────────────────────────────────────────
 export const OrdenTile = memo(function OrdenTile() {
   const d = useLiveDecision();
@@ -23,7 +45,7 @@ export const OrdenTile = memo(function OrdenTile() {
   const nivelColor = d.nivel === 'ok' ? C.ok : d.nivel === 'precaucion' ? C.white : C.err;
 
   return (
-    <section aria-label="Juega esto" data-qp="orden" style={{ ...seg, gap: 'calc(var(--qp-gap) * 0.7)', borderLeft: `3px solid ${j.fuente ? colorF : C.line2}`, boxShadow: j.fuente ? `inset 4px 0 14px -6px ${rgba(colorF, 0.9)}` : undefined, borderRadius: '6px 0 0 6px', background: j.fuente ? `linear-gradient(90deg, ${rgba(colorF, 0.16)}, transparent 70%)` : 'transparent' }}>
+    <section aria-label="Juega esto" data-qp="orden" style={{ ...seg, position: 'relative', gap: 'calc(var(--qp-gap) * 0.7)', borderLeft: `3px solid ${j.fuente ? colorF : C.line2}`, boxShadow: j.fuente ? `inset 4px 0 14px -6px ${rgba(colorF, 0.9)}` : undefined, borderRadius: '6px 0 0 6px', background: j.fuente ? `linear-gradient(90deg, ${rgba(colorF, 0.16)}, transparent 70%)` : 'transparent' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
         <span style={{ display: 'flex', gap: 7, alignItems: 'baseline', minWidth: 0 }}>
           <Lbl color={C.ink2}>Juega esto</Lbl>
@@ -37,6 +59,7 @@ export const OrdenTile = memo(function OrdenTile() {
         <Txt color={nivelColor} size="var(--qp-fs-txt)" weight={600} style={{ whiteSpace: 'nowrap' }}>● Entrada segura</Txt>
       </div>
 
+      <SombraLinea />
       <div aria-live="polite" style={{ display: 'flex', alignItems: 'stretch', minHeight: 0 }}>
         {j.fuente ? (
           <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>

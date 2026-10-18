@@ -19,6 +19,8 @@
 // salto en esa columna delata un hueco.
 
 import { useEffect, useRef, useState } from 'react';
+import { useTelemetryStore, type SombraFila, type RegimenFila } from '@/store/telemetryStore';
+import type { DiagRegimen } from '@/domain/regimen';
 
 const CLAVE = 'danna_session_log_v1';
 // Metadata de sesión (hora de inicio + saldo inicial) — se fija UNA vez, al
@@ -302,15 +304,51 @@ interface MetaSesion {
 // depender de keyof (los nombres del CSV no calzan 1:1 con los del objeto).
 const META_HEADERS = ['mesa', 'hora_inicio', 'hora_final', 'saldo_inicial', 'saldo_final'];
 
-function aCSV(filas: Fila[], meta: MetaSesion): string {
+// MODO SOMBRA (oct 2026): columnas extra al FINAL del CSV, unidas por spin_index
+// con el registro de la sombra del store. Cero = acierto en estas columnas.
+const SOMBRA_HEADERS = [
+  'sombra_voz', 'sombra_pick', 'sombra_result',
+  'danna_pick', 'danna_result_cero', 'escudo_pick', 'escudo_result_cero', 'capa1_pick', 'capa1_result_cero',
+];
+const NOM_VOZ = { D: 'D.A.N.N.A.', E: 'Escudo', C: 'Capa 1' } as const;
+const resTxt = (r: 0 | 1 | null | undefined) => (r === 1 ? 'acierto' : r === 0 ? 'error' : '');
+function sombraVals(l: SombraFila | undefined): string[] {
+  if (!l) return SOMBRA_HEADERS.map(() => '');
+  return [
+    l.voz ? NOM_VOZ[l.voz] : '', l.pickSombra ?? '', resTxt(l.resSombra),
+    l.pickD ?? '', resTxt(l.resD), l.pickE ?? '', resTxt(l.resE), l.pickC ?? '', resTxt(l.resC),
+  ];
+}
+
+// DETECTOR DE RÉGIMEN (oct 2026, solo registro): estado de la mesa tras cada giro,
+// por separado para docenas y columnas. Decimales con coma (separador es ';').
+// Se evalúa con el spin del giro SIGUIENTE, que ya está en la fila de abajo.
+const REG_CAMPOS = ['estado', 'lider', 'n', 'chi_conc', 'cambios16', 'chi_ruptura', 'entropia', 'transicion'];
+const REGIMEN_HEADERS = [
+  ...REG_CAMPOS.map((c) => `reg_doc_${c}`),
+  ...REG_CAMPOS.map((c) => `reg_col_${c}`),
+];
+const dec = (x: number | null) => (x === null ? '' : x.toFixed(3).replace('.', ','));
+function regValsMercado(d: DiagRegimen, trans: boolean): string[] {
+  return [d.estado, d.lider === null ? '' : String(d.lider), String(d.n), dec(d.chiConc),
+    d.cambios === null ? '' : String(d.cambios), dec(d.chiRuptura), dec(d.entropia), trans ? '1' : '0'];
+}
+function regimenVals(l: RegimenFila | undefined): string[] {
+  if (!l) return REGIMEN_HEADERS.map(() => '');
+  return [...regValsMercado(l.doc, l.transDoc), ...regValsMercado(l.col, l.transCol)];
+}
+
+function aCSV(filas: Fila[], meta: MetaSesion, sombra: SombraFila[] = [], regimen: RegimenFila[] = []): string {
   const esc = (v: unknown) => {
     const s = v === null || v === undefined ? '' : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const metaVals = [meta.mesa, meta.horaInicio, meta.horaFinal, meta.saldoInicial, meta.saldoFinal];
-  const head = [...META_HEADERS, ...COLS.map(([, t]) => t)].join(';');
+  const head = [...META_HEADERS, ...COLS.map(([, t]) => t), ...SOMBRA_HEADERS, ...REGIMEN_HEADERS].join(';');
+  const porN = new Map<number, SombraFila>(sombra.map((l) => [l.n, l]));
+  const regPorN = new Map<number, RegimenFila>(regimen.map((l) => [l.n, l]));
   const body = filas.map((f) =>
-    [...metaVals.map(esc), ...COLS.map(([k]) => esc(f[k]))].join(';')
+    [...metaVals.map(esc), ...COLS.map(([k]) => esc(f[k])), ...sombraVals(porN.get(f.spin_index)).map(esc), ...regimenVals(regPorN.get(f.spin_index)).map(esc)].join(';')
   );
   return [head, ...body].join('\n');
 }
@@ -419,7 +457,7 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
       saldoInicial: leerSaldoManual(SALDO_INICIAL_CLAVE),
       saldoFinal: leerSaldoManual(SALDO_FINAL_CLAVE),
     };
-    const csv = '\uFEFF' + aCSV(derivar(filas), meta); // BOM para que Excel lea los acentos
+    const csv = '\uFEFF' + aCSV(derivar(filas), meta, useTelemetryStore.getState().sombra.log, useTelemetryStore.getState().regimen.log); // BOM para que Excel lea los acentos
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

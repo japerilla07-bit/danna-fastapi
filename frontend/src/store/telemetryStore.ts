@@ -27,7 +27,6 @@ import { create } from 'zustand';
 import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, type Zone, type Market } from '@/domain/zoneMatrix';
 import { decidirPiloto, registrarGiroCobertura, resetCobertura, type MarketRead, type DecisionPiloto, type Decision, type EscudoInfo } from '@/domain/copilot';
 import { calorInicial, avanzarCalor, type CalorEstado } from '@/domain/calor';
-import { agregarEntrada, type EntradaRend } from '@/domain/rendimiento';
 
 // ────────────────────────────────────────────────────────────────────────
 // Resolución de pick (copiado 1:1 del SessionRecorder)
@@ -130,12 +129,10 @@ interface TelemetryState {
   // FRECUENCIA DE RACHAS EN VIVO (oct 2026) — pedido de Gunner: "que me diga
   // el copiloto / el motor / el escudo viene cometiendo un error cada X giros,
   // dos errores seguidos cada tanto". Por cada marcador (real = copScore,
-  // Capa 1 sola, Escudo 1 solo) se guarda cuántas veces la racha de errores
-  // LLEGÓ a N seguidos (oct 2026: "llega a N o más" — antes solo contaba las
-  // cerradas con largo exacto N e ignoraba el 57% de los errores, los que
-  // vienen dentro de rachas de 2 o más): índice = N (1..9), el 10 junta
-  // "10 o más"; el 0 no se usa. "Cada X giros" = giros puntuados de ese
-  // marcador ÷ veces que llegó a N. Solo lectura: no alimenta ninguna decisión.
+  // Capa 1 sola, Escudo 1 solo) se guardan las rachas de errores YA CERRADAS:
+  // índice = largo de la racha (1..8), el 9 junta 9 o más; el 0 no se usa.
+  // "Cada X giros" = giros puntuados de ese marcador ÷ veces que pasó esa
+  // racha. Solo lectura: no alimenta ninguna decisión.
   // CALOR RECIENTE (domain/calor.ts): estado del detector de calor/fin de
   // sesgo y del tanteador "¿volvió en ≤3 giros?". Solo lectura: ninguna
   // decisión lo usa.
@@ -143,14 +140,6 @@ interface TelemetryState {
   copRachas: number[];
   capa1Rachas: number[];
   escudoRachas: number[];
-  // "EN QUÉ GIRO VOY" (oct 2026) — pedido de Gunner: si dice "2 seguidos cada
-  // 19 giros", saber cuántos giros lleva desde la última vez. Misma forma que
-  // los de arriba (índice = N, 10 = "10 o más"), pero guarda el N° de giro
-  // PUNTUADO de ese marcador en que la racha llegó a N por última vez. 0 = nunca
-  // hoy. Solo lectura.
-  copRachasUlt: number[];
-  capa1RachasUlt: number[];
-  escudoRachasUlt: number[];
   // ── SEPARACIÓN CAPA1 / ESCUDO1 (oct 2026) ──────────────────────────────
   // Pedido de Gunner: ver la efectividad de la Capa 1 sola y de Escudo 1
   // (COBERTURA) solo, cada uno contra lo que DE VERDAD habría apostado,
@@ -160,11 +149,6 @@ interface TelemetryState {
   // Estos dos son marcadores PARALELOS, de solo lectura, para comparar.
   capa1Score: CopScore;
   escudoScore: CopScore;
-  // RENDIMIENTO EN VIVO (oct 2026) — registro giro a giro de aciertos/errores de
-  // las cuatro voces (Motor, Capa 1, Escudo, D.A.N.N.A.), para la franja
-  // "Mejor / Peor" del Quantum Pilot (domain/rendimiento.ts). Solo lectura: ninguna
-  // decisión lo usa. Acotado a CAP_REGISTRO entradas.
-  rendLog: EntradaRend[];
   // FIX (oct 2026) — ver nota completa junto a computeMarketRead() más abajo.
   // La decisión del piloto (Capa1+2) que se usa TANTO para puntuar como para
   // mostrar en pantalla (CopilotOrder la lee de acá en vez de recalcularla).
@@ -271,15 +255,11 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   cellReg: { doc: {}, col: {} },
   copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   calor: calorInicial(),
-  copRachas: new Array(11).fill(0),
-  capa1Rachas: new Array(11).fill(0),
-  escudoRachas: new Array(11).fill(0),
-  copRachasUlt: new Array(11).fill(0),
-  capa1RachasUlt: new Array(11).fill(0),
-  escudoRachasUlt: new Array(11).fill(0),
+  copRachas: new Array(10).fill(0),
+  capa1Rachas: new Array(10).fill(0),
+  escudoRachas: new Array(10).fill(0),
   capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
-  rendLog: [],
   liveDecision: decisionInicial(),
 
   ingest: (p) => {
@@ -296,12 +276,8 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       ? avanzarCalor(st.calor, Number(p.spin))
       : st.calor;
     let escudoRachas = st.escudoRachas;
-    let copRachasUlt = st.copRachasUlt;
-    let capa1RachasUlt = st.capa1RachasUlt;
-    let escudoRachasUlt = st.escudoRachasUlt;
     let capa1Score = st.capa1Score;
     let escudoScore = st.escudoScore;
-    let rendLog = st.rendLog;
     let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
 
     // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
@@ -352,15 +328,11 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         if (copHit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         copScore = cs;
-        // "LLEGA A N O MÁS" (oct 2026) — se anota en el MOMENTO en que la racha
-        // alcanza N errores seguidos (1, 2, 3 … 10), no cuando termina: así cada
-        // error cuenta y reinicia el "voy" de su fila sin importar si la racha
-        // se queda en 1 o sigue hasta 7. Más de 10 no suma otra vez.
-        if (!copHit && cs.streak <= 10) {
+        // Una racha de errores se CIERRA cuando llega un acierto: ahí se anota
+        // su largo (la racha que venía viva en st.copScore, antes de este giro).
+        if (copHit && st.copScore.streak > 0) {
           copRachas = [...copRachas];
-          copRachas[cs.streak] += 1;
-          copRachasUlt = [...copRachasUlt];
-          copRachasUlt[cs.streak] = cs.hits + cs.misses;   // N° de giro puntuado de este error
+          copRachas[Math.min(st.copScore.streak, 9)] += 1;
         }
       }
 
@@ -376,20 +348,14 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         if (capa1Hit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         capa1Score = cs;
-        // "LLEGA A N O MÁS" (oct 2026) — se anota en el MOMENTO en que la racha
-        // alcanza N errores seguidos (1, 2, 3 … 10), no cuando termina: así cada
-        // error cuenta y reinicia el "voy" de su fila sin importar si la racha
-        // se queda en 1 o sigue hasta 7. Más de 10 no suma otra vez.
-        if (!capa1Hit && cs.streak <= 10) {
+        if (capa1Hit && st.capa1Score.streak > 0) {
           capa1Rachas = [...capa1Rachas];
-          capa1Rachas[cs.streak] += 1;
-          capa1RachasUlt = [...capa1RachasUlt];
-          capa1RachasUlt[cs.streak] = cs.hits + cs.misses;   // N° de giro puntuado de este error
+          capa1Rachas[Math.min(st.capa1Score.streak, 9)] += 1;
         }
       }
-      // Escudo 1 solo: un giro = un evento. En COBERTURA DOBLE ya llega aquí
-      // SOLO el lado `principal` (ver pending, abajo), así que escudoHitDoc o
-      // escudoHitCol es null y el acierto es el de ese único mercado.
+      // Escudo 1 solo: puede cubrir doc y/o col a la vez — mismo criterio
+      // "un giro = un evento, acierto si ganó al menos un lado" que ya usa
+      // el marcador real de arriba para COBERTURA DOBLE.
       const escudoHitDoc: boolean | null = pend.escudoPickDoc ? resolvePick(pend.escudoPickDoc, spin) : null;
       const escudoHitCol: boolean | null = pend.escudoPickCol ? resolvePick(pend.escudoPickCol, spin) : null;
       const escudoHit: boolean | null =
@@ -399,22 +365,11 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         if (escudoHit) { cs.hits += 1; cs.streak = 0; }
         else { cs.misses += 1; cs.streak += 1; if (cs.streak > cs.maxStreak) cs.maxStreak = cs.streak; }
         escudoScore = cs;
-        // "LLEGA A N O MÁS" (oct 2026) — se anota en el MOMENTO en que la racha
-        // alcanza N errores seguidos (1, 2, 3 … 10), no cuando termina: así cada
-        // error cuenta y reinicia el "voy" de su fila sin importar si la racha
-        // se queda en 1 o sigue hasta 7. Más de 10 no suma otra vez.
-        if (!escudoHit && cs.streak <= 10) {
+        if (escudoHit && st.escudoScore.streak > 0) {
           escudoRachas = [...escudoRachas];
-          escudoRachas[cs.streak] += 1;
-          escudoRachasUlt = [...escudoRachasUlt];
-          escudoRachasUlt[cs.streak] = cs.hits + cs.misses;   // N° de giro puntuado de este error
+          escudoRachas[Math.min(st.escudoScore.streak, 9)] += 1;
         }
       }
-
-      // ── RENDIMIENTO EN VIVO: una entrada por giro resuelto, con lo que cada
-      //    voz acertó o falló en ESTE giro (null = esa voz no sugirió). Solo
-      //    lectura, no toca ningún marcador de arriba. ──
-      rendLog = agregarEntrada(rendLog, { danna: copHit, capa1: capa1Hit, escudo: escudoHit, motorDoc: docHit, motorCol: colHit });
 
       // ── Alimentar la ventana de COBERTURA DOBLE con el número real de
       //    este giro — independiente de si se jugó o no, de si acertó o
@@ -484,25 +439,15 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       copPickDocOverride: suprimirDoc ? null : (liveDecision.pickDoc ?? null),
       copPickColOverride: suprimirCol ? null : (liveDecision.pickCol ?? null),
       // SEPARACIÓN CAPA1/ESCUDO1: lo que CADA capa sugiere por su cuenta,
-      // leído de los campos nuevos que ya trae liveDecision (ver copilot.ts).
-      //
-      // FIX (oct 2026) — auditado con 56 sesiones: el marcador del Escudo
-      // contaba la COBERTURA_DOBLE como acierto si ganaba CUALQUIERA de los
-      // dos lados (docenas O columnas), o sea 4 zonas a la vez. Gunner juega
-      // UN solo mercado por giro (el de la ▲ PRIORIDAD), así que ese marcador
-      // no mostraba errores que él sí vivía: en cobertura doble, el 60% de los
-      // errores de las Unidas (1.898 de 3.140) salían como acierto del Escudo.
-      // Ahora, en COBERTURA_DOBLE, el Escudo puntúa SOLO el mercado `principal`
-      // — la misma condición suprimirDoc/suprimirCol del marcador real de
-      // arriba. En COBERTURA_DOC / COBERTURA_COL (un solo mercado) no cambia
-      // nada. Las zonas que se muestran en pantalla salen de liveDecision.escudo
-      // y tampoco cambian: esto solo decide qué lado se puntúa.
+      // leído de los campos nuevos que ya trae liveDecision (ver copilot.ts)
+      // — sin el "principal" ni las supresiones de arriba, que son solo
+      // para el marcador REAL combinado.
       capa1Sug: liveDecision.capa1Decision.mercado,
-      escudoPickDoc: liveDecision.escudo.doc && !suprimirDoc ? liveDecision.escudo.doc.zonas.join(' / ') : null,
-      escudoPickCol: liveDecision.escudo.col && !suprimirCol ? liveDecision.escudo.col.zonas.join(' / ') : null,
+      escudoPickDoc: liveDecision.escudo.doc ? liveDecision.escudo.doc.zonas.join(' / ') : null,
+      escudoPickCol: liveDecision.escudo.col ? liveDecision.escudo.col.zonas.join(' / ') : null,
     };
 
-    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, rendLog, liveDecision });
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, capa1Score, escudoScore, liveDecision });
   },
 
   reset: () => {
@@ -514,15 +459,11 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       cellReg: { doc: {}, col: {} },
       copScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       calor: calorInicial(),
-      copRachas: new Array(11).fill(0),
-      capa1Rachas: new Array(11).fill(0),
-      escudoRachas: new Array(11).fill(0),
-      copRachasUlt: new Array(11).fill(0),
-      capa1RachasUlt: new Array(11).fill(0),
-      escudoRachasUlt: new Array(11).fill(0),
+      copRachas: new Array(10).fill(0),
+      capa1Rachas: new Array(10).fill(0),
+      escudoRachas: new Array(10).fill(0),
       capa1Score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
-      rendLog: [],
       liveDecision: decisionInicial(),
     });
   },
@@ -588,16 +529,12 @@ export const useCopStreak = (): number => useTelemetryStore((s) => s.copScore.ma
 // mantiene correcto en vivo (ver ingest(), más arriba) — solo faltaba este
 // selector para leerlo.
 export const useCopLiveStreak = (): number => useTelemetryStore((s) => s.copScore.streak);
-// Veces que la racha de errores llegó a N hoy, por marcador (índice = N, 10 = "10 o más"):
+// Rachas de errores cerradas de hoy, por marcador (índice = largo, 9 = "9 o más"):
 // real (copRachas), Capa 1 sola y Escudo 1 solo.
 export const useCopRachas = (): number[] => useTelemetryStore((s) => s.copRachas);
 export const useCalor = (): CalorEstado => useTelemetryStore((s) => s.calor);
 export const useCapa1Rachas = (): number[] => useTelemetryStore((s) => s.capa1Rachas);
 export const useEscudoRachas = (): number[] => useTelemetryStore((s) => s.escudoRachas);
-// Giro puntuado (de ese marcador) en que pasó por última vez cada largo de racha.
-export const useCopRachasUlt = (): number[] => useTelemetryStore((s) => s.copRachasUlt);
-export const useCapa1RachasUlt = (): number[] => useTelemetryStore((s) => s.capa1RachasUlt);
-export const useEscudoRachasUlt = (): number[] => useTelemetryStore((s) => s.escudoRachasUlt);
 export const useCopWr = (): number | null => useTelemetryStore((s) => {
   const t = s.copScore.hits + s.copScore.misses;
   return t > 0 ? (s.copScore.hits / t) * 100 : null;
@@ -661,6 +598,3 @@ export function useTermoStreak(mkt: Market, ventana = 10): number {
 if (typeof window !== 'undefined') {
   (window as any).__telemetry = useTelemetryStore;
 }
-
-// Registro de rendimiento por giro (solo lectura) — alimenta la franja Mejor/Peor.
-export const useRendLog = (): EntradaRend[] => useTelemetryStore((s) => s.rendLog);
