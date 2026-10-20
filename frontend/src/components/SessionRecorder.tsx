@@ -19,7 +19,7 @@
 // salto en esa columna delata un hueco.
 
 import { useEffect, useRef, useState } from 'react';
-import { useTelemetryStore, type SombraFila, type RegimenFila } from '@/store/telemetryStore';
+import { useTelemetryStore, type SombraFila, type RegimenFila, type PacienciaFila } from '@/store/telemetryStore';
 import type { DiagRegimen } from '@/domain/regimen';
 
 const CLAVE = 'danna_session_log_v1';
@@ -338,17 +338,26 @@ function regimenVals(l: RegimenFila | undefined): string[] {
   return [...regValsMercado(l.doc, l.transDoc), ...regValsMercado(l.col, l.transCol)];
 }
 
-function aCSV(filas: Fila[], meta: MetaSesion, sombra: SombraFila[] = [], regimen: RegimenFila[] = []): string {
+// MEDIDOR DE PACIENCIA DEL ESCUDO (oct 2026, solo registro): qué jugaban "sigo al
+// Escudo al 1.er error" y "espero 2 errores" en cada giro. Cero = acierto.
+const PACIENCIA_HEADERS = ['pac1_pick', 'pac1_result_cero', 'pac2_pick', 'pac2_result_cero'];
+function pacienciaVals(l: PacienciaFila | undefined): string[] {
+  if (!l) return PACIENCIA_HEADERS.map(() => '');
+  return [l.pickS ?? '', resTxt(l.resS), l.pickE ?? '', resTxt(l.resE)];
+}
+
+function aCSV(filas: Fila[], meta: MetaSesion, sombra: SombraFila[] = [], regimen: RegimenFila[] = [], paciencia: PacienciaFila[] = []): string {
   const esc = (v: unknown) => {
     const s = v === null || v === undefined ? '' : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const metaVals = [meta.mesa, meta.horaInicio, meta.horaFinal, meta.saldoInicial, meta.saldoFinal];
-  const head = [...META_HEADERS, ...COLS.map(([, t]) => t), ...SOMBRA_HEADERS, ...REGIMEN_HEADERS].join(';');
+  const head = [...META_HEADERS, ...COLS.map(([, t]) => t), ...SOMBRA_HEADERS, ...REGIMEN_HEADERS, ...PACIENCIA_HEADERS].join(';');
   const porN = new Map<number, SombraFila>(sombra.map((l) => [l.n, l]));
   const regPorN = new Map<number, RegimenFila>(regimen.map((l) => [l.n, l]));
+  const pacPorN = new Map<number, PacienciaFila>(paciencia.map((l) => [l.n, l]));
   const body = filas.map((f) =>
-    [...metaVals.map(esc), ...COLS.map(([k]) => esc(f[k])), ...sombraVals(porN.get(f.spin_index)).map(esc), ...regimenVals(regPorN.get(f.spin_index)).map(esc)].join(';')
+    [...metaVals.map(esc), ...COLS.map(([k]) => esc(f[k])), ...sombraVals(porN.get(f.spin_index)).map(esc), ...regimenVals(regPorN.get(f.spin_index)).map(esc), ...pacienciaVals(pacPorN.get(f.spin_index)).map(esc)].join(';')
   );
   return [head, ...body].join('\n');
 }
@@ -457,7 +466,7 @@ export function SessionRecorder({ snap, thrEnt = 8, thrHud = 5, thrHudNivel = 60
       saldoInicial: leerSaldoManual(SALDO_INICIAL_CLAVE),
       saldoFinal: leerSaldoManual(SALDO_FINAL_CLAVE),
     };
-    const csv = '\uFEFF' + aCSV(derivar(filas), meta, useTelemetryStore.getState().sombra.log, useTelemetryStore.getState().regimen.log); // BOM para que Excel lea los acentos
+    const csv = '\uFEFF' + aCSV(derivar(filas), meta, useTelemetryStore.getState().sombra.log, useTelemetryStore.getState().regimen.log, useTelemetryStore.getState().paciencia.log); // BOM para que Excel lea los acentos
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

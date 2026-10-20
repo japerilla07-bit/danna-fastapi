@@ -28,6 +28,7 @@ import { classifyZone, cellKeyOf, fusedZone, currentCellWr, currentCellMaxRun, t
 import { decidirPiloto, registrarGiroCobertura, resetCobertura, type MarketRead, type DecisionPiloto, type Decision, type EscudoInfo } from '@/domain/copilot';
 import { calorInicial, avanzarCalor, type CalorEstado } from '@/domain/calor';
 import { agregarEntrada, type EntradaRend } from '@/domain/rendimiento';
+import { pacienciaVacia, pacienciaDecidir, pacienciaResolver, type PacienciaEstado, type PacienciaJugadas } from '@/domain/paciencia';
 import { sombraHistVacia, sombraAvanzar, sombraElegir, picksSombra, aciertoConCero, type SombraHist, type SombraPicks, type VozSombra, type ResSombra } from '@/domain/sombra';
 import { zonaDe, regimenAvanzar, clasificarRegimen, type DiagRegimen } from '@/domain/regimen';
 
@@ -106,6 +107,9 @@ interface Pending {
   //    Solo lectura: no cambia nada de lo que D.A.N.N.A. juega.
   sombraPicks: SombraPicks;
   sombraVoz: VozSombra | null;
+  // ── MEDIDOR DE PACIENCIA DEL ESCUDO (oct 2026, ver domain/paciencia.ts):
+  //    qué jugaba cada jugador virtual (1 error / 2 errores) este giro.
+  pacJugadas: PacienciaJugadas;
 }
 
 /** Una fila del registro de la sombra: una por giro, con el resultado cuando llega el siguiente. */
@@ -131,6 +135,24 @@ export interface SombraState {
 
 function sombraInicial(): SombraState {
   return { hist: sombraHistVacia(), score: { hits: 0, misses: 0, streak: 0, maxStreak: 0 }, rachas: new Array(11).fill(0), log: [] };
+}
+
+/** Una fila del registro del medidor de paciencia: una por giro (misma n que spin_index del CSV). */
+export interface PacienciaFila {
+  n: number;
+  pickS: string | null;          // pareja que jugaba "sigo al Escudo al 1.er error"
+  pickE: string | null;          // pareja que jugaba "espero 2 errores"
+  resS: ResSombra;               // 1 acierto · 0 error · null sin jugada / sin resolver (cero = acierto)
+  resE: ResSombra;
+}
+
+export interface PacienciaState {
+  est: PacienciaEstado;          // pareja que sostiene cada jugador + últimos 12 resultados
+  log: PacienciaFila[];
+}
+
+function pacienciaInicial(): PacienciaState {
+  return { est: pacienciaVacia(), log: [] };
 }
 
 /** Una fila del registro del DETECTOR DE RÉGIMEN (modo sombra): el estado de la mesa tras el giro `n`. */
@@ -218,6 +240,8 @@ interface TelemetryState {
   // MODO SOMBRA (oct 2026) — "seguir a la voz de peor rendimiento, 12 giros".
   // Marcador PARALELO de solo lectura; ver domain/sombra.ts.
   sombra: SombraState;
+  // Medidor de paciencia del Escudo (1 error vs 2 errores). Solo lectura.
+  paciencia: PacienciaState;
   // DETECTOR DE RÉGIMEN (oct 2026) — solo observa y registra; ver domain/regimen.ts.
   regimen: RegimenState;
   // FIX (oct 2026) — ver nota completa junto a computeMarketRead() más abajo.
@@ -336,6 +360,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
   escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
   rendLog: [],
   sombra: sombraInicial(),
+  paciencia: pacienciaInicial(),
   regimen: regimenInicial(),
   liveDecision: decisionInicial(),
 
@@ -360,6 +385,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     let escudoScore = st.escudoScore;
     let rendLog = st.rendLog;
     let sombra = st.sombra;
+    let paciencia = st.paciencia;
     let histResuelto = st.history;   // history con el resultado del pendiente ya escrito
 
     // ── 1) Resolver el PENDIENTE (giro anterior) con el número de ESTE giro ──
@@ -495,6 +521,19 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
         sombra = { hist: sombraAvanzar(sombra.hist, sp, spin), score: sc, rachas: rachasS, log };
       }
 
+      // ── MEDIDOR DE PACIENCIA DEL ESCUDO (solo lectura): resolver lo que
+      //    jugaba cada jugador virtual con el número de ESTE giro. ──
+      if (pend.pacJugadas) {
+        const pj = pend.pacJugadas;
+        const estP = pacienciaResolver(paciencia.est, pj, spin);
+        const logP = paciencia.log.slice();
+        const ultP = logP[logP.length - 1];
+        if (ultP && ultP.n === pend.n) {
+          logP[logP.length - 1] = { ...ultP, resS: aciertoConCero(pj.S, spin), resE: aciertoConCero(pj.E, spin) };
+        }
+        paciencia = { est: estP, log: logP };
+      }
+
       // ── RENDIMIENTO EN VIVO: una entrada por giro resuelto, con lo que cada
       //    voz acertó o falló en ESTE giro (null = esa voz no sugirió). Solo
       //    lectura, no toca ningún marcador de arriba. ──
@@ -590,7 +629,15 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
     //    Usa los mismos campos que puntúan los marcadores reales (arriba). ──
     const sombraPicks = picksSombra(pendingBase, p.docPick, p.colPick);
     const sombraVoz = sombraElegir(sombra.hist, sombraPicks);
-    const pending: Pending = { ...pendingBase, sombraPicks, sombraVoz };
+    // ── MEDIDOR DE PACIENCIA: qué parejas jugarían "1 error" y "2 errores"
+    //    siguiendo al Escudo (su pick es el mismo de la voz E de la sombra). ──
+    const dec = pacienciaDecidir(paciencia.est, sombraPicks.E);
+    const pacJugadas = dec.jugadas;
+    paciencia = {
+      est: dec.est,
+      log: [...paciencia.log, { n: p.n, pickS: pacJugadas.S, pickE: pacJugadas.E, resS: null, resE: null }].slice(-HISTORY_CAP),
+    };
+    const pending: Pending = { ...pendingBase, sombraPicks, sombraVoz, pacJugadas };
     sombra = {
       ...sombra,
       log: [...sombra.log, {
@@ -620,7 +667,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       };
     }
 
-    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, rendLog, sombra, regimen, liveDecision });
+    set({ history, lastN: p.n, pending, counters, cellReg, copScore, calor, copRachas, capa1Rachas, escudoRachas, copRachasUlt, capa1RachasUlt, escudoRachasUlt, capa1Score, escudoScore, rendLog, sombra, paciencia, regimen, liveDecision });
   },
 
   reset: () => {
@@ -642,6 +689,7 @@ export const useTelemetryStore = create<TelemetryState>((set, get) => ({
       escudoScore: { hits: 0, misses: 0, streak: 0, maxStreak: 0 },
       rendLog: [],
       sombra: sombraInicial(),
+      paciencia: pacienciaInicial(),
       regimen: regimenInicial(),
       liveDecision: decisionInicial(),
     });
@@ -698,6 +746,7 @@ export const useLiveDecision = (): DecisionPiloto => useTelemetryStore((s) => s.
 
 // ── MODO SOMBRA (oct 2026) — ver domain/sombra.ts ──
 export const useSombra = (): SombraState => useTelemetryStore((s) => s.sombra);
+export const usePaciencia = (): PacienciaState => useTelemetryStore((s) => s.paciencia);
 // ── DETECTOR DE RÉGIMEN (oct 2026) — ver domain/regimen.ts ──
 export const useRegimen = (): RegimenState => useTelemetryStore((s) => s.regimen);
 
