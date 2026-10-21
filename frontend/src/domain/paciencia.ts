@@ -7,8 +7,11 @@
 //                    que muestra el Escudo en ese momento. Mientras acierta, se queda.
 //   · E "2 errores": igual, pero adopta la pareja nueva del Escudo solo tras
 //                    DOS errores seguidos.
-// Cada uno acumula sus aciertos en los últimos 5 giros; la franja del Quantum
-// Pilot compara los dos. Cero = acierto (como se juega: el cero siempre cubierto).
+// La franja del Quantum Pilot compara los dos SOLO en los giros donde juegan
+// pareja DISTINTA (después de un error de alguno): ahí es donde "seguir al Escudo"
+// y "esperar el error" de verdad se separan. En los giros en que juegan lo mismo
+// no hay nada que comparar y no se cuentan. Cada uno acumula sus aciertos en los
+// últimos 5 de esos giros. Cero = acierto (como se juega: el cero siempre cubierto).
 // Solo juegan en giros donde el Escudo tiene jugada; si el Escudo no juega,
 // el estado no cambia (como en la simulación de 56 sesiones).
 //
@@ -20,7 +23,14 @@
 // Funciones PURAS; el estado lo guarda telemetryStore.ts. Solo lectura.
 // ════════════════════════════════════════════════════════════════════════
 
-import { aciertoConCero, type ResSombra } from '@/domain/sombra';
+import { aciertoConCero, numerosZonas, type ResSombra } from '@/domain/sombra';
+
+/** ¿Las dos parejas cubren exactamente los mismos números? (el orden del texto no importa) */
+export function mismaPareja(a: string | null, b: string | null): boolean {
+  const x = numerosZonas(a).sort((p, q) => p - q).join(',');
+  const y = numerosZonas(b).sort((p, q) => p - q).join(',');
+  return x === y;
+}
 
 export type PolPaciencia = 'S' | 'E';
 export const POLS_PACIENCIA: readonly PolPaciencia[] = ['S', 'E'];
@@ -37,7 +47,7 @@ export interface PolEstado {
   held: string | null;
   /** Errores seguidos con la pareja actual. */
   miss: number;
-  /** Últimos PACIENCIA_VENTANA resultados (1 acierto, 0 error). */
+  /** Resultados (1 acierto, 0 error) de los últimos PACIENCIA_VENTANA giros en que jugaron pareja DISTINTA. */
   hist: Array<0 | 1>;
 }
 export type PacienciaEstado = Record<PolPaciencia, PolEstado>;
@@ -73,11 +83,13 @@ export function pacienciaDecidir(
 /** Resuelve las jugadas del giro anterior con el número que salió y actualiza cada jugador. */
 export function pacienciaResolver(est: PacienciaEstado, jugadasPrev: PacienciaJugadas, spin: number): PacienciaEstado {
   const out = pacienciaVacia();
+  // Solo entra a la ventana comparable el giro en que juegan pareja distinta.
+  const distinto = jugadasPrev.S !== null && jugadasPrev.E !== null && !mismaPareja(jugadasPrev.S, jugadasPrev.E);
   for (const p of POLS_PACIENCIA) {
     const s = est[p];
     const r: ResSombra = aciertoConCero(jugadasPrev[p], spin);
     if (r === null) { out[p] = s; continue; }
-    const hist = [...s.hist, r].slice(-PACIENCIA_VENTANA);
+    const hist = distinto ? [...s.hist, r].slice(-PACIENCIA_VENTANA) : s.hist;
     if (r === 1) { out[p] = { held: s.held, miss: 0, hist }; continue; }
     const miss = s.miss + 1;
     // tras el error N-ésimo seguido deja la pareja: en la próxima jugada adopta la del Escudo

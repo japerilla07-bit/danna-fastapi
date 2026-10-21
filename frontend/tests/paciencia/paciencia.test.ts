@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pacienciaVacia, pacienciaDecidir, pacienciaResolver, tasaPaciencia, pacienciaVeredicto,
+  pacienciaVacia, pacienciaDecidir, pacienciaResolver, tasaPaciencia, pacienciaVeredicto, mismaPareja,
   PACIENCIA_VENTANA, type PacienciaEstado,
 } from '../../src/domain/paciencia';
 
@@ -28,7 +28,7 @@ test('mientras acierta se queda con su pareja aunque el Escudo cambie', () => {
   e = giro(e, A, 5).est;                       // acierta (5 está en 1-12)
   const g = giro(e, B, 6);                     // el Escudo ya muestra B; S y E siguen en A y vuelven a acertar
   assert.deepEqual(g.jugadas, { S: A, E: A });
-  assert.equal(tasaPaciencia(g.est, 'S').hits, 2);
+  assert.equal(g.est.S.miss, 0);
 });
 
 test('S cambia tras 1 error; E tras 2', () => {
@@ -46,14 +46,34 @@ test('cero cuenta como acierto y corta la racha de errores', () => {
   e = giro(e, A, 30).est;                      // error 1
   e = giro(e, B, 0).est;                       // cero: acierto para ambos (S ya adoptó B; E sigue en A)
   assert.equal(e.E.miss, 0);
-  assert.equal(tasaPaciencia(e, 'E').hits, 1);
+  assert.equal(tasaPaciencia(e, 'E').hits, 1); // este giro sí cuenta: juegan pareja distinta (S=B, E=A)
 });
 
-test('la ventana guarda solo los últimos 5 resultados', () => {
+test('solo cuenta los giros en que juegan pareja DISTINTA; antes del primer error no hay nada que comparar', () => {
   let e = pacienciaVacia();
-  for (let i = 0; i < 9; i++) e = giro(e, A, 5).est;
+  for (let i = 0; i < 4; i++) e = giro(e, A, 5).est;   // 4 aciertos seguidos: juegan lo mismo
+  assert.equal(tasaPaciencia(e, 'S').n, 0);
+  assert.equal(tasaPaciencia(e, 'E').n, 0);
+  e = giro(e, A, 30).est;                              // error de los dos, misma pareja: tampoco cuenta
+  assert.equal(tasaPaciencia(e, 'S').n, 0);
+  const g = giro(e, B, 30);                            // S adopta B (acierta); E sigue en A (falla): SÍ cuenta
+  assert.deepEqual(g.jugadas, { S: B, E: A });
+  assert.deepEqual([tasaPaciencia(g.est, 'S').hits, tasaPaciencia(g.est, 'S').n], [1, 1]);
+  assert.deepEqual([tasaPaciencia(g.est, 'E').hits, tasaPaciencia(g.est, 'E').n], [0, 1]);
+});
+
+test('el orden del texto de la pareja no cuenta: "13-24 / 1-12" es la misma pareja que "1-12 / 13-24"', () => {
+  assert.equal(mismaPareja('1-12 / 13-24', '13-24 / 1-12'), true);
+  assert.equal(mismaPareja('1-12 / 13-24', '1-12 / 25-36'), false);
+  assert.equal(mismaPareja(null, null), true);
+});
+
+test('la ventana guarda solo los últimos 5 giros comparables', () => {
+  let e = pacienciaVacia();
+  e = giro(e, A, 30).est;                      // error: queda S sin pareja, E sigue en A con 1 error
+  // desde aquí S y E juegan parejas distintas varios giros seguidos
+  for (let i = 0; i < 9; i++) e = giro(e, i % 2 ? B : C, 20).est;
   assert.equal(e.S.hist.length, PACIENCIA_VENTANA);
-  assert.equal(tasaPaciencia(e, 'S').pct, 100);
 });
 
 test('veredicto: sin datos, parejo y quién va mejor', () => {
