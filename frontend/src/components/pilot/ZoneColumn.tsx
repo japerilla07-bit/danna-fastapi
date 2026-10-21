@@ -7,9 +7,8 @@ import React, { memo } from 'react';
 import {
   useLastHud, useLastEnt, useCellRec,
   useMarketHits, useMarketMisses, useMarketMaxStreak, useMarketStreak,
-  useTermoHits, useTermoTotal, usePaciencia,
+  useTermoHits, useTermoTotal,
 } from '@/store/telemetryStore';
-import { tasaPaciencia, pacienciaVeredicto, PACIENCIA_VENTANA } from '@/domain/paciencia';
 import { cellKeyOf, cellStats, fusedZone, liveDeviation, type Zone, type Market } from '@/domain/zoneMatrix';
 import { STYLE, INSTRUCCION } from '@/components/MatrixPanel';
 import { C, FONT_UI, num, rgba, glowText, neon } from './theme';
@@ -31,27 +30,6 @@ const Line = ({ children, right }: { children: React.ReactNode; right?: React.Re
   </div>
 );
 const B = ({ c = C.ink, children }: { c?: string; children: React.ReactNode }) => <b style={{ ...num, color: c, fontWeight: 600, fontSize: 'calc(var(--qp-fs-txt) - 0.5px)' }}>{children}</b>;
-
-/**
- * MEDIDOR DE PACIENCIA DEL ESCUDO (solo lectura, no cambia lo que se juega): aciertos de los
- * últimos 12 giros siguiendo al Escudo al 1.er error ("1e") vs esperando 2 errores ("2e").
- * Se pinta en verde el que viene mejor por 2 o más giros; parejo = ambos en blanco.
- */
-const PacChip = memo(function PacChip() {
-  const { est } = usePaciencia();
-  const a = tasaPaciencia(est, 'S');
-  const b = tasaPaciencia(est, 'E');
-  const v = pacienciaVeredicto(est);
-  const cA = v === 'S' ? C.ok : C.ink;
-  const cB = v === 'E' ? C.ok : C.ink;
-  const txt = v === 'sin datos' ? 'sin datos' : v === 'parejo' ? 'parejo' : v === 'S' ? 'va mejor 1e' : 'va mejor 2e';
-  return (
-    <span data-qp="pac-chip" title={`Escudo últimos ${PACIENCIA_VENTANA} giros: siguiéndolo al 1.er error ${a.hits}/${a.n} · esperando 2 errores ${b.hits}/${b.n} (${txt}). Solo medición.`}
-      style={{ color: C.ink3, fontSize: 'calc(var(--qp-fs-txt) - 1px)', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-      Esc 1e <B c={cA}>{a.hits}</B> · 2e <B c={cB}>{b.hits}</B>
-    </span>
-  );
-});
 
 const MarketCard = memo(function MarketCard({ mkt }: { mkt: Market }) {
   const hud = useLastHud();
@@ -87,7 +65,7 @@ const MarketCard = memo(function MarketCard({ mkt }: { mkt: Market }) {
       <Line right={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: luz }} />últ. 10 <B c={luz}>{termoTotal > 0 ? `${termoHits}/${termoTotal}` : '—'}</B></span>}>
         racha actual <B c={colorRacha(gCur)}>{gCur}</B> · peor racha <B c={gMax >= 4 ? C.err : C.ink}>{gMax}</B>
       </Line>
-      <Line right={mkt === 'doc' ? <PacChip /> : undefined}>
+      <Line>
         eficiencia{' '}
         {map ? (
           <>

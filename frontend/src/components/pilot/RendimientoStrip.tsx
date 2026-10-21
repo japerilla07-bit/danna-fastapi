@@ -5,7 +5,8 @@
 // lee el registro del store. No decide nada ni toca ninguna apuesta.
 
 import React, { memo, useMemo } from 'react';
-import { useRendLog } from '@/store/telemetryStore';
+import { useRendLog, usePaciencia } from '@/store/telemetryStore';
+import { tasaPaciencia, pacienciaVeredicto, PACIENCIA_VENTANA } from '@/domain/paciencia';
 import { leerRendimiento, lineaTendencia, fmtDelta, unir, FUENTES, NOMBRE, VENTANA, type Fuente, type ItemTendencia, type Medida } from '@/domain/rendimiento';
 import { C, FONT_UI, FONT_NUM, glowText, rgba } from './theme';
 
@@ -39,6 +40,33 @@ function Chip({ m, rol }: { m: Medida; rol: 'mejor' | 'peor' | null }) {
     </span>
   );
 }
+
+/**
+ * MEDIDOR DE PACIENCIA DEL ESCUDO (solo lectura, no cambia lo que se juega): de los últimos
+ * 5 giros del Escudo, cuántos habría acertado quien lo sigue al 1.er error ("siguiéndolo") y
+ * quien espera 2 errores antes de cambiar ("esperando el error"). En verde el que lleva
+ * 2 o más giros de ventaja; parejo = los dos en blanco. Ver domain/paciencia.ts.
+ */
+const PacienciaChip = memo(function PacienciaChip() {
+  const { est } = usePaciencia();
+  const a = tasaPaciencia(est, 'S');
+  const b = tasaPaciencia(est, 'E');
+  const v = pacienciaVeredicto(est);
+  const f = (t: { hits: number; n: number }) => (t.n > 0 ? `${t.hits}/${t.n}` : '—');
+  const pc = (t: { pct: number | null }) => (t.pct === null ? '—' : `${Math.round(t.pct)}%`);
+  const tono = (quien: 'S' | 'E') => (v === quien ? C.ok : C.ink);
+  const detalle = `Escudo, últimos ${PACIENCIA_VENTANA} giros con jugada: siguiéndolo al 1.er error ${f(a)} (${pc(a)}) · esperando 2 errores ${f(b)} (${pc(b)}). ${v === 'sin datos' ? 'Todavía pocos giros.' : v === 'parejo' ? 'Parejo.' : v === 'S' ? 'Va mejor siguiéndolo.' : 'Va mejor esperando.'} Solo medición: no cambia lo que se juega.`;
+  return (
+    <span
+      data-qp="rend-paciencia" data-veredicto={v} title={detalle}
+      style={{ marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap', fontFamily: FONT_UI, fontSize: 'calc(var(--qp-fs-txt) - 1px)', color: C.ink3 }}
+    >
+      <b style={{ color: C.escudo, fontWeight: 700 }}>Escudo</b>
+      {' siguiéndolo '}<b style={{ fontFamily: FONT_NUM, color: tono('S'), fontWeight: 700 }}>{f(a)}</b>
+      {' · esperando el error '}<b style={{ fontFamily: FONT_NUM, color: tono('E'), fontWeight: 700 }}>{f(b)}</b>
+    </span>
+  );
+});
 
 export const RendimientoStrip = memo(function RendimientoStrip({ height }: { height: number }) {
   const log = useRendLog();
@@ -95,6 +123,7 @@ export const RendimientoStrip = memo(function RendimientoStrip({ height }: { hei
         >
           {tendencia}
         </span>
+        <PacienciaChip />
       </div>
     </section>
   );
