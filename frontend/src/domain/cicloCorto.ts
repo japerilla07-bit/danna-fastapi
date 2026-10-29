@@ -12,8 +12,16 @@
 //   2. Si aprueba, el jugador elige la voz que juega (Propuesta, Motor
 //      docenas o Motor columnas) y ENTRA. Un solo mercado por giro.
 //   3. Cada giro dentro del ciclo se vuelve a leer la ventana. Con la voz
-//      Propuesta: si la lectura nueva aprueba otro par u otro mercado, se
-//      cambia; si ya no aprueba, se sigue con el último par.
+//      Propuesta (ESTADO DINÁMICO, versión D, oct 2026):
+//        · si la lectura sigue aprobando el par que juegas → CONCENTRACIÓN: juegas;
+//        · si no lo sostiene (siempre pasa tras un error) → TRANSICIÓN: ese giro
+//          NO se apuesta (el ciclo sigue abierto con sus aciertos y errores);
+//        · un par nuevo solo se juega cuando la mesa lo aprueba 2 lecturas
+//          seguidas (CONFIRMADO);
+//        · 7 giros seguidos sin lectura clara → INDETERMINADO: cierra el ciclo
+//          (no es reventón) y va a pausa.
+//      Medido sobre el corpus: rachas de 4 de 28 a 10, de 3 de 67 a 40.
+//      Las voces del motor siguen igual: juegan todos los giros.
 //   4. El cero cuenta como ACIERTO. El ciclo cierra en el 2º acierto, o en
 //      el 4º error seguido (CORTE = reventón).
 //   5. Después de cada ciclo (gane o reviente): pausa de 4 minutos. Al
@@ -22,9 +30,10 @@
 // REGLA B — la ventana aprueba un mercado si cumple las 5:
 //   · Concentración: zona más salida − zona menos salida ≥ 2 (conteo simple).
 //   · Coherencia:    el par del conteo simple = el par ponderado.
-//   · Recencia:      la zona de afuera no salió en los últimos 3 giros.
+//   · Recencia:      la zona de afuera no salió en los últimos 4 giros (V2, oct 2026; antes 3).
 //   · Separación:    la zona de afuera salió como máximo 1 vez en los 7.
-//   · Indeterminado: con 2 o más ceros en la ventana no se aprueba nada.
+//   · Indeterminado: con 2 o más ceros en la ventana, o con un cero en los últimos
+//                    4 giros (dispersión reciente, V2), no se aprueba nada.
 // El par ponderado usa EXACTAMENTE el cálculo de evaluarMercado() de
 // copilot.ts (pesos 1-1-1-1-2-3-4, desempate por la zona que salió más
 // tarde, luego orden fijo). Si aprueban los dos mercados: gana el de la zona
@@ -46,9 +55,15 @@ export interface Jugada {
 }
 
 export const VENTANA = 7;
+// V2 (oct 2026): la zona de afuera y el cero se revisan en los últimos 4 giros.
+export const RECENCIA = 4;
 export const CORTE_ERRORES = 4;
 export const PAUSA_MS = 4 * 60 * 1000;
 export const TOPE_REVENTONES_DEFECTO = 4;
+// Estado dinámico (versión D): lecturas seguidas para confirmar un par nuevo
+// y giros seguidos sin lectura clara antes de cerrar el ciclo.
+export const CONFIRMAR_CAMBIO = 2;
+export const MAX_QUIETOS = 7;
 
 const PESOS: readonly number[] = [1, 1, 1, 1, 2, 3, 4].map((w) => (w * VENTANA) / 13);
 
@@ -167,8 +182,8 @@ function leerMercado(v: number[], m: Mercado): LecturaMercado {
   if (gap < 2) motivo = 'sin concentración (reparto parejo)';
   else if (!(parSimple.includes(par[0]) && parSimple.includes(par[1])))
     motivo = 'conteo y recencia no coinciden en el par';
-  else if (v.slice(-3).some((n) => zonaDe(n, m) === excl))
-    motivo = `${nm(excl)} (la de afuera) salió en los últimos 3`;
+  else if (v.slice(-RECENCIA).some((n) => zonaDe(n, m) === excl))
+    motivo = `${nm(excl)} (la de afuera) salió en los últimos ${RECENCIA}`;
   else if (cnt[excl] > 1) motivo = `${nm(excl)} (la de afuera) salió ${cnt[excl]} veces`;
 
   const j = jugadaDe(m, par);
@@ -196,6 +211,9 @@ export function leerVentana(giros: number[]): Lectura {
   if (ceros >= 2) {
     return { completa: true, faltan, ceros, aprobado: false, jugada: null, doc, col, motivo: `${ceros} ceros en la ventana (indeterminado)` };
   }
+  if (v.slice(-RECENCIA).includes(0)) {
+    return { completa: true, faltan, ceros, aprobado: false, jugada: null, doc, col, motivo: `cero en los últimos ${RECENCIA} giros (dispersión reciente)` };
+  }
   let elegido: LecturaMercado | null = null;
   if (doc.ok && col.ok) {
     const ed = doc.conteo[doc.excluida];
@@ -218,8 +236,9 @@ export function leerVentana(giros: number[]): Lectura {
 
 // ── Estado del día ───────────────────────────────────────────────────────
 export type Fase = 'VENTANA' | 'CICLO' | 'PAUSA' | 'CERRADO';
-export type Resultado = 'A' | 'E'; // el cero se registra como 'A' (acierto)
-export type Cierre = 'GANADO' | 'CORTE';
+export type Resultado = 'A' | 'E' | 'N'; // el cero se registra como 'A' (acierto); 'N' = giro sin apuesta (transición)
+export type Cierre = 'GANADO' | 'CORTE' | 'INDETERMINADO';
+export type EstadoMesa = 'CONCENTRACION' | 'TRANSICION';
 
 export interface Config {
   topeReventones: number;
@@ -266,6 +285,14 @@ export interface Ciclo {
   resultados: Resultado[];
   jugadas: string[]; // par jugado en cada giro (para ver los cambios)
   cambios: number;
+  // Estado dinámico (opcionales: un ciclo guardado antes no los trae).
+  apuesta?: boolean; // ¿se apuesta el PRÓXIMO giro? (false = transición)
+  estadoMesa?: EstadoMesa;
+  girosEnEstado?: number; // giros que lleva en el estado actual
+  motivoEstado?: string; // por qué está en ese estado
+  quietos?: number; // giros seguidos sin apostar
+  candidato?: Jugada | null; // par nuevo que la mesa está aprobando
+  confirmaciones?: number; // lecturas seguidas del candidato
 }
 
 export interface Estado {
@@ -379,6 +406,13 @@ export function entrar(e: Estado, voz: Voz, motor: MotorSnap, ahora: number): Es
     resultados: [],
     jugadas: [],
     cambios: 0,
+    apuesta: true,
+    estadoMesa: 'CONCENTRACION',
+    girosEnEstado: 0,
+    motivoEstado: 'la mesa aprueba el par',
+    quietos: 0,
+    candidato: null,
+    confirmaciones: 0,
   };
   return {
     ...e,
@@ -432,21 +466,66 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
 
   // 3) Ciclo en curso.
   if (fase === 'CICLO' && ciclo) {
-    const ok = esAcierto(ciclo.jugada, numero);
-    const racha = ok ? 0 : ciclo.racha + 1;
-    let c: Ciclo = {
-      ...ciclo,
-      aciertos: ciclo.aciertos + (ok ? 1 : 0),
-      errores: ciclo.errores + (ok ? 0 : 1),
-      racha,
-      rachaMax: Math.max(ciclo.rachaMax, racha),
-      numeros: [...ciclo.numeros, numero],
-      resultados: [...ciclo.resultados, ok ? 'A' : 'E'],
-      jugadas: [...ciclo.jugadas, textoJugada(ciclo.jugada)],
-    };
+    let c: Ciclo;
+    if (ciclo.apuesta === false) {
+      // Giro de TRANSICIÓN: no se apostó; no suma acierto ni error.
+      c = {
+        ...ciclo,
+        numeros: [...ciclo.numeros, numero],
+        resultados: [...ciclo.resultados, 'N'],
+        jugadas: [...ciclo.jugadas, '—'],
+      };
+    } else {
+      const ok = esAcierto(ciclo.jugada, numero);
+      const racha = ok ? 0 : ciclo.racha + 1;
+      c = {
+        ...ciclo,
+        aciertos: ciclo.aciertos + (ok ? 1 : 0),
+        errores: ciclo.errores + (ok ? 0 : 1),
+        racha,
+        rachaMax: Math.max(ciclo.rachaMax, racha),
+        numeros: [...ciclo.numeros, numero],
+        resultados: [...ciclo.resultados, ok ? 'A' : 'E'],
+        jugadas: [...ciclo.jugadas, textoJugada(ciclo.jugada)],
+      };
+    }
     let cierre: Cierre | null = null;
     if (c.aciertos >= 2) cierre = 'GANADO';
     else if (c.racha >= CORTE_ERRORES) cierre = 'CORTE';
+    else if (c.voz === 'PROPUESTA') {
+      // ── Estado dinámico: ¿la mesa sostiene lo que juegas? ──
+      const d = lectura.aprobado ? lectura.jugada : null;
+      const antes = c.estadoMesa ?? 'CONCENTRACION';
+      if (d && mismaJugada(d, c.jugada)) {
+        c = { ...c, apuesta: true, estadoMesa: 'CONCENTRACION', motivoEstado: 'la mesa sostiene el par', quietos: 0, candidato: null, confirmaciones: 0 };
+        aviso = antes === 'TRANSICION'
+          ? `Confirmado: vuelve a jugar ${textoJugada(c.jugada)}.`
+          : `Se mantiene: ${textoJugada(c.jugada)}.`;
+      } else {
+        let candidato: Jugada | null = null;
+        let conf = 0;
+        if (d) {
+          conf = mismaJugada(d, c.candidato ?? null) ? (c.confirmaciones ?? 0) + 1 : 1;
+          candidato = d;
+        }
+        if (d && conf >= CONFIRMAR_CAMBIO) {
+          c = {
+            ...c, jugada: d, cambios: c.cambios + 1, apuesta: true, estadoMesa: 'CONCENTRACION',
+            motivoEstado: `${textoJugada(d)} confirmado ${CONFIRMAR_CAMBIO} lecturas seguidas`, quietos: 0, candidato: null, confirmaciones: 0,
+          };
+          aviso = `Confirmado: ahora ${textoJugada(d)}. Vuelve a jugar.`;
+        } else {
+          const quietos = (c.quietos ?? 0) + 1;
+          const motivo = d
+            ? `${textoJugada(d)} aparece, falta confirmarlo (${conf} de ${CONFIRMAR_CAMBIO})`
+            : `la mesa no sostiene ${textoJugada(c.jugada)}: ${lectura.motivo ?? 'sin lectura clara'}`;
+          c = { ...c, apuesta: false, estadoMesa: 'TRANSICION', motivoEstado: motivo, quietos, candidato, confirmaciones: conf };
+          if (quietos >= MAX_QUIETOS) cierre = 'INDETERMINADO';
+          else aviso = `Transición: no apuestes este giro. ${motivo.charAt(0).toUpperCase()}${motivo.slice(1)}.`;
+        }
+      }
+      if (!cierre) c = { ...c, girosEnEstado: c.estadoMesa === antes ? (c.girosEnEstado ?? 0) + 1 : 1 };
+    }
 
     if (cierre) {
       c = { ...c, cierre, fin: ahora };
@@ -463,21 +542,15 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
         pausaHasta = ahora + PAUSA_MS;
         aviso = cierre === 'GANADO'
           ? `Ciclo ganado (${c.errores} error${c.errores === 1 ? '' : 'es'}). Pausa de 4 minutos.`
-          : `Corte en el ${CORTE_ERRORES}º error. Pausa de 4 minutos.`;
+          : cierre === 'INDETERMINADO'
+            ? `Mesa indeterminada ${MAX_QUIETOS} giros seguidos: cierro el ciclo (no es reventón). Pausa de 4 minutos.`
+            : `Corte en el ${CORTE_ERRORES}º error. Pausa de 4 minutos.`;
       }
     } else {
-      // Sigue el ciclo: cada voz actualiza lo que juega con la mesa nueva.
+      // Sigue el ciclo. La Propuesta ya se actualizó arriba (estado dinámico);
+      // las voces del motor siguen su pick giro a giro.
       let nueva: Jugada = c.jugada;
-      if (c.voz === 'PROPUESTA') {
-        if (lectura.aprobado && lectura.jugada && !mismaJugada(lectura.jugada, c.jugada)) {
-          nueva = lectura.jugada;
-          aviso = `Cambió → ahora ${textoJugada(nueva)}.`;
-        } else if (lectura.aprobado) {
-          aviso = `Se mantiene: ${textoJugada(c.jugada)}.`;
-        } else {
-          aviso = `La mesa ya no aprueba: sigues con ${textoJugada(c.jugada)}.`;
-        }
-      } else {
+      if (c.voz !== 'PROPUESTA') {
         const m = c.voz === 'MOTOR_DOC' ? motor.doc : motor.col;
         if (m && !mismaJugada(m, c.jugada)) {
           nueva = m;
@@ -502,7 +575,7 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
   const pendientes: Record<Voz, Jugada | null> = {
     PROPUESTA:
       fase === 'CICLO' && ciclo && ciclo.voz === 'PROPUESTA'
-        ? ciclo.jugada
+        ? ciclo.apuesta === false ? null : ciclo.jugada
         : lecturaFinal && lecturaFinal.aprobado ? lecturaFinal.jugada : null,
     MOTOR_DOC: motor.doc,
     MOTOR_COL: motor.col,
@@ -547,12 +620,14 @@ export function csvCiclos(e: Estado): string {
   const cab = [
     'dia', 'ciclo', 'inicio', 'fin', 'voz', 'mesa', 'crupier', 'llegada', 'ventana', 'propuesta', 'motor_doc', 'motor_col',
     'hud', 'entropia', 'jugada_inicial', 'jugadas', 'numeros', 'resultados', 'errores', 'racha_max', 'cambios', 'cierre',
+    'giros_sin_apuesta',
   ];
   const filas = e.ciclos.map((c) => [
     e.dia, c.id, hora(c.inicio), hora(c.fin), NOMBRE_VOZ[c.voz], c.mesa, c.crupier, c.llegada ?? '',
     c.ventana.join(' '), textoJugada(c.propuesta), textoJugada(c.motorDoc), textoJugada(c.motorCol),
     c.hud ?? '', c.ent ?? '', c.jugadas[0] ?? '', c.jugadas.join(' | '), c.numeros.join(' '), c.resultados.join(''),
     c.errores, c.rachaMax, c.cambios, c.cierre ?? '',
+    c.resultados.filter((r) => r === 'N').length,
   ].map((x) => String(x).replace(/;/g, ',')).join(';'));
   return '﻿' + [cab.join(';'), ...filas].join('\n');
 }
