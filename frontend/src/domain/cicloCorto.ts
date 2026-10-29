@@ -416,11 +416,18 @@ export function terminarPausa(e: Estado): Estado {
   };
 }
 
-/** ¿Se puede entrar ahora con esta voz? */
+/**
+ * ¿Se puede entrar ahora con esta voz?
+ * · Propuesta: solo cuando la ventana aprueba (si no aprueba, no hay propuesta).
+ * · Motor docenas / Motor columnas: con la ventana completa (7 giros), aunque no
+ *   apruebe — la decisión queda en manos del jugador y el registro lo deja ver
+ *   (propuesta '—' en el CSV).
+ */
 export function puedeEntrar(e: Estado, voz: Voz): boolean {
   if (e.fase !== 'VENTANA') return false;
   const l = leerVentana(e.ventana);
-  return l.aprobado && e.pendientes[voz] !== null;
+  if (!l.completa || e.pendientes[voz] === null) return false;
+  return voz === 'PROPUESTA' ? l.aprobado : true;
 }
 
 /** El jugador entra al ciclo con la voz elegida. */
