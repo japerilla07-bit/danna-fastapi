@@ -268,6 +268,7 @@ export interface TrazaGiro {
   motivoLectura: string | null; // la regla que falló en la lectura de la ventana, si no aprobó
   racha: number; // errores seguidos apostados tras este giro
   quietos: number; // giros seguidos sin apostar tras este giro
+  eleccion?: boolean; // este giro se apostó por decisión del jugador estando en transición
 }
 
 export interface Config {
@@ -324,6 +325,8 @@ export interface Ciclo {
   candidato?: Jugada | null; // par nuevo que la mesa está aprobando
   confirmaciones?: number; // lecturas seguidas del candidato
   traza?: TrazaGiro[]; // un registro por giro del ciclo (solo lectura)
+  eleccionJugador?: boolean; // el próximo giro se apuesta por decisión del jugador (en transición)
+  elecciones?: number; // giros jugados por decisión del jugador estando en transición
 }
 
 export interface Estado {
@@ -413,6 +416,33 @@ export function terminarPausa(e: Estado): Estado {
     pausasRotas: (e.pausasRotas ?? 0) + (e.pausaRota ? 0 : 1),
     pausaRota: false,
     aviso: 'Pausa cortada. Ingresa los últimos 7 giros.',
+  };
+}
+
+/**
+ * En TRANSICIÓN el jugador decide apostar igual el próximo giro con la jugada que elija
+ * (su par, el par que aparece, un mercado que cumple o el pick del motor). Solo ese giro:
+ * después el copiloto sigue con su lógica normal. Queda marcado en la traza.
+ */
+export function jugarIgual(e: Estado, jugada: Jugada): Estado {
+  const c = e.ciclo;
+  if (e.fase !== 'CICLO' || !c || c.apuesta !== false) return e;
+  const cambia = !mismaJugada(jugada, c.jugada);
+  const ciclo: Ciclo = {
+    ...c,
+    jugada,
+    cambios: c.cambios + (cambia ? 1 : 0),
+    apuesta: true,
+    eleccionJugador: true,
+    quietos: 0,
+    candidato: null,
+    confirmaciones: 0,
+  };
+  return {
+    ...e,
+    ciclo,
+    pendientes: c.voz === 'PROPUESTA' ? { ...e.pendientes, PROPUESTA: jugada } : e.pendientes,
+    aviso: `Decides jugar igual: ${textoJugada(jugada)} en el próximo giro.`,
   };
 }
 
@@ -615,8 +645,14 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
         motivoLectura: lectura.aprobado ? null : lectura.motivo,
         racha: cc.racha,
         quietos: cc.quietos ?? 0,
+        eleccion: ciclo!.eleccionJugador === true,
       };
-      return { ...cc, traza: [...(cc.traza ?? []), t] };
+      return {
+        ...cc,
+        traza: [...(cc.traza ?? []), t],
+        eleccionJugador: false,
+        elecciones: (cc.elecciones ?? 0) + (ciclo!.eleccionJugador === true ? 1 : 0),
+      };
     };
     if (cierre) {
       const motivoCierre: MotivoGiro = cierre === 'GANADO' ? 'CIERRE_GANADO' : cierre === 'CORTE' ? 'CIERRE_CORTE' : 'INDETERMINADO_7';
@@ -719,6 +755,7 @@ export function csvCiclos(e: Estado): string {
     // Trazabilidad por giro: una lista por columna, alineada con 'numeros' (separador |).
     'traza_estado', 'traza_resultado', 'traza_mercado', 'traza_par_anterior', 'traza_par_candidato',
     'traza_par_siguiente', 'traza_motivo', 'traza_motivo_lectura', 'traza_racha', 'traza_quietos',
+    'traza_eleccion_jugador', 'giros_por_eleccion',
   ];
   const lista = (c: Ciclo, f: (t: TrazaGiro) => string | number | null) => (c.traza ?? []).map((t) => String(f(t) ?? '—')).join(' | ');
   const filas = e.ciclos.map((c) => [
@@ -730,6 +767,7 @@ export function csvCiclos(e: Estado): string {
     lista(c, (t) => t.estado), lista(c, (t) => t.resultado), lista(c, (t) => (t.mercado === 'doc' ? 'Docenas' : t.mercado === 'col' ? 'Columnas' : null)),
     lista(c, (t) => t.parAnterior), lista(c, (t) => t.parCandidato), lista(c, (t) => t.parSiguiente), lista(c, (t) => t.motivo),
     lista(c, (t) => t.motivoLectura), lista(c, (t) => t.racha), lista(c, (t) => t.quietos),
+    lista(c, (t) => (t.eleccion ? 'SI' : 'NO')), c.elecciones ?? 0,
   ].map((x) => String(x).replace(/;/g, ',')).join(';'));
   return '﻿' + [cab.join(';'), ...filas].join('\n');
 }
