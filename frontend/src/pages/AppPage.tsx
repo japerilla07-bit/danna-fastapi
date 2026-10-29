@@ -25,6 +25,7 @@ import { WarTerminal } from '@/components/WarTerminal';
 import { SessionPanel } from '@/components/SessionPanel';
 import { LiveBetStrip } from '@/components/LiveBetStrip';
 import { RouletteBoard } from '@/components/RouletteBoard';
+import { CategoryTable } from '@/components/CategoryTable';
 import { TableEntropy } from '@/components/TableEntropy';
 import { RadarCard } from '@/components/RadarCard';
 import { NeuralLayer } from '@/neural/NeuralLayer';
@@ -343,9 +344,9 @@ export function AppPage() {
             />
           </div>
 
-          {/* CENTRO: Live Bet + Paño + Wheel — Tabla Categorías y GOD BET se
-              movieron adentro del Quantum Pilot (cockpit único), ya no van
-              acá para no duplicarlas. */}
+          {/* CENTRO: Live Bet + Paño + Tabla de categorías. La tabla había
+              pasado adentro del Quantum Pilot; al salir el Quantum (oct 2026)
+              vuelve aquí, debajo del paño. */}
           <div className="col-center">
             <LiveBetStrip
               pendingBet={pendingBet}
@@ -357,6 +358,11 @@ export function AppPage() {
               payload={data.payload}
               wheelInfo={(data as any).wheel_info ?? null}
               onPick={handlePick}
+            />
+            <CategoryTable
+              payload={data.payload}
+              counters={(data.counters ?? {}) as any}
+              errorHist={(data as any).error_hist ?? {}}
             />
           </div>
 
