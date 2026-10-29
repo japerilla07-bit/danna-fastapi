@@ -34,6 +34,7 @@ import {
   puedeEntrar,
   registrarGiro,
   reventonesHoy,
+  terminarPausa,
   textoJugada,
   tick,
 } from '@/domain/cicloCorto';
@@ -703,6 +704,12 @@ export function CicloPanel({ data }: { data: any }) {
                 onClick={() => hablar(`${c.apuesta === false ? 'Transición. No apuestes este giro' : `Juegas ${jugadaHablada(c.jugada)}`}. Aciertos ${c.aciertos} de 2. Errores seguidos ${c.racha} de ${CORTE_ERRORES}.`)}>
                 <span className="cp-reply-t">Leer el estado en voz alta</span>
                 <span className="cp-reply-s">aciertos {c.aciertos} de 2 · errores {c.racha} de {CORTE_ERRORES}</span>
+              </button>
+            )}
+            {estado.fase === 'PAUSA' && (
+              <button type="button" className="cp-reply cp-prim" onClick={() => setEstado((e) => terminarPausa(e))}>
+                <span className="cp-reply-t">Iniciar ciclo nuevo ya</span>
+                <span className="cp-reply-s">corta la pausa · queda como pausa no cumplida</span>
               </button>
             )}
             {estado.fase === 'PAUSA' && (
