@@ -13,14 +13,16 @@
 //      docenas o Motor columnas) y ENTRA. Un solo mercado por giro.
 //   3. Cada giro dentro del ciclo se vuelve a leer la ventana. Con la voz
 //      Propuesta (ESTADO DINÁMICO, versión D, oct 2026):
-//        · si la lectura sigue aprobando el par que juegas → CONCENTRACIÓN: juegas;
+//        · si aciertas (el cero también) → sigues con tu par, nunca transición;
+//        · si el mercado que juegas sigue aprobando tu par (aunque el otro
+//          mercado gane el desempate) → CONCENTRACIÓN: juegas;
 //        · si no lo sostiene (siempre pasa tras un error) → TRANSICIÓN: ese giro
 //          NO se apuesta (el ciclo sigue abierto con sus aciertos y errores);
 //        · un par nuevo solo se juega cuando la mesa lo aprueba 2 lecturas
 //          seguidas (CONFIRMADO);
 //        · 7 giros seguidos sin lectura clara → INDETERMINADO: cierra el ciclo
 //          (no es reventón) y va a pausa.
-//      Medido sobre el corpus: rachas de 4 de 28 a 10, de 3 de 67 a 40.
+//      Medido sobre el corpus: rachas de 4 de 28 a 12, de 3 de 67 a 38.
 //      Las voces del motor siguen igual: juegan todos los giros.
 //   4. El cero cuenta como ACIERTO. El ciclo cierra en el 2º acierto, o en
 //      el 4º error seguido (CORTE = reventón).
@@ -370,6 +372,21 @@ export function tick(e: Estado, ahora: number): Estado {
   return e;
 }
 
+/** El jugador corta la pausa y empieza ya a leer 7 giros nuevos (la pausa queda como no cumplida). */
+export function terminarPausa(e: Estado): Estado {
+  if (e.fase !== 'PAUSA') return e;
+  return {
+    ...e,
+    fase: 'VENTANA',
+    ventana: [],
+    pausaHasta: null,
+    pendientes: { ...e.pendientes, PROPUESTA: null },
+    pausasRotas: (e.pausasRotas ?? 0) + (e.pausaRota ? 0 : 1),
+    pausaRota: false,
+    aviso: 'Pausa cortada. Ingresa los últimos 7 giros.',
+  };
+}
+
 /** ¿Se puede entrar ahora con esta voz? */
 export function puedeEntrar(e: Estado, voz: Voz): boolean {
   if (e.fase !== 'VENTANA') return false;
@@ -496,7 +513,18 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
       // ── Estado dinámico: ¿la mesa sostiene lo que juegas? ──
       const d = lectura.aprobado ? lectura.jugada : null;
       const antes = c.estadoMesa ?? 'CONCENTRACION';
-      if (d && mismaJugada(d, c.jugada)) {
+      const acerto = ciclo.apuesta !== false && c.resultados[c.resultados.length - 1] === 'A';
+      // Sostén por MERCADO: el mercado que juegas sigue aprobando tu mismo par (aunque el otro mercado gane el desempate).
+      const lm = c.jugada.mercado === 'doc' ? lectura.doc : lectura.col;
+      const ventanaLimpia = lectura.ceros < 2 && !ventana.slice(-RECENCIA).includes(0);
+      const sostiene =
+        (d !== null && mismaJugada(d, c.jugada)) ||
+        (lm !== null && lm.ok && ventanaLimpia && lm.zonas[0] === c.jugada.zonas[0] && lm.zonas[1] === c.jugada.zonas[1]);
+      if (acerto) {
+        // Acierto (el cero también): sigues con tu par, nunca transición.
+        c = { ...c, apuesta: true, estadoMesa: 'CONCENTRACION', motivoEstado: 'acertaste: sigues con tu par', quietos: 0, candidato: null, confirmaciones: 0 };
+        aviso = `Acierto: sigues con ${textoJugada(c.jugada)}.`;
+      } else if (sostiene) {
         c = { ...c, apuesta: true, estadoMesa: 'CONCENTRACION', motivoEstado: 'la mesa sostiene el par', quietos: 0, candidato: null, confirmaciones: 0 };
         aviso = antes === 'TRANSICION'
           ? `Confirmado: vuelve a jugar ${textoJugada(c.jugada)}.`
