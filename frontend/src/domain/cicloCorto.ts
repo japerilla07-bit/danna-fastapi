@@ -242,6 +242,34 @@ export type Resultado = 'A' | 'E' | 'N'; // el cero se registra como 'A' (aciert
 export type Cierre = 'GANADO' | 'CORTE' | 'INDETERMINADO';
 export type EstadoMesa = 'CONCENTRACION' | 'TRANSICION';
 
+// ── Trazabilidad por giro (solo registro: no interviene en ninguna decisión) ──
+export type MotivoGiro =
+  | 'ACIERTO_SIGUE' // acertó (o cero): sigue con su par
+  | 'LECTURA_SOSTIENE' // la lectura completa aprueba el mismo par
+  | 'MERCADO_SOSTIENE' // su mercado aprueba el mismo par aunque el otro gane el desempate
+  | 'VUELVE_MISMO_PAR' // salía de transición y su mismo par volvió a sostenerse
+  | 'CONFIRMADO_NUEVO' // par nuevo aprobado 2 lecturas seguidas: cambia y apuesta
+  | 'CANDIDATO_1_DE_2' // aparece otro par, falta confirmarlo: transición
+  | 'SIN_LECTURA' // ningún mercado aprueba: transición
+  | 'INDETERMINADO_7' // 7 giros seguidos sin apostar: cierra el ciclo
+  | 'CIERRE_GANADO'
+  | 'CIERRE_CORTE'
+  | 'MOTOR_SIGUE' // voz del motor: mantiene su pick
+  | 'MOTOR_CAMBIA'; // voz del motor: cambia de pick
+export interface TrazaGiro {
+  numero: number;
+  estado: 'APUESTA' | 'TRANSICION'; // este giro se apostó o no
+  resultado: 'ACIERTO' | 'CERO' | 'ERROR' | 'SIN_APUESTA';
+  mercado: Mercado | null; // mercado apostado en este giro (null si no se apostó)
+  parAnterior: string; // par vigente antes de la decisión de este giro
+  parCandidato: string | null; // par en evaluación tras este giro, si existe
+  parSiguiente: string; // lo que se apuesta en el próximo giro ('—' = no se apuesta o el ciclo cerró)
+  motivo: MotivoGiro; // condición del código que se activó
+  motivoLectura: string | null; // la regla que falló en la lectura de la ventana, si no aprobó
+  racha: number; // errores seguidos apostados tras este giro
+  quietos: number; // giros seguidos sin apostar tras este giro
+}
+
 export interface Config {
   topeReventones: number;
   mesa: string;
@@ -295,6 +323,7 @@ export interface Ciclo {
   quietos?: number; // giros seguidos sin apostar
   candidato?: Jugada | null; // par nuevo que la mesa está aprobando
   confirmaciones?: number; // lecturas seguidas del candidato
+  traza?: TrazaGiro[]; // un registro por giro del ciclo (solo lectura)
 }
 
 export interface Estado {
@@ -483,6 +512,9 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
 
   // 3) Ciclo en curso.
   if (fase === 'CICLO' && ciclo) {
+    const jugadaAntes = ciclo.jugada; // trazabilidad
+    let motivoGiro: MotivoGiro = 'MOTOR_SIGUE'; // trazabilidad
+    let candidatoGiro: Jugada | null = null; // trazabilidad
     let c: Ciclo;
     if (ciclo.apuesta === false) {
       // Giro de TRANSICIÓN: no se apostó; no suma acierto ni error.
@@ -522,9 +554,11 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
         (lm !== null && lm.ok && ventanaLimpia && lm.zonas[0] === c.jugada.zonas[0] && lm.zonas[1] === c.jugada.zonas[1]);
       if (acerto) {
         // Acierto (el cero también): sigues con tu par, nunca transición.
+        motivoGiro = 'ACIERTO_SIGUE';
         c = { ...c, apuesta: true, estadoMesa: 'CONCENTRACION', motivoEstado: 'acertaste: sigues con tu par', quietos: 0, candidato: null, confirmaciones: 0 };
         aviso = `Acierto: sigues con ${textoJugada(c.jugada)}.`;
       } else if (sostiene) {
+        motivoGiro = antes === 'TRANSICION' ? 'VUELVE_MISMO_PAR' : d !== null && mismaJugada(d, c.jugada) ? 'LECTURA_SOSTIENE' : 'MERCADO_SOSTIENE';
         c = { ...c, apuesta: true, estadoMesa: 'CONCENTRACION', motivoEstado: 'la mesa sostiene el par', quietos: 0, candidato: null, confirmaciones: 0 };
         aviso = antes === 'TRANSICION'
           ? `Confirmado: vuelve a jugar ${textoJugada(c.jugada)}.`
@@ -537,6 +571,7 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
           candidato = d;
         }
         if (d && conf >= CONFIRMAR_CAMBIO) {
+          motivoGiro = 'CONFIRMADO_NUEVO';
           c = {
             ...c, jugada: d, cambios: c.cambios + 1, apuesta: true, estadoMesa: 'CONCENTRACION',
             motivoEstado: `${textoJugada(d)} confirmado ${CONFIRMAR_CAMBIO} lecturas seguidas`, quietos: 0, candidato: null, confirmaciones: 0,
@@ -548,6 +583,8 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
             ? `${textoJugada(d)} aparece, falta confirmarlo (${conf} de ${CONFIRMAR_CAMBIO})`
             : `la mesa no sostiene ${textoJugada(c.jugada)}: ${lectura.motivo ?? 'sin lectura clara'}`;
           c = { ...c, apuesta: false, estadoMesa: 'TRANSICION', motivoEstado: motivo, quietos, candidato, confirmaciones: conf };
+          motivoGiro = d ? 'CANDIDATO_1_DE_2' : 'SIN_LECTURA';
+          candidatoGiro = candidato;
           if (quietos >= MAX_QUIETOS) cierre = 'INDETERMINADO';
           else aviso = `Transición: no apuestes este giro. ${motivo.charAt(0).toUpperCase()}${motivo.slice(1)}.`;
         }
@@ -555,7 +592,28 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
       if (!cierre) c = { ...c, girosEnEstado: c.estadoMesa === antes ? (c.girosEnEstado ?? 0) + 1 : 1 };
     }
 
+    // Trazabilidad: registra lo que el código ya decidió (no cambia nada del ciclo).
+    const registrar = (cc: Ciclo, motivo: MotivoGiro, siguiente: Jugada | null): Ciclo => {
+      const apostado = ciclo!.apuesta !== false;
+      const res = cc.resultados[cc.resultados.length - 1];
+      const t: TrazaGiro = {
+        numero,
+        estado: apostado ? 'APUESTA' : 'TRANSICION',
+        resultado: !apostado ? 'SIN_APUESTA' : res === 'A' ? (numero === 0 ? 'CERO' : 'ACIERTO') : 'ERROR',
+        mercado: apostado ? jugadaAntes.mercado : null,
+        parAnterior: textoJugada(jugadaAntes),
+        parCandidato: candidatoGiro ? textoJugada(candidatoGiro) : null,
+        parSiguiente: siguiente ? textoJugada(siguiente) : '—',
+        motivo,
+        motivoLectura: lectura.aprobado ? null : lectura.motivo,
+        racha: cc.racha,
+        quietos: cc.quietos ?? 0,
+      };
+      return { ...cc, traza: [...(cc.traza ?? []), t] };
+    };
     if (cierre) {
+      const motivoCierre: MotivoGiro = cierre === 'GANADO' ? 'CIERRE_GANADO' : cierre === 'CORTE' ? 'CIERRE_CORTE' : 'INDETERMINADO_7';
+      c = registrar(c, motivoCierre, null);
       c = { ...c, cierre, fin: ahora };
       ciclos = [...ciclos, c];
       ciclo = null;
@@ -587,7 +645,9 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
           aviso = `Se mantiene: ${textoJugada(c.jugada)}.`;
         }
       }
+      if (c.voz !== 'PROPUESTA') motivoGiro = mismaJugada(nueva, c.jugada) ? 'MOTOR_SIGUE' : 'MOTOR_CAMBIA';
       if (!mismaJugada(nueva, c.jugada)) c = { ...c, jugada: nueva, cambios: c.cambios + 1 };
+      c = registrar(c, motivoGiro, c.voz === 'PROPUESTA' && c.apuesta === false ? null : c.jugada);
       ciclo = c;
     }
   } else if (fase === 'VENTANA') {
@@ -649,13 +709,20 @@ export function csvCiclos(e: Estado): string {
     'dia', 'ciclo', 'inicio', 'fin', 'voz', 'mesa', 'crupier', 'llegada', 'ventana', 'propuesta', 'motor_doc', 'motor_col',
     'hud', 'entropia', 'jugada_inicial', 'jugadas', 'numeros', 'resultados', 'errores', 'racha_max', 'cambios', 'cierre',
     'giros_sin_apuesta',
+    // Trazabilidad por giro: una lista por columna, alineada con 'numeros' (separador |).
+    'traza_estado', 'traza_resultado', 'traza_mercado', 'traza_par_anterior', 'traza_par_candidato',
+    'traza_par_siguiente', 'traza_motivo', 'traza_motivo_lectura', 'traza_racha', 'traza_quietos',
   ];
+  const lista = (c: Ciclo, f: (t: TrazaGiro) => string | number | null) => (c.traza ?? []).map((t) => String(f(t) ?? '—')).join(' | ');
   const filas = e.ciclos.map((c) => [
     e.dia, c.id, hora(c.inicio), hora(c.fin), NOMBRE_VOZ[c.voz], c.mesa, c.crupier, c.llegada ?? '',
     c.ventana.join(' '), textoJugada(c.propuesta), textoJugada(c.motorDoc), textoJugada(c.motorCol),
     c.hud ?? '', c.ent ?? '', c.jugadas[0] ?? '', c.jugadas.join(' | '), c.numeros.join(' '), c.resultados.join(''),
     c.errores, c.rachaMax, c.cambios, c.cierre ?? '',
     c.resultados.filter((r) => r === 'N').length,
+    lista(c, (t) => t.estado), lista(c, (t) => t.resultado), lista(c, (t) => (t.mercado === 'doc' ? 'Docenas' : t.mercado === 'col' ? 'Columnas' : null)),
+    lista(c, (t) => t.parAnterior), lista(c, (t) => t.parCandidato), lista(c, (t) => t.parSiguiente), lista(c, (t) => t.motivo),
+    lista(c, (t) => t.motivoLectura), lista(c, (t) => t.racha), lista(c, (t) => t.quietos),
   ].map((x) => String(x).replace(/;/g, ',')).join(';'));
   return '﻿' + [cab.join(';'), ...filas].join('\n');
 }
