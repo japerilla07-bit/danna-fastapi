@@ -198,6 +198,7 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
         out.push(`Docenas: ${l.doc?.motivo ?? 'cumple'}. Columnas: ${l.col?.motivo ?? 'cumple'}.`);
         out.push('Mi lectura: aquí no hay dominancia. Mete el siguiente giro y vuelvo a mirar.');
       }
+      if (!l.aprobado) out.push('Si aun así quieres entrar, los botones del motor siguen abiertos: la decisión es tuya.');
     }
   } else if (e.fase === 'CICLO' && e.ciclo) {
     const c = e.ciclo;
@@ -650,8 +651,8 @@ export function CicloPanel({ data }: { data: any }) {
             </div>
             {lectura.completa && lectura.doc && lectura.col && estado.fase !== 'PAUSA' && estado.fase !== 'CERRADO' && (
               <div className="cp-mercados">
-                <Mercado l={lectura.doc} />
-                <Mercado l={lectura.col} />
+                <Mercado l={lectura.doc} frenoCero={lectura.ceros >= 2 || (lectura.motivo ?? '').startsWith('cero en')} />
+                <Mercado l={lectura.col} frenoCero={lectura.ceros >= 2 || (lectura.motivo ?? '').startsWith('cero en')} />
               </div>
             )}
           </div>
@@ -672,25 +673,27 @@ export function CicloPanel({ data }: { data: any }) {
             ))}
           </div>
           <div className="cp-replies">
-            {estado.fase === 'VENTANA' && lectura.aprobado && !pasado && (
+            {estado.fase === 'VENTANA' && lectura.completa && !pasado && (
               <>
-                {(['PROPUESTA', 'MOTOR_DOC', 'MOTOR_COL'] as Voz[]).map((v) => {
+                {((lectura.aprobado ? ['PROPUESTA', 'MOTOR_DOC', 'MOTOR_COL'] : ['MOTOR_DOC', 'MOTOR_COL']) as Voz[]).map((v) => {
                   const p = estado.pendientes[v];
                   const m = estado.marcadores[v];
                   const prim = v === 'PROPUESTA';
                   return (
                     <button key={v} type="button" className={`cp-reply ${prim ? 'cp-prim' : ''}`} disabled={!puedeEntrar(estado, v)}
                       onClick={() => setEstado((e) => entrar(e, v, motorRef.current, Date.now()))}>
-                      <span className="cp-reply-t">{prim ? 'Entro con mi propuesta' : 'Entro con el motor'}</span>
+                      <span className="cp-reply-t">{prim ? 'Entro con mi propuesta' : lectura.aprobado ? 'Entro con el motor' : 'Entro con el motor (sin aprobación)'}</span>
                       <span className="cp-reply-p">{textoJugada(p)}</span>
                       <span className="cp-reply-s">{nombreVoz(v)} · ✓{m.aciertos} ✗{m.errores} · peor {m.peor}</span>
                     </button>
                   );
                 })}
-                <button type="button" className="cp-reply cp-mute" onClick={() => setPasadoEn(estado.giros)}>
-                  <span className="cp-reply-t">Paso esta</span>
-                  <span className="cp-reply-s">no entro, sigo leyendo</span>
-                </button>
+                {lectura.aprobado && (
+                  <button type="button" className="cp-reply cp-mute" onClick={() => setPasadoEn(estado.giros)}>
+                    <span className="cp-reply-t">Paso esta</span>
+                    <span className="cp-reply-s">no entro, sigo leyendo</span>
+                  </button>
+                )}
               </>
             )}
             {estado.fase === 'VENTANA' && lectura.completa && !lectura.aprobado && (
@@ -746,10 +749,11 @@ export function CicloPanel({ data }: { data: any }) {
   );
 }
 
-function Mercado({ l }: { l: LecturaMercado }) {
+function Mercado({ l, frenoCero = false }: { l: LecturaMercado; frenoCero?: boolean }) {
   const pref = l.mercado === 'doc' ? 'D' : 'C';
+  const frenado = l.ok && frenoCero;
   return (
-    <div className="cp-mkt" data-ok={l.ok ? '1' : '0'}>
+    <div className="cp-mkt" data-ok={frenado ? 'freno' : l.ok ? '1' : '0'}>
       <div className="cp-barras">
         {l.conteo.map((n, z) => (
           <div key={z} className="cp-barra" data-on={l.ok && l.zonas.includes(z as 0 | 1 | 2) ? '1' : '0'} style={{ height: Math.max(4, Math.round((n / 7) * 38)) }} />
@@ -757,7 +761,7 @@ function Mercado({ l }: { l: LecturaMercado }) {
       </div>
       <div className="cp-mkt-t">
         <span className="cp-mkt-n">{l.mercado === 'doc' ? 'Docenas' : 'Columnas'} <span className="cp-mono">{l.conteo.map((n, z) => `${nombreZona(l.mercado, z as 0 | 1 | 2)}:${n}`).join(' ')}</span></span>
-        <span className="cp-mkt-r">{l.ok ? `Cumple las 5 reglas · ${pref}${l.zonas[0] + 1} + ${pref}${l.zonas[1] + 1}` : l.motivo}</span>
+        <span className="cp-mkt-r">{frenado ? `Cumple sus 4 reglas · ${pref}${l.zonas[0] + 1} + ${pref}${l.zonas[1] + 1} · frenado por el cero` : l.ok ? `Cumple las 5 reglas · ${pref}${l.zonas[0] + 1} + ${pref}${l.zonas[1] + 1}` : l.motivo}</span>
       </div>
     </div>
   );
@@ -868,6 +872,9 @@ const CSS = `
 .cp-mkt-n{font-size:13px;font-weight:700}
 .cp-mkt-r{font-size:12px;font-weight:600;color:#475069}
 .cp-mkt[data-ok="1"] .cp-mkt-r{color:#00875a}
+.cp-mkt[data-ok="freno"]{border:1.5px solid #d4a017;background:#fff8db;box-shadow:0 0 14px rgba(212,160,23,.22)}
+.cp-mkt[data-ok="freno"] .cp-mkt-r{color:#8a6500}
+.cp-mkt[data-ok="freno"] .cp-barra[data-on="1"]{background:linear-gradient(180deg,#f5d76e,#b8860b);box-shadow:0 0 10px rgba(212,160,23,.55)}
 .cp-mono{font-family:'JetBrains Mono',monospace;font-weight:500;color:#475069}
 .cp-chat{min-width:0;padding:16px;border-radius:22px;background:#f6f8fc;border:1px solid #e3e8f2;display:flex;flex-direction:column;gap:12px}
 .cp-msgs{flex-grow:1;display:flex;flex-direction:column;gap:10px;min-height:120px}
