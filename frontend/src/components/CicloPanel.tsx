@@ -77,8 +77,8 @@ interface PrefsUI {
 function cargarUI(): PrefsUI {
   const p = leerJSON<Partial<PrefsUI>>(CLAVE_UI) ?? {};
   return {
-    x: typeof p.x === 'number' ? p.x : 16,
-    y: typeof p.y === 'number' ? p.y : 70,
+    x: typeof p.x === 'number' ? p.x : 76,
+    y: typeof p.y === 'number' ? p.y : 10,
     voz: p.voz !== false,
     avisarPausa: p.avisarPausa !== false,
     min: p.min === true,
@@ -178,7 +178,7 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
         const lm = l.jugada.mercado === 'doc' ? l.doc! : l.col!;
         const pref = l.jugada.mercado === 'doc' ? 'D' : 'C';
         out.push(`${NOMBRE_MKT[l.jugada.mercado]} cumple las 5 reglas: ${pref}${lm.zonas[0] + 1} y ${pref}${lm.zonas[1] + 1} se llevan la ventana y ${pref}${lm.excluida + 1} no aparece en los últimos 3.`);
-        out.push(`Te propongo ${textoJugada(l.jugada)}. El motor ve ${textoJugada(e.pendientes.MOTOR_DOC)} en docenas y ${textoJugada(e.pendientes.MOTOR_COL)} en columnas: elige tú con qué entras.`);
+        out.push(`Te propongo ${textoJugada(l.jugada)}. El motor ve ${textoJugada(e.pendientes.MOTOR_DOC)} en docenas y ${textoJugada(e.pendientes.MOTOR_COL)} en columnas. Elige con qué entras, o toca «Paso esta». Mientras no toques nada, los giros no cuentan para ningún ciclo.`);
       } else if (l.ceros >= 2) {
         out.push(`Hay ${l.ceros} ceros en la ventana: no la doy por buena.`);
         out.push('Mete el siguiente giro y vuelvo a mirar.');
@@ -222,6 +222,8 @@ export function CicloPanel({ data }: { data: any }) {
   const motorRef = useRef<MotorSnap>({ doc: null, col: null, hud: null, ent: null });
   const conteoRef = useRef<number | null>(null);
   const habladoRef = useRef<string>('');
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [escala, setEscala] = useState(1);
 
   useEffect(() => guardarJSON(CLAVE, estado), [estado]);
   useEffect(() => guardarJSON(CLAVE_UI, ui), [ui]);
@@ -252,6 +254,7 @@ export function CicloPanel({ data }: { data: any }) {
     const nuevos = spins.slice(-(count - prev)).filter((n) => Number.isInteger(n) && n >= 0 && n <= 36);
     setEstado((e) => {
       let r = e;
+      // La entrada es SIEMPRE manual: el ciclo arranca solo cuando tocas una voz.
       for (const n of nuevos) r = registrarGiro(r, n, m, Date.now());
       return r;
     });
@@ -271,11 +274,21 @@ export function CicloPanel({ data }: { data: any }) {
     if (estado.fase === 'VENTANA' && lectura.aprobado && lectura.jugada) {
       clave = `ap-${estado.giros}`;
       texto = `Aprobado. Propuesta: ${jugadaHablada(lectura.jugada)}.`;
+    } else if (estado.fase === 'VENTANA' && lectura.completa) {
+      clave = `na-${estado.giros}`;
+      texto = 'Sin señal. No entres.';
+    } else if (estado.fase === 'CICLO' && c && c.numeros.length === 0) {
+      clave = `in-${c.id}`;
+      texto = `Dentro con ${jugadaHablada(c.jugada)}.`;
     } else if (estado.fase === 'CICLO' && c && c.numeros.length > 0) {
       clave = `ci-${c.id}-${c.numeros.length}`;
+      const ok = c.resultados[c.resultados.length - 1] === 'A';
+      texto = ok
+        ? (c.aciertos === 1 ? 'Acierto. Falta uno.' : 'Acierto.')
+        : c.racha === CORTE_ERRORES - 1 ? 'Error. Tres seguidos. Uno más y corto.'
+          : c.racha === 1 ? 'Error.' : `Error. ${c.racha} seguidos.`;
       const cambio = c.jugadas.length > 0 && c.jugadas[c.jugadas.length - 1] !== textoJugada(c.jugada);
-      if (cambio) texto = `Cambio. Ahora ${jugadaHablada(c.jugada)}.`;
-      else if (c.racha === CORTE_ERRORES - 1) texto = 'Tres errores seguidos. Uno más y corto.';
+      if (cambio) texto += ` Cambio: ahora ${jugadaHablada(c.jugada)}.`;
     } else if (estado.fase === 'PAUSA' && ultimo) {
       clave = `pa-${ultimo.id}`;
       texto = ultimo.cierre === 'GANADO' ? 'Ciclo ganado. Pausa de cuatro minutos.' : 'Corte en el cuarto error. Pausa de cuatro minutos.';
@@ -329,6 +342,32 @@ export function CicloPanel({ data }: { data: any }) {
     };
   }, [arrastrando]);
   const noArrastrar = (e: RMouseEvent | RTouchEvent) => e.stopPropagation();
+
+  // ── Tamaño: el panel se achica solo para caber entero en la pantalla, sin scroll ──
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el) return;
+    const ajustar = () => {
+      const h = el.offsetHeight;
+      const w = el.offsetWidth;
+      if (!h || !w) return;
+      const s = Math.max(0.5, Math.min(1, (window.innerHeight - 12) / h, (window.innerWidth - 12) / w));
+      setEscala(Math.round(s * 1000) / 1000);
+      setUi((u) => {
+        const y = Math.max(0, Math.min(u.y, window.innerHeight - h * s - 6));
+        const x = Math.max(-w * s + 120, Math.min(u.x, window.innerWidth - 120));
+        return y === u.y && x === u.x ? u : { ...u, x, y };
+      });
+    };
+    ajustar();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(ajustar) : null;
+    ro?.observe(el);
+    window.addEventListener('resize', ajustar);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', ajustar);
+    };
+  }, [ui.min]);
 
   function descargar() {
     const blob = new Blob([csvCiclos(estado)], { type: 'text/csv;charset=utf-8' });
@@ -400,7 +439,7 @@ export function CicloPanel({ data }: { data: any }) {
   }
 
   return (
-    <div className="cp-shell" style={{ left: ui.x, top: ui.y, boxShadow: `0 30px 70px rgba(15,20,38,0.22), 0 4px 14px rgba(15,20,38,0.08), 0 0 0 4px ${tema.halo}` }}>
+    <div ref={shellRef} className="cp-shell" style={{ left: ui.x, top: ui.y, transform: `scale(${escala})`, transformOrigin: 'top left', boxShadow: `0 30px 70px rgba(15,20,38,0.22), 0 4px 14px rgba(15,20,38,0.08), 0 0 0 4px ${tema.halo}` }}>
       <style>{CSS}</style>
 
       {/* Cabecera (arrastrable) */}
@@ -695,7 +734,7 @@ const CSS = `
 .cp-rojo{background:linear-gradient(135deg,#5c0012 0%,#b3122e 22%,#ff7088 42%,#c8102e 60%,#6b0016 80%,#e0314f 100%)}
 .cp-oro-txt{background:linear-gradient(180deg,#f2d36b 0%,#c99a06 35%,#7a5800 62%,#d4a017 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 10px rgba(184,134,11,.35));text-shadow:none!important}
 .cp-rojo-txt{background:linear-gradient(180deg,#ff7088 0%,#c8102e 38%,#6b0016 66%,#e0314f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 10px rgba(200,16,46,.35))}
-.cp-shell{position:fixed;z-index:60;width:1040px;max-width:96vw;max-height:94vh;overflow:auto;box-sizing:border-box;padding:16px;border-radius:26px;background:#fff;border:1px solid #e3e8f2;border-top:6px solid #c99a06;display:flex;flex-direction:column;gap:14px;font-family:'Sora','Segoe UI',sans-serif;color:#0f1426;user-select:none}
+.cp-shell{position:fixed;z-index:60;width:1040px;box-sizing:border-box;padding:14px;border-radius:26px;background:#fff;border:1px solid #e3e8f2;border-top:6px solid #c99a06;display:flex;flex-direction:column;gap:12px;font-family:'Sora','Segoe UI',sans-serif;color:#0f1426;user-select:none}
 .cp-shell button{font:inherit}
 .cp-shell button:focus-visible,.cp-shell input:focus-visible,.cp-min:focus-visible{outline:2px solid #1d4ed8;outline-offset:3px}
 .cp-min{position:fixed;z-index:60;min-width:54px;height:54px;padding:0 12px;border-radius:999px;border:1px solid #8a6500;color:#1f1500;font:800 15px 'JetBrains Mono',monospace;cursor:grab;box-shadow:0 10px 26px rgba(15,20,38,.3),inset 0 1px 0 rgba(255,255,255,.7)}
@@ -728,18 +767,18 @@ const CSS = `
 .cp-body{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:16px}
 .cp-col{display:flex;flex-direction:column;gap:14px;min-width:0}
 .cp-persp{perspective:1000px}
-.cp-holo{position:relative;isolation:isolate;min-height:318px;box-sizing:border-box;padding:20px 22px;border-radius:22px;background:linear-gradient(150deg,#fff,#f4f7fd);transition:transform .18s ease-out;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.cp-holo{position:relative;isolation:isolate;min-height:272px;box-sizing:border-box;padding:20px 22px;border-radius:22px;background:linear-gradient(150deg,#fff,#f4f7fd);transition:transform .18s ease-out;display:flex;flex-direction:column;gap:10px;overflow:hidden}
 .cp-holo::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:2px;background:conic-gradient(from var(--cp-ang),#fff1a8,#d4a017,#7a5800,#e0314f,#6b0016,#ff7088,#d4a017,#fff1a8);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:cp-girar 7s linear infinite;z-index:-1}
 .cp-chip{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.14em;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.6)}
 .cp-chip[data-claro="1"]{color:#2b1d00}
 .cp-sub{font-size:13px;color:#475069}
 .cp-hero{display:flex;flex-direction:column;gap:4px}
 .cp-lab{font-size:13px;color:#5e6886}
-.cp-big{font-size:76px;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+.cp-big{font-size:64px;font-weight:800;line-height:1.05;letter-spacing:-.01em}
 .cp-det{font-size:15px;color:#475069}
-.cp-cerrado{font-size:64px;font-weight:800;line-height:1.05}
+.cp-cerrado{font-size:54px;font-weight:800;line-height:1.05}
 .cp-pausa{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
-.cp-ring{position:relative;width:170px;height:170px;flex-shrink:0}
+.cp-ring{position:relative;width:170px;height:170px;flex-shrink:0;margin:-8px 0}
 .cp-ring>span{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .cp-ring b{font:700 40px 'JetBrains Mono',monospace;color:#1e3a8a}
 .cp-ring small{font-size:12px;color:#5e6886}
@@ -765,8 +804,8 @@ const CSS = `
 .cp-card-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;font-weight:600;color:#1e2640}
 .cp-nota{font-size:12px;font-weight:400;color:#5e6886}
 .cp-ventana{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
-.cp-ficha{height:64px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;animation:cp-flotar 4.5s ease-in-out infinite;box-shadow:0 10px 18px rgba(15,20,38,.18)}
-.cp-ficha b{font-size:25px;font-weight:800;line-height:1}
+.cp-ficha{height:56px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;animation:cp-flotar 4.5s ease-in-out infinite;box-shadow:0 10px 18px rgba(15,20,38,.18)}
+.cp-ficha b{font-size:22px;font-weight:800;line-height:1}
 .cp-ficha small{font:11px 'JetBrains Mono',monospace;color:rgba(255,255,255,.85)}
 .cp-ficha[data-color="r"]{background:linear-gradient(160deg,#d1213b,#b81a32)}
 .cp-ficha[data-color="n"]{background:linear-gradient(160deg,#16181f,#2a2d38)}
@@ -809,7 +848,7 @@ const CSS = `
 .cp-dia-i[data-tipo="corte"]{color:#fff;border:1px solid #5c0012;background:linear-gradient(135deg,#5c0012,#b3122e 30%,#e0314f 55%,#8b0a1f)}
 .cp-dia-i[data-tipo="corte"] .cp-mono{color:#fff}
 .cp-cont{font-size:13px}
-@media (max-width:980px){.cp-body{grid-template-columns:1fr}.cp-ajustes{grid-template-columns:1fr}.cp-ajustes .cp-check{grid-column:auto}.cp-big{font-size:56px}.cp-ventana{gap:6px}.cp-ficha b{font-size:20px}}
+
 `;
 
 export default CicloPanel;
