@@ -7,6 +7,8 @@
 // · Toda la lógica vive en domain/cicloCorto.ts (pura y validada contra el
 //   corpus): ventana de 7, Regla B, 3 voces, cierre en el 2º acierto, corte en
 //   el 4º error seguido, pausa de 4 minutos, tope de reventones del día.
+//   Estado dinámico (versión D): en transición avisa «No apuestes» y el giro
+//   queda marcado «·» (sin apuesta); 7 giros sin lectura clara cierran el ciclo.
 // · Del motor SOLO lee (picks de docenas/columnas, HUD y entropía para el
 //   registro). No modifica nada del motor ni del store de telemetría.
 // · Flotante y arrastrable como el Quantum; se puede minimizar.
@@ -16,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as RMouseEvent, TouchEvent as RTouchEvent } from 'react';
 import {
   CORTE_ERRORES,
+  MAX_QUIETOS,
   PAUSA_MS,
   VENTANA,
   actualizarMotor,
@@ -159,10 +162,15 @@ function jugadaHablada(j: Jugada | null): string {
 const NOMBRE_MKT = { doc: 'Docenas', col: 'Columnas' } as const;
 const REGLAS_TXT =
   'Las 5 reglas: 1) una zona sale al menos 2 veces más que la menos salida; 2) el conteo y lo más reciente señalan el mismo par; ' +
-  '3) la zona de afuera no salió en los últimos 3 giros; 4) la de afuera salió como máximo 1 vez en los 7; 5) menos de 2 ceros en la ventana.';
+  '3) la zona de afuera no salió en los últimos 4 giros; 4) la de afuera salió como máximo 1 vez en los 7; 5) menos de 2 ceros en la ventana y ningún cero en los últimos 4. ' +
+  'Dentro del ciclo: si la mesa deja de sostener tu par, es transición y no apuestas ese giro; un par nuevo se juega solo cuando la mesa lo aprueba 2 veces seguidas; 7 giros sin lectura clara cierran el ciclo.';
 
+const MARCA_RES = { A: '✓', E: '✗', N: '·' } as const;
 function tiraTexto(c: Ciclo): string {
-  return c.numeros.map((n, i) => `${n} ${c.resultados[i] === 'A' ? '✓' : '✗'}`).join(' · ');
+  return c.numeros.map((n, i) => `${n} ${MARCA_RES[c.resultados[i] ?? 'E']}`).join(' · ');
+}
+function textoCierre(c: Ciclo): string {
+  return c.cierre === 'GANADO' ? 'Ganado.' : c.cierre === 'INDETERMINADO' ? 'Cerrado: mesa indeterminada (no es reventón).' : `Cortado en el ${CORTE_ERRORES}º error.`;
 }
 
 function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
@@ -177,8 +185,11 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
       if (l.aprobado && l.jugada) {
         const lm = l.jugada.mercado === 'doc' ? l.doc! : l.col!;
         const pref = l.jugada.mercado === 'doc' ? 'D' : 'C';
-        out.push(`${NOMBRE_MKT[l.jugada.mercado]} cumple las 5 reglas: ${pref}${lm.zonas[0] + 1} y ${pref}${lm.zonas[1] + 1} se llevan la ventana y ${pref}${lm.excluida + 1} no aparece en los últimos 3.`);
+        out.push(`${NOMBRE_MKT[l.jugada.mercado]} cumple las 5 reglas: ${pref}${lm.zonas[0] + 1} y ${pref}${lm.zonas[1] + 1} se llevan la ventana y ${pref}${lm.excluida + 1} no aparece en los últimos 4.`);
         out.push(`Te propongo ${textoJugada(l.jugada)}. El motor ve ${textoJugada(e.pendientes.MOTOR_DOC)} en docenas y ${textoJugada(e.pendientes.MOTOR_COL)} en columnas. Elige con qué entras, o toca «Paso esta». Mientras no toques nada, los giros no cuentan para ningún ciclo.`);
+      } else if (l.motivo && l.motivo.startsWith('cero en')) {
+        out.push('Salió un cero en los últimos 4 giros: la mesa está dispersa, no la doy por buena.');
+        out.push('Mete el siguiente giro y vuelvo a mirar.');
       } else if (l.ceros >= 2) {
         out.push(`Hay ${l.ceros} ceros en la ventana: no la doy por buena.`);
         out.push('Mete el siguiente giro y vuelvo a mirar.');
@@ -193,11 +204,12 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
       ? `Ciclo #${c.id} con ${nombreVoz(c.voz)}: ${textoJugada(c.jugada)}. Cierra en 2 aciertos o en ${CORTE_ERRORES} errores seguidos.`
       : `Ciclo #${c.id}: ${tiraTexto(c)}.`);
     if (e.aviso && c.numeros.length > 0) out.push(e.aviso);
-    if (c.racha === CORTE_ERRORES - 1) out.push('Van 3 errores seguidos. Si llega el cuarto, corto el ciclo y nos vamos a pausa.');
+    if (c.apuesta === false) out.push(`Llevo ${c.quietos ?? 0} de ${MAX_QUIETOS} giros sin lectura clara. Tus errores y aciertos quedan guardados; espera a que confirme.`);
+    else if (c.racha === CORTE_ERRORES - 1) out.push('Van 3 errores seguidos. Si llega el cuarto, corto el ciclo y nos vamos a pausa.');
     else if (c.racha === 2) out.push('Van 2 errores seguidos. Calma: el corte está en el cuarto.');
   } else if (e.fase === 'PAUSA') {
     const c = e.ciclos[e.ciclos.length - 1];
-    if (c) out.push(`Ciclo #${c.id} cerrado: ${c.resultados.join(' · ')}. ${c.cierre === 'GANADO' ? 'Ganado.' : `Cortado en el ${CORTE_ERRORES}º error.`}`);
+    if (c) out.push(`Ciclo #${c.id} cerrado: ${tiraTexto(c)}. ${textoCierre(c)}`);
     out.push('Ahora 4 minutos fuera. Esa pausa es la que mantiene bajas las rachas por hora.');
     out.push(e.pausaRota
       ? 'Entraron giros durante la pausa: no cuentan para el ciclo y esta pausa queda como no cumplida.'
@@ -282,16 +294,23 @@ export function CicloPanel({ data }: { data: any }) {
       texto = `Dentro con ${jugadaHablada(c.jugada)}.`;
     } else if (estado.fase === 'CICLO' && c && c.numeros.length > 0) {
       clave = `ci-${c.id}-${c.numeros.length}`;
-      const ok = c.resultados[c.resultados.length - 1] === 'A';
-      texto = ok
-        ? (c.aciertos === 1 ? 'Acierto. Falta uno.' : 'Acierto.')
-        : c.racha === CORTE_ERRORES - 1 ? 'Error. Tres seguidos. Uno más y corto.'
-          : c.racha === 1 ? 'Error.' : `Error. ${c.racha} seguidos.`;
-      const cambio = c.jugadas.length > 0 && c.jugadas[c.jugadas.length - 1] !== textoJugada(c.jugada);
-      if (cambio) texto += ` Cambio: ahora ${jugadaHablada(c.jugada)}.`;
+      const res = c.resultados[c.resultados.length - 1];
+      texto = res === 'N' ? ''
+        : res === 'A'
+          ? (c.aciertos === 1 ? 'Acierto. Falta uno.' : 'Acierto.')
+          : c.racha === CORTE_ERRORES - 1 ? 'Error. Tres seguidos. Uno más y corto.'
+            : c.racha === 1 ? 'Error.' : `Error. ${c.racha} seguidos.`;
+      const previa = c.jugadas[c.jugadas.length - 1];
+      const cambio = c.jugadas.length > 0 && previa !== '—' && previa !== textoJugada(c.jugada);
+      if (c.apuesta === false) texto += ' Transición. No apuestes este giro.';
+      else if (cambio) texto += ` Confirmado. Ahora ${jugadaHablada(c.jugada)}.`;
+      else if (res === 'N') texto = `Confirmado. Juega ${jugadaHablada(c.jugada)}.`;
+      texto = texto.trim();
     } else if (estado.fase === 'PAUSA' && ultimo) {
       clave = `pa-${ultimo.id}`;
-      texto = ultimo.cierre === 'GANADO' ? 'Ciclo ganado. Pausa de cuatro minutos.' : 'Corte en el cuarto error. Pausa de cuatro minutos.';
+      texto = ultimo.cierre === 'GANADO' ? 'Ciclo ganado. Pausa de cuatro minutos.'
+        : ultimo.cierre === 'INDETERMINADO' ? 'Mesa indeterminada. Cierro el ciclo. Pausa de cuatro minutos.'
+          : 'Corte en el cuarto error. Pausa de cuatro minutos.';
     } else if (estado.fase === 'CERRADO') {
       clave = `cerrado-${estado.dia}`;
       texto = 'Jornada cerrada. Hasta aquí llegamos hoy.';
@@ -386,7 +405,7 @@ export function CicloPanel({ data }: { data: any }) {
     if (estado.fase === 'PAUSA') return { fase: 'PAUSA', chip: 'cp-oro', halo: 'rgba(29,78,216,0.22)', sombra: 'rgba(29,78,216,0.28)', sub: '4 minutos fuera de la mesa' };
     if (estado.fase === 'CERRADO') return { fase: 'DÍA CERRADO', chip: 'cp-rojo', halo: 'rgba(200,16,46,0.28)', sombra: 'rgba(200,16,46,0.34)', sub: 'tope de reventones alcanzado' };
     if (estado.fase === 'CICLO' && c) {
-      const sub = c.racha >= CORTE_ERRORES - 1 ? `${c.racha} errores seguidos · uno más y corta` : c.racha === 2 ? '2 errores seguidos' : `aciertos ${c.aciertos} de 2`;
+      const sub = c.apuesta === false ? `transición · no apuestes · errores seguidos ${c.racha}` : c.racha >= CORTE_ERRORES - 1 ? `${c.racha} errores seguidos · uno más y corta` : c.racha === 2 ? '2 errores seguidos' : `aciertos ${c.aciertos} de 2`;
       return c.racha >= 2
         ? { fase: `CICLO #${c.id}`, chip: 'cp-rojo', halo: 'rgba(200,16,46,0.30)', sombra: 'rgba(200,16,46,0.36)', sub }
         : { fase: `CICLO #${c.id}`, chip: 'cp-oro', halo: 'rgba(212,160,23,0.32)', sombra: 'rgba(184,134,11,0.36)', sub };
@@ -525,7 +544,7 @@ export function CicloPanel({ data }: { data: any }) {
                     <span><b>{reloj}</b><small>para volver</small></span>
                   </div>
                   <div className="cp-pausa-t">
-                    <span className="cp-pausa-h">{ultimo ? `Ciclo #${ultimo.id} ${ultimo.cierre === 'GANADO' ? 'ganado' : 'cortado'}` : 'Pausa'}</span>
+                    <span className="cp-pausa-h">{ultimo ? `Ciclo #${ultimo.id} ${ultimo.cierre === 'GANADO' ? 'ganado' : ultimo.cierre === 'INDETERMINADO' ? 'cerrado: mesa indeterminada' : 'cortado'}` : 'Pausa'}</span>
                     <span>Fuera de la mesa 4 minutos. La pausa es parte del sistema: es la que mantiene bajas las rachas por hora.</span>
                   </div>
                 </div>
@@ -537,8 +556,22 @@ export function CicloPanel({ data }: { data: any }) {
               ) : estado.fase === 'CICLO' && c ? (
                 <div className="cp-hero">
                   <span className="cp-lab">Juegas con {nombreVoz(c.voz)}{c.cambios > 0 ? ` · cambió ${c.cambios} ${c.cambios === 1 ? 'vez' : 'veces'}` : ''}</span>
-                  <span className="cp-oro-txt cp-big" style={{ textShadow: `0 6px 24px ${tema.sombra}` }}>{textoJugada(c.jugada)}</span>
-                  <span className="cp-det">{detalleJugada(c.jugada)}{c.cambios > 0 && c.jugadas[0] ? ` · venías con ${c.jugadas[0]}` : ''}</span>
+                  {c.apuesta === false ? (
+                    <>
+                      <span className="cp-big" style={{ color: '#8a6500' }}>No apuestes</span>
+                      <span className="cp-det">Transición · {c.motivoEstado ?? 'la mesa no sostiene el par'} · {c.quietos ?? 0} de {MAX_QUIETOS} sin lectura clara</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="cp-oro-txt cp-big" style={{ textShadow: `0 6px 24px ${tema.sombra}` }}>{textoJugada(c.jugada)}</span>
+                      <span className="cp-det">{detalleJugada(c.jugada)}{c.cambios > 0 && c.jugadas[0] ? ` · venías con ${c.jugadas[0]}` : ''}</span>
+                    </>
+                  )}
+                  {c.voz === 'PROPUESTA' && c.estadoMesa && (
+                    <span className="cp-estado" data-estado={c.estadoMesa}>
+                      {c.estadoMesa === 'TRANSICION' ? 'Transición' : 'Concentración'} · {c.girosEnEstado ?? 0} giro{(c.girosEnEstado ?? 0) === 1 ? '' : 's'}
+                    </span>
+                  )}
                 </div>
               ) : lectura.aprobado ? (
                 <div className="cp-hero">
@@ -550,7 +583,7 @@ export function CicloPanel({ data }: { data: any }) {
                 <div className="cp-hero">
                   <span className="cp-lab">La mesa no muestra dominancia</span>
                   <span className="cp-big" style={{ color: '#8a6500' }}>No entres</span>
-                  <span className="cp-det">{lectura.ceros >= 2 ? `${lectura.ceros} ceros en la ventana.` : 'Ningún mercado cumple las 5 reglas.'}</span>
+                  <span className="cp-det">{lectura.ceros >= 2 ? `${lectura.ceros} ceros en la ventana.` : lectura.motivo && lectura.motivo.startsWith('cero en') ? 'Cero en los últimos 4 giros: dispersión reciente.' : 'Ningún mercado cumple las 5 reglas.'}</span>
                 </div>
               ) : (
                 <div className="cp-hero">
@@ -581,11 +614,11 @@ export function CicloPanel({ data }: { data: any }) {
                   {c && (
                     <div className="cp-row cp-tira">
                       {c.numeros.slice(-6).map((n, k, arr) => {
-                        const ok = c.resultados[c.resultados.length - arr.length + k] === 'A';
+                        const res = c.resultados[c.resultados.length - arr.length + k] ?? 'E';
                         return (
                           <span key={k} className="cp-tira-i">
-                            <span className="cp-num" data-color={n === 0 ? 'v' : ROJOS.has(n) ? 'r' : 'n'} data-res={ok ? 'A' : 'E'}>{n}</span>
-                            <span className="cp-marca" data-res={ok ? 'A' : 'E'}>{ok ? '✓' : '✗'}</span>
+                            <span className="cp-num" data-color={n === 0 ? 'v' : ROJOS.has(n) ? 'r' : 'n'} data-res={res}>{n}</span>
+                            <span className="cp-marca" data-res={res}>{MARCA_RES[res]}</span>
                           </span>
                         );
                       })}
@@ -667,7 +700,7 @@ export function CicloPanel({ data }: { data: any }) {
             )}
             {estado.fase === 'CICLO' && c && (
               <button type="button" className="cp-reply cp-mute"
-                onClick={() => hablar(`Juegas ${jugadaHablada(c.jugada)}. Aciertos ${c.aciertos} de 2. Errores seguidos ${c.racha} de ${CORTE_ERRORES}.`)}>
+                onClick={() => hablar(`${c.apuesta === false ? 'Transición. No apuestes este giro' : `Juegas ${jugadaHablada(c.jugada)}`}. Aciertos ${c.aciertos} de 2. Errores seguidos ${c.racha} de ${CORTE_ERRORES}.`)}>
                 <span className="cp-reply-t">Leer el estado en voz alta</span>
                 <span className="cp-reply-s">aciertos {c.aciertos} de 2 · errores {c.racha} de {CORTE_ERRORES}</span>
               </button>
@@ -694,8 +727,8 @@ export function CicloPanel({ data }: { data: any }) {
         <span className="cp-dia-h">Tu día</span>
         {estado.ciclos.length === 0 && <span className="cp-nota">Todavía no hay ciclos hoy.</span>}
         {estado.ciclos.slice(-6).map((x) => (
-          <span key={x.id} className="cp-dia-i" data-tipo={x.cierre === 'CORTE' ? 'corte' : x.rachaMax >= 3 ? 'duro' : 'limpio'}>
-            <span className="cp-mono">{x.resultados.join(' ')}</span>#{x.id} {x.cierre === 'CORTE' ? 'corte' : 'ganado'}
+          <span key={x.id} className="cp-dia-i" data-tipo={x.cierre === 'CORTE' ? 'corte' : x.cierre === 'INDETERMINADO' ? 'indet' : x.rachaMax >= 3 ? 'duro' : 'limpio'}>
+            <span className="cp-mono">{x.resultados.join(' ')}</span>#{x.id} {x.cierre === 'CORTE' ? 'corte' : x.cierre === 'INDETERMINADO' ? 'indeterminado' : 'ganado'}
           </span>
         ))}
         {estado.fase === 'CICLO' && c && <span className="cp-nota">en juego: #{c.id}</span>}
@@ -800,6 +833,11 @@ const CSS = `
 .cp-num[data-res="E"]{box-shadow:0 0 0 2px #fff,0 0 0 4px #c8102e,0 0 14px rgba(200,16,46,.55)}
 .cp-marca{font-size:12px;font-weight:800}
 .cp-marca[data-res="A"]{color:#8a6500}.cp-marca[data-res="E"]{color:#b3122e}
+.cp-num[data-res="N"]{opacity:.45;box-shadow:0 0 0 2px #fff,0 0 0 4px #c9cfdc}
+.cp-marca[data-res="N"]{color:#9aa3b5}
+.cp-estado{align-self:flex-start;margin-top:4px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.cp-estado[data-estado="CONCENTRACION"]{color:#6b4e00;background:linear-gradient(135deg,#fff8db,#fde9a0);border:1px solid #c99a06}
+.cp-estado[data-estado="TRANSICION"]{color:#8b0a1f;background:linear-gradient(135deg,#fff0f2,#ffd3da);border:1px solid #c8102e}
 .cp-card{padding:14px 16px;border-radius:20px;background:#fff;border:1px solid #e3e8f2;box-shadow:0 14px 30px rgba(15,20,38,.08);display:flex;flex-direction:column;gap:12px}
 .cp-card-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px;font-weight:600;color:#1e2640}
 .cp-nota{font-size:12px;font-weight:400;color:#5e6886}
@@ -844,6 +882,7 @@ const CSS = `
 .cp-dia-h{font-size:12.5px;font-weight:700;color:#1e2640}
 .cp-dia-i{height:34px;padding:0 12px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700}
 .cp-dia-i[data-tipo="limpio"]{background:linear-gradient(135deg,#fff8db,#fde9a0);border:1.5px solid #c99a06;color:#6b4e00}
+.cp-dia-i[data-tipo="indet"]{background:#f1f3f8;border:1.5px dashed #9aa3b5;color:#4a5368}
 .cp-dia-i[data-tipo="duro"]{background:linear-gradient(135deg,#fff0f2,#ffd3da);border:1.5px solid #c8102e;color:#8b0a1f}
 .cp-dia-i[data-tipo="corte"]{color:#fff;border:1px solid #5c0012;background:linear-gradient(135deg,#5c0012,#b3122e 30%,#e0314f 55%,#8b0a1f)}
 .cp-dia-i[data-tipo="corte"] .cp-mono{color:#fff}
