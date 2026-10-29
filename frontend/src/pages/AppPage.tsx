@@ -31,7 +31,7 @@ import { NeuralLayer } from '@/neural/NeuralLayer';
 import { ChaosPanel } from '@/components/ChaosPanel';
 import { SessionRecorder } from '@/components/SessionRecorder';
 
-import { QuantumPilot } from '@/components/Quantumpilot';
+import { CicloPanel } from '@/components/CicloPanel';
 import { SidebarDrawer } from '@/components/SidebarDrawer';
 
 import '@/styles/hud.css';
@@ -230,22 +230,11 @@ export function AppPage() {
         onReset={() => {}}
       />
 
-      {/* QUANTUM PILOT overlay (flotante draggable) — cockpit único: acá
-          adentro vive TODO lo que antes estaba repartido entre este panel,
-          CategoryTable/GodBetPanel (columna central) y BankrollLedger
-          (columna izquierda). Se sacaron de abajo para no duplicar. */}
-      <QuantumPilot
-        godBet={(data as any).god_bet ?? { active: false, cond_state: 'caution', radar_score: 0, counters_god: {} }}
-        payload={data.payload}
-        bankroll={data.bankroll}
-        counters={(data.counters ?? {}) as any}
-        errorHist={(data as any).error_hist ?? {}}
-        spinsCount={data.sequence.count}
-        pdHud={condCalc}
-        pdEntropy={entropyCalc}
-        pdDocHit={lastHits.doc}
-        pdColHit={lastHits.col}
-      />
+      {/* COPILOTO DE CICLO (flotante, arrastrable) — reemplaza al Quantum
+          Pilot (oct 2026). Toma los giros que entran por Control de Misión;
+          su lógica vive en domain/cicloCorto.ts. Los archivos del Quantum
+          siguen en el repo, desconectados. */}
+      <CicloPanel data={data} />
 
       <div className="app-wrap">
         {/* Userbar */}
