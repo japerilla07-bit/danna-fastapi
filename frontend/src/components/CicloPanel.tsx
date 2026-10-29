@@ -209,9 +209,15 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
       : `Ciclo #${c.id}: ${tiraTexto(c)}.`);
     if (e.aviso && c.numeros.length > 0) out.push(e.aviso);
     if (c.apuesta === false) out.push(`Llevo ${c.quietos ?? 0} de ${MAX_QUIETOS} giros sin lectura clara. Tus errores y aciertos quedan guardados; espera a que confirme.`);
-    else if (c.resultados[c.resultados.length - 1] === 'A' && l.doc && l.col) {
-      const lm = (x: LecturaMercado) => (x.ok ? `cumple ${textoJugada({ mercado: x.mercado, zonas: x.zonas })}` : x.motivo);
-      out.push(`Mesa ahora · Docenas: ${lm(l.doc)} · Columnas: ${lm(l.col)}. Sigo con ${textoJugada(c.jugada)}; si prefieres otra, escógela abajo.`);
+    else if ((c.voz !== 'PROPUESTA' || c.resultados[c.resultados.length - 1] === 'A') && c.numeros.length > 0 && l.doc && l.col) {
+      // Relectura de la mesa: tras un acierto (Propuesta) o en cada giro (voces del motor).
+      const freno = l.ceros >= 2 || (l.motivo ?? '').startsWith('cero en');
+      const lm = (x: LecturaMercado) => (x.ok ? `cumple ${textoJugada({ mercado: x.mercado, zonas: x.zonas })}${freno ? ' pero frenado por el cero' : ''}` : x.motivo);
+      const sigo = c.voz === 'PROPUESTA' ? `Sigo con ${textoJugada(c.jugada)}` : `El motor sigue con ${textoJugada(c.jugada)}`;
+      const consejo = c.voz !== 'PROPUESTA' && c.resultados[c.resultados.length - 1] === 'E' && !l.aprobado
+        ? ' Con la Propuesta yo no apostaría este giro (transición).'
+        : '';
+      out.push(`Mesa ahora · Docenas: ${lm(l.doc)} · Columnas: ${lm(l.col)}. ${sigo}; si prefieres otra, escógela abajo.${consejo}`);
     }
     else if (c.racha === CORTE_ERRORES - 1) out.push('Van 3 errores seguidos. Si llega el cuarto, corto el ciclo y nos vamos a pausa.');
     else if (c.racha === 2) out.push('Van 2 errores seguidos. Calma: el corte está en el cuarto.');
@@ -708,11 +714,11 @@ export function CicloPanel({ data }: { data: any }) {
                 <span className="cp-reply-s">ver las 5 reglas de la lectura</span>
               </button>
             )}
-            {estado.fase === 'CICLO' && c && c.voz === 'PROPUESTA' && opcionesTransicion(estado, lectura).map((o) => (
+            {estado.fase === 'CICLO' && c && opcionesTransicion(estado, lectura).map((o) => (
               <button key={o.clave} type="button" className="cp-reply" onClick={() => setEstado((e) => jugarIgual(e, o.jugada))}>
                 <span className="cp-reply-t">{c.apuesta === false ? 'Juego igual' : 'Cambio a'} · {o.fuente}</span>
                 <span className="cp-reply-p">{textoJugada(o.jugada)}</span>
-                <span className="cp-reply-s">{c.apuesta === false ? 'solo el próximo giro · lo recomendado es esperar' : `solo el próximo giro · si no tocas, sigues con ${textoJugada(c.jugada)}`}</span>
+                <span className="cp-reply-s">{c.apuesta === false ? 'solo el próximo giro · lo recomendado es esperar' : `solo el próximo giro · si no tocas, sigues con ${c.voz === 'PROPUESTA' ? textoJugada(c.jugada) : 'el motor'}`}</span>
               </button>
             ))}
             {estado.fase === 'CICLO' && c && (
