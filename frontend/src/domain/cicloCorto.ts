@@ -420,14 +420,17 @@ export function terminarPausa(e: Estado): Estado {
 }
 
 /**
- * En TRANSICIÓN el jugador decide apostar igual el próximo giro con la jugada que elija
- * (su par, el par que aparece, un mercado que cumple o el pick del motor). Solo ese giro:
- * después el copiloto sigue con su lógica normal. Queda marcado en la traza.
+ * El jugador elige qué apostar en el PRÓXIMO giro de un ciclo con la Propuesta:
+ * · en TRANSICIÓN: juega igual (su par, el par que aparece, un mercado que cumple o el motor);
+ * · en CONCENTRACIÓN (p. ej. tras un acierto): cambia a otra de esas opciones.
+ * Solo decide ese giro; después el copiloto sigue con su lógica normal. Queda marcado en la traza.
  */
 export function jugarIgual(e: Estado, jugada: Jugada): Estado {
   const c = e.ciclo;
-  if (e.fase !== 'CICLO' || !c || c.apuesta !== false) return e;
+  if (e.fase !== 'CICLO' || !c || c.voz !== 'PROPUESTA') return e;
   const cambia = !mismaJugada(jugada, c.jugada);
+  if (c.apuesta !== false && !cambia) return e;
+  const enTransicion = c.apuesta === false;
   const ciclo: Ciclo = {
     ...c,
     jugada,
@@ -442,7 +445,9 @@ export function jugarIgual(e: Estado, jugada: Jugada): Estado {
     ...e,
     ciclo,
     pendientes: c.voz === 'PROPUESTA' ? { ...e.pendientes, PROPUESTA: jugada } : e.pendientes,
-    aviso: `Decides jugar igual: ${textoJugada(jugada)} en el próximo giro.`,
+    aviso: enTransicion
+      ? `Decides jugar igual: ${textoJugada(jugada)} en el próximo giro.`
+      : `Cambias a ${textoJugada(jugada)} en el próximo giro (decisión tuya).`,
   };
 }
 
