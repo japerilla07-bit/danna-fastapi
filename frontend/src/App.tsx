@@ -2,6 +2,7 @@
 // - /         → LandingPage (publico - landing comercial)
 // - /login    → LoginPage (publico)
 // - /app/bitacora → Planificador de jornada de la bitácora (protegido)
+// - /app/ciclo    → Modo Ciclo: entradas cortas de 7 giros (protegido)
 // - /app/*    → AppPage (protegido)
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LandingPage from '@/pages/LandingPage';
@@ -9,6 +10,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { AppPage } from '@/pages/AppPage';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { PlanificadorPage } from '@/bitacora/PlanificadorPage';
+import { CicloPage } from '@/pages/CicloPage';
 
 export default function App() {
   return (
@@ -21,6 +23,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <PlanificadorPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/ciclo"
+          element={
+            <ProtectedRoute>
+              <CicloPage />
             </ProtectedRoute>
           }
         />
