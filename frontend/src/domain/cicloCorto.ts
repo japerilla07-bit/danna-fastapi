@@ -420,14 +420,14 @@ export function terminarPausa(e: Estado): Estado {
 }
 
 /**
- * El jugador elige qué apostar en el PRÓXIMO giro de un ciclo con la Propuesta:
+ * El jugador elige qué apostar en el PRÓXIMO giro (cualquier voz: Propuesta o Motor):
  * · en TRANSICIÓN: juega igual (su par, el par que aparece, un mercado que cumple o el motor);
  * · en CONCENTRACIÓN (p. ej. tras un acierto): cambia a otra de esas opciones.
  * Solo decide ese giro; después el copiloto sigue con su lógica normal. Queda marcado en la traza.
  */
 export function jugarIgual(e: Estado, jugada: Jugada): Estado {
   const c = e.ciclo;
-  if (e.fase !== 'CICLO' || !c || c.voz !== 'PROPUESTA') return e;
+  if (e.fase !== 'CICLO' || !c) return e;
   const cambia = !mismaJugada(jugada, c.jugada);
   if (c.apuesta !== false && !cambia) return e;
   const enTransicion = c.apuesta === false;
@@ -688,7 +688,9 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
         const m = c.voz === 'MOTOR_DOC' ? motor.doc : motor.col;
         if (m && !mismaJugada(m, c.jugada)) {
           nueva = m;
-          aviso = `El motor cambió → ahora ${textoJugada(nueva)}.`;
+          aviso = ciclo.eleccionJugador
+            ? `Vuelves con el motor: ${textoJugada(nueva)}.`
+            : `El motor cambió → ahora ${textoJugada(nueva)}.`;
         } else {
           aviso = `Se mantiene: ${textoJugada(c.jugada)}.`;
         }
