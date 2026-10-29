@@ -36,6 +36,7 @@ import {
   reventonesHoy,
   terminarPausa,
   jugarIgual,
+  mismaJugada,
   textoJugada,
   tick,
 } from '@/domain/cicloCorto';
@@ -208,6 +209,10 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
       : `Ciclo #${c.id}: ${tiraTexto(c)}.`);
     if (e.aviso && c.numeros.length > 0) out.push(e.aviso);
     if (c.apuesta === false) out.push(`Llevo ${c.quietos ?? 0} de ${MAX_QUIETOS} giros sin lectura clara. Tus errores y aciertos quedan guardados; espera a que confirme.`);
+    else if (c.resultados[c.resultados.length - 1] === 'A' && l.doc && l.col) {
+      const lm = (x: LecturaMercado) => (x.ok ? `cumple ${textoJugada({ mercado: x.mercado, zonas: x.zonas })}` : x.motivo);
+      out.push(`Mesa ahora · Docenas: ${lm(l.doc)} · Columnas: ${lm(l.col)}. Sigo con ${textoJugada(c.jugada)}; si prefieres otra, escógela abajo.`);
+    }
     else if (c.racha === CORTE_ERRORES - 1) out.push('Van 3 errores seguidos. Si llega el cuarto, corto el ciclo y nos vamos a pausa.');
     else if (c.racha === 2) out.push('Van 2 errores seguidos. Calma: el corte está en el cuarto.');
   } else if (e.fase === 'PAUSA') {
@@ -703,11 +708,11 @@ export function CicloPanel({ data }: { data: any }) {
                 <span className="cp-reply-s">ver las 5 reglas de la lectura</span>
               </button>
             )}
-            {estado.fase === 'CICLO' && c && c.apuesta === false && opcionesTransicion(estado, lectura).map((o) => (
+            {estado.fase === 'CICLO' && c && c.voz === 'PROPUESTA' && opcionesTransicion(estado, lectura).map((o) => (
               <button key={o.clave} type="button" className="cp-reply" onClick={() => setEstado((e) => jugarIgual(e, o.jugada))}>
-                <span className="cp-reply-t">Juego igual · {o.fuente}</span>
+                <span className="cp-reply-t">{c.apuesta === false ? 'Juego igual' : 'Cambio a'} · {o.fuente}</span>
                 <span className="cp-reply-p">{textoJugada(o.jugada)}</span>
-                <span className="cp-reply-s">solo el próximo giro · lo recomendado es esperar</span>
+                <span className="cp-reply-s">{c.apuesta === false ? 'solo el próximo giro · lo recomendado es esperar' : `solo el próximo giro · si no tocas, sigues con ${textoJugada(c.jugada)}`}</span>
               </button>
             ))}
             {estado.fase === 'CICLO' && c && (
@@ -762,8 +767,10 @@ function opcionesTransicion(e: Estado, l: Lectura): { clave: string; fuente: str
   const c = e.ciclo;
   if (!c) return [];
   const out: { clave: string; fuente: string; jugada: Jugada }[] = [];
+  const enJuego = c.apuesta !== false; // en concentración no se ofrece el par que ya juegas
   const add = (fuente: string, j: Jugada | null | undefined) => {
     if (!j || out.some((o) => o.clave === textoJugada(j))) return;
+    if (enJuego && mismaJugada(j, c.jugada)) return;
     out.push({ clave: textoJugada(j), fuente, jugada: j });
   };
   add('mi par', c.jugada);
