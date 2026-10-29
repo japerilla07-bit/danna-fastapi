@@ -282,6 +282,10 @@ export interface Estado {
   aviso: string | null;
   giros: number; // giros ingresados hoy
   siguienteId: number;
+  // Disciplina de pausas (opcionales: un estado guardado antes no los trae).
+  pausaRota?: boolean; // en la pausa actual entró algún giro
+  pausasCumplidas?: number; // pausas que terminaron sin giros dentro
+  pausasRotas?: number; // pausas en las que se siguió metiendo giros
 }
 
 const marcadorVacio = (): Marcador => ({ aciertos: 0, errores: 0, racha: 0, peor: 0 });
@@ -307,6 +311,9 @@ export function estadoInicial(dia: string, config?: Partial<Config>): Estado {
     aviso: 'Ingresa los últimos 7 giros de la mesa.',
     giros: 0,
     siguienteId: 1,
+    pausaRota: false,
+    pausasCumplidas: 0,
+    pausasRotas: 0,
   };
 }
 
@@ -328,6 +335,8 @@ export function tick(e: Estado, ahora: number): Estado {
       ventana: [],
       pausaHasta: null,
       pendientes: { ...e.pendientes, PROPUESTA: null },
+      pausasCumplidas: (e.pausasCumplidas ?? 0) + (e.pausaRota ? 0 : 1),
+      pausaRota: false,
       aviso: 'Pausa terminada. Ingresa los últimos 7 giros.',
     };
   }
@@ -394,7 +403,15 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
   if (!Number.isInteger(numero) || numero < 0 || numero > 36) return e0;
   let e = tick(e0, ahora);
   if (e.fase === 'CERRADO') return { ...e, aviso: 'Jornada cerrada. No se registran más giros hoy.' };
-  if (e.fase === 'PAUSA') return { ...e, aviso: 'En pausa. Espera a que termine el cronómetro.' };
+  if (e.fase === 'PAUSA') {
+    // El giro no entra al ciclo; la pausa queda marcada como no cumplida (una sola vez).
+    return {
+      ...e,
+      aviso: 'Estás en pausa: este giro no cuenta para el ciclo.',
+      pausasRotas: (e.pausasRotas ?? 0) + (e.pausaRota ? 0 : 1),
+      pausaRota: true,
+    };
+  }
 
   // 1) Marcador de cada voz con lo que tenía pendiente para ESTE giro.
   const marcadores = { ...e.marcadores };
