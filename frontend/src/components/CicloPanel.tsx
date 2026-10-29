@@ -35,6 +35,7 @@ import {
   registrarGiro,
   reventonesHoy,
   terminarPausa,
+  jugarIgual,
   textoJugada,
   tick,
 } from '@/domain/cicloCorto';
@@ -702,6 +703,13 @@ export function CicloPanel({ data }: { data: any }) {
                 <span className="cp-reply-s">ver las 5 reglas de la lectura</span>
               </button>
             )}
+            {estado.fase === 'CICLO' && c && c.apuesta === false && opcionesTransicion(estado, lectura).map((o) => (
+              <button key={o.clave} type="button" className="cp-reply" onClick={() => setEstado((e) => jugarIgual(e, o.jugada))}>
+                <span className="cp-reply-t">Juego igual · {o.fuente}</span>
+                <span className="cp-reply-p">{textoJugada(o.jugada)}</span>
+                <span className="cp-reply-s">solo el próximo giro · lo recomendado es esperar</span>
+              </button>
+            ))}
             {estado.fase === 'CICLO' && c && (
               <button type="button" className="cp-reply cp-mute"
                 onClick={() => hablar(`${c.apuesta === false ? 'Transición. No apuestes este giro' : `Juegas ${jugadaHablada(c.jugada)}`}. Aciertos ${c.aciertos} de 2. Errores seguidos ${c.racha} de ${CORTE_ERRORES}.`)}>
@@ -747,6 +755,24 @@ export function CicloPanel({ data }: { data: any }) {
       </div>
     </div>
   );
+}
+
+/** Opciones para jugar igual en transición (sin repetir la misma jugada). */
+function opcionesTransicion(e: Estado, l: Lectura): { clave: string; fuente: string; jugada: Jugada }[] {
+  const c = e.ciclo;
+  if (!c) return [];
+  const out: { clave: string; fuente: string; jugada: Jugada }[] = [];
+  const add = (fuente: string, j: Jugada | null | undefined) => {
+    if (!j || out.some((o) => o.clave === textoJugada(j))) return;
+    out.push({ clave: textoJugada(j), fuente, jugada: j });
+  };
+  add('mi par', c.jugada);
+  add('el par que aparece', c.candidato ?? null);
+  if (l.doc && l.doc.ok) add('docenas cumple', { mercado: 'doc', zonas: l.doc.zonas });
+  if (l.col && l.col.ok) add('columnas cumple', { mercado: 'col', zonas: l.col.zonas });
+  add('motor docenas', e.pendientes.MOTOR_DOC);
+  add('motor columnas', e.pendientes.MOTOR_COL);
+  return out;
 }
 
 function Mercado({ l, frenoCero = false }: { l: LecturaMercado; frenoCero?: boolean }) {
