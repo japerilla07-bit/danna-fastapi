@@ -164,12 +164,12 @@ const STYLE: Record<Zone, {
     halo: true,
   },
   NEUTRA: {
-    bg: 'linear-gradient(180deg, rgba(51,65,85,0.45) 0%, rgba(30,41,59,0.20) 100%)',
-    border: 'rgba(148,163,184,0.45)',
+    bg: 'linear-gradient(180deg, rgba(51,65,85,0.45) 0%, rgba(33, 33, 33,0.20) 100%)',
+    border: 'rgba(172, 168, 160,0.45)',
     text: '#cbd5e1',
     label: 'NEUTRA · SIN DECISIÓN',
     icon: '·',
-    glow: 'rgba(148,163,184,0.25)',
+    glow: 'rgba(172, 168, 160,0.25)',
     haloColor: 0x64748b,
     halo: false,
   },
@@ -226,7 +226,7 @@ function MarketCardImpl({
           <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.25em', color: '#e2e8f0' }}>
             {title}
           </span>
-          <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
+          <span style={{ fontSize: 9, color: '#aca8a0', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
             HUD {hud ?? '—'} · ENT {ent ?? '—'}
             {cellWr !== null && <> · {cellWr.toFixed(1)}%</>}
           </span>
@@ -258,7 +258,7 @@ function MarketCardImpl({
 
         {/* Zona nombrada + hint */}
         {cellLabel && (
-          <div style={{ fontSize: 9, color: '#94a3b8', lineHeight: 1.35 }}>
+          <div style={{ fontSize: 9, color: '#aca8a0', lineHeight: 1.35 }}>
             <div style={{ letterSpacing: '0.08em', fontWeight: 600, color: '#cbd5e1' }}>
               {cellLabel}
             </div>
@@ -277,19 +277,19 @@ function MarketCardImpl({
           alignItems: 'center',
           padding: '5px 8px',
           borderRadius: 6,
-          background: 'rgba(15,23,42,0.55)',
-          border: '1px solid rgba(148,163,184,0.15)',
+          background: 'rgba(21, 21, 21,0.55)',
+          border: '1px solid rgba(172, 168, 160,0.15)',
           fontFamily: 'monospace',
           fontSize: 10,
         }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <span style={{ color: '#4ade80' }}>✓ {hits}</span>
             <span style={{ color: '#f87171' }}>✗ {misses}</span>
-            <span style={{ color: '#64748b' }}>· {total}</span>
+            <span style={{ color: '#807a6f' }}>· {total}</span>
           </div>
           <span style={{
             fontWeight: 700,
-            color: wr === null ? '#64748b' : wr >= 66.67 ? '#4ade80' : wr >= 60 ? '#fbbf24' : '#f87171',
+            color: wr === null ? '#807a6f' : wr >= 66.67 ? '#4ade80' : wr >= 60 ? '#fbbf24' : '#f87171',
           }}>
             {wr === null ? '—' : `${wr.toFixed(1)}%`}
           </span>
@@ -304,12 +304,12 @@ function MarketCardImpl({
           alignItems: 'center',
           padding: '4px 8px',
           borderRadius: 6,
-          background: streak >= 6 ? 'rgba(127,29,29,0.45)' : 'rgba(15,23,42,0.55)',
-          border: `1px solid ${streak >= 6 ? 'rgba(248,113,113,0.5)' : 'rgba(148,163,184,0.15)'}`,
+          background: streak >= 6 ? 'rgba(127,29,29,0.45)' : 'rgba(21, 21, 21,0.55)',
+          border: `1px solid ${streak >= 6 ? 'rgba(248,113,113,0.5)' : 'rgba(172, 168, 160,0.15)'}`,
           fontFamily: 'monospace',
           fontSize: 10,
         }}>
-          <span style={{ color: '#94a3b8', letterSpacing: '0.05em' }}>
+          <span style={{ color: '#aca8a0', letterSpacing: '0.05em' }}>
             RACHA ✗
           </span>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -319,7 +319,7 @@ function MarketCardImpl({
             }}>
               {streak} seg.
             </span>
-            <span style={{ color: '#64748b' }}>
+            <span style={{ color: '#807a6f' }}>
               máx {maxStreak}
             </span>
           </div>
