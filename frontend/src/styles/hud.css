@@ -22,8 +22,8 @@
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.07),
     inset 0 0 1px rgba(255,255,255,0.04),
-    0 0 0 1px rgba(0,229,255,0.03),
-    0 0 80px rgba(0,229,255,0.06),
+    0 0 0 1px rgba(178, 140, 56,0.03),
+    0 0 80px rgba(178, 140, 56,0.06),
     0 32px 80px rgba(0,0,0,0.55);
 }
 
@@ -37,8 +37,8 @@
   background: conic-gradient(
     from var(--hud-angle, 0deg),
     transparent 0%,
-    rgba(0,229,255,0.7) 8%,
-    rgba(168,85,247,0.5) 16%,
+    rgba(178, 140, 56,0.7) 8%,
+    rgba(237, 18, 54,0.5) 16%,
     transparent 25%,
     transparent 100%
   );
@@ -99,14 +99,14 @@
   font-size: 26px;
   letter-spacing: 7px;
   line-height: 1;
-  background: linear-gradient(135deg, #00e5ff 0%, #a855f7 60%, #ec4899 100%);
+  background: linear-gradient(135deg, #b28c38 0%, #ed1236 60%, #ed1236 100%);
   background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   filter:
-    drop-shadow(0 0 12px rgba(0,229,255,0.40))
-    drop-shadow(0 0 24px rgba(168,85,247,0.15));
+    drop-shadow(0 0 12px rgba(178, 140, 56,0.40))
+    drop-shadow(0 0 24px rgba(237, 18, 54,0.15));
   animation:
     hud-brand-flow 8s ease-in-out infinite,
     hud-brand-breathe 4s ease-in-out infinite;
@@ -118,8 +118,8 @@
 }
 
 @keyframes hud-brand-breathe {
-  0%, 100% { filter: drop-shadow(0 0 12px rgba(0,229,255,0.40)) drop-shadow(0 0 24px rgba(168,85,247,0.15)); }
-  50%      { filter: drop-shadow(0 0 24px rgba(0,229,255,0.65)) drop-shadow(0 0 40px rgba(168,85,247,0.35)); }
+  0%, 100% { filter: drop-shadow(0 0 12px rgba(178, 140, 56,0.40)) drop-shadow(0 0 24px rgba(237, 18, 54,0.15)); }
+  50%      { filter: drop-shadow(0 0 24px rgba(178, 140, 56,0.65)) drop-shadow(0 0 40px rgba(237, 18, 54,0.35)); }
 }
 
 .hud-brand-sub {
@@ -141,7 +141,7 @@
   border-radius: 12px;
   background:
     linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 50%, rgba(0,0,0,0.15) 100%),
-    rgba(10, 16, 26, 0.50);
+    rgba(14, 14, 14, 0.50);
   border: 1px solid var(--panel-bd);
   position: relative;
   transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -156,7 +156,7 @@
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.07),
     0 4px 12px rgba(0,0,0,0.35),
-    0 0 24px rgba(0,229,255,0.08);
+    0 0 24px rgba(178, 140, 56,0.08);
 }
 
 .hud-chip-k {
@@ -299,7 +299,7 @@
 .hud-mission-line strong {
   color: var(--cyan);
   font-weight: 600;
-  text-shadow: 0 0 8px rgba(0,229,255,0.30);
+  text-shadow: 0 0 8px rgba(178, 140, 56,0.30);
 }
 
 .hud-mission-metrics {
