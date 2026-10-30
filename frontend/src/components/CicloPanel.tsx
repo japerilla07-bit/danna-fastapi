@@ -542,7 +542,11 @@ export function CicloPanel({ data }: { data: any }) {
       </div>
 
       {verAjustes && (
-        <div className="cp-ajustes">
+        <div className="cp-ajustes" role="dialog" aria-label="Configuración del copiloto" onMouseDown={noArrastrar} onTouchStart={noArrastrar}>
+          <div className="cp-ajustes-h">
+            <span>Configuración</span>
+            <button type="button" className="cp-btn" onClick={() => setVerAjustes(false)}>Cerrar ✕</button>
+          </div>
           <label>Mesa<input className="cp-in" value={estado.config.mesa} placeholder="ej. rápida"
             onChange={(ev) => setEstado((e) => cambiarConfig(e, { mesa: ev.target.value }))} /></label>
           <label>Crupier<input className="cp-in" value={estado.config.crupier} placeholder="nombre o número"
@@ -714,7 +718,7 @@ export function CicloPanel({ data }: { data: any }) {
         {/* Derecha: conversación */}
         <div className="cp-chat">
           <div className="cp-card-h">
-            <span>Conversación</span>
+            <span className="cp-chat-t">Conversación</span>
             <span className="cp-nota">D.A.N.N.A. propone, no manda</span>
           </div>
           <div className="cp-msgs" aria-live="polite">
@@ -935,7 +939,10 @@ const CSS = `
 .cp-voz{flex-shrink:0;white-space:nowrap;height:44px;padding:0 14px;border-radius:999px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;background:#fff;border:1px solid #d4dae8;color:#475069}
 .cp-voz[data-on="1"]{background:#fff8db;border:1.5px solid #d99a00;color:#7a4f00}
 .cp-icon{flex-shrink:0;width:44px;height:44px;border-radius:12px;background:#f6f8fc;border:1px solid #e3e8f2;color:#475069;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px}
-.cp-ajustes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:14px;border-radius:16px;background:#f6f8fc;border:1px solid #e3e8f2;user-select:text}
+.cp-ajustes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:14px;border-radius:16px;background:#f6f8fc;border:1px solid #e3e8f2;user-select:text;
+  /* flotante: se abre ENCIMA del panel, no empuja el contenido ni cambia el tamaño */
+  position:absolute;top:74px;left:14px;right:14px;z-index:30;background:#fff;border:1.5px solid #c99a06;border-top:4px solid #b3122e;box-shadow:0 26px 60px rgba(15,20,38,.28),0 0 0 6px rgba(255,255,255,.7)}
+.cp-ajustes-h{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:14px;color:#0f1426}
 .cp-ajustes label,.cp-lbl{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:#475069}
 .cp-ajustes .cp-check{flex-direction:row;align-items:center;gap:8px;grid-column:span 2}
 .cp-in{background:#fff;border:1px solid #d4dae8;color:#0f1426;border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;min-height:40px}
@@ -1060,11 +1067,17 @@ const CSS = `
 .cp-mkt[data-ok="freno"] .cp-mkt-r{color:#8a6500}
 .cp-mkt[data-ok="freno"] .cp-barra[data-on="1"]{background:linear-gradient(180deg,#f5d76e,#b8860b);box-shadow:0 0 10px rgba(212,160,23,.55)}
 .cp-mono{font-family:'JetBrains Mono',monospace;font-weight:500;color:#475069}
-.cp-chat{min-width:0;padding:16px;border-radius:22px;background:#f6f8fc;border:1px solid #e3e8f2;display:flex;flex-direction:column;gap:12px}
+.cp-chat{min-width:0;padding:16px;border-radius:22px;display:flex;flex-direction:column;gap:12px;position:relative;
+  /* rojo metálico: borde degradado + franja superior */
+  border:2px solid transparent;
+  background:linear-gradient(#f9f6f7,#f6f8fc) padding-box,linear-gradient(160deg,#ff7088,#c8102e 30%,#5c0012 55%,#e0314f 80%,#8b0a1f) border-box;
+  box-shadow:0 14px 34px rgba(139,10,31,.14)}
+.cp-chat::before{content:"";position:absolute;left:18px;right:18px;top:-2px;height:5px;border-radius:0 0 6px 6px;background:linear-gradient(90deg,#5c0012,#b3122e 25%,#ff7088 45%,#c8102e 65%,#6b0016)}
+.cp-chat-t{font-weight:800;letter-spacing:.02em;background:linear-gradient(180deg,#e0314f 0%,#b3122e 45%,#5c0012 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .cp-msgs{flex-grow:1;display:flex;flex-direction:column;gap:10px;min-height:120px}
 .cp-msg{display:flex;gap:10px;align-items:flex-start;animation:cp-entrar .45s ease both}
 .cp-msg-av{width:26px;height:26px;margin-top:2px;border-radius:50%;flex-shrink:0;background:radial-gradient(circle at 32% 28%,#fffbe0,#f5d76e 30%,#b8860b 62%,#5c4300 100%)}
-.cp-msg-t{padding:10px 13px;border-radius:4px 16px 16px 16px;background:#fff;border:1px solid #e3e8f2;box-shadow:0 4px 12px rgba(15,20,38,.05);font-size:14.5px;line-height:1.45;color:#0f1426;user-select:text}
+.cp-msg-t{padding:10px 13px;border-radius:4px 16px 16px 16px;background:#fff;border:1px solid #f1d6dc;border-left:4px solid #c8102e;box-shadow:0 4px 12px rgba(139,10,31,.08);font-size:14.5px;line-height:1.45;color:#0f1426;user-select:text}
 .cp-replies{display:flex;flex-direction:column;gap:8px}
 .cp-reply{width:100%;min-height:48px;padding:8px 14px;border-radius:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 10px;text-align:left;cursor:pointer;background:#fff;border:1px solid #d4dae8;color:#0f1426;box-shadow:0 6px 14px rgba(15,20,38,.06)}
 .cp-reply:disabled{opacity:.45;cursor:default}
