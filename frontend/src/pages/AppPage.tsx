@@ -43,6 +43,7 @@ import '@/styles/sidebar.css';
 import '@/styles/app.css';
 import '@/styles/chaos-panel.css';
 import '@/styles/session-recorder.css';
+import '@/styles/tema-shinkiro.css'; // tema Shinkirō: marco negro, oro y rojo metálicos (va de último)
 
 interface PendingBet {
   kind: string;
