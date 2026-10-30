@@ -37,6 +37,7 @@ import {
   reventonesHoy,
   terminarPausa,
   jugarIgual,
+  noApostar,
   mismaJugada,
   textoJugada,
   tick,
@@ -761,6 +762,12 @@ export function CicloPanel({ data }: { data: any }) {
                 <span className="cp-reply-s">{c.apuesta === false ? 'solo el próximo giro · lo recomendado es esperar' : `solo el próximo giro · si no tocas, sigues con ${c.voz === 'PROPUESTA' ? textoJugada(c.jugada) : 'el motor'}`}</span>
               </button>
             ))}
+            {estado.fase === 'CICLO' && c && c.apuesta !== false && (
+              <button type="button" className="cp-reply cp-mute" onClick={() => setEstado((e) => noApostar(e))}>
+                <span className="cp-reply-t">No apuesto el próximo giro</span>
+                <span className="cp-reply-s">el ciclo sigue abierto · ese giro no suma acierto ni error</span>
+              </button>
+            )}
             {estado.fase === 'CICLO' && c && (
               <button type="button" className="cp-reply cp-mute"
                 onClick={() => hablar(`${c.apuesta === false ? 'Transición. No apuestes este giro' : `Juegas ${jugadaHablada(c.jugada)}`}. Aciertos ${c.aciertos} de 2. Errores seguidos ${c.racha} de ${CORTE_ERRORES}.`)}>
@@ -938,6 +945,13 @@ const CSS = `
 .cp-btn:disabled{opacity:.45;cursor:default}
 .cp-peligro{border-color:#e7a3b1;color:#b3122e}
 .cp-body{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:16px}
+/* Tamaño ESTABLE (computador/tablet): altura fija; lo que crezca se desplaza por dentro. */
+.cp-shell:not(.cp-movil){height:860px}
+.cp-shell:not(.cp-movil) .cp-body{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr)}
+.cp-shell:not(.cp-movil) .cp-col{min-height:0}
+.cp-shell:not(.cp-movil) .cp-chat{min-height:0;overflow:hidden}
+.cp-shell:not(.cp-movil) .cp-msgs{min-height:0;overflow-y:auto;scrollbar-width:thin}
+.cp-shell:not(.cp-movil) .cp-replies{flex-shrink:0;max-height:62%;overflow-y:auto;scrollbar-width:thin}
 .cp-spin{gap:10px;user-select:text}
 .cp-spin-row{display:flex;gap:10px;align-items:stretch}
 .cp-spin-in{flex:1 1 auto;min-width:0;font:700 24px 'JetBrains Mono',monospace;text-align:center;letter-spacing:.08em;min-height:52px;border-radius:14px;border:1.5px solid #d4dae8}
