@@ -181,12 +181,12 @@ function leerMercado(v: number[], m: Mercado): LecturaMercado {
 
   let motivo: string | null = null;
   const nm = (z: number) => nombreZona(m, z as Zona);
-  if (gap < 2) motivo = 'sin concentración (reparto parejo)';
+  if (gap < 2) motivo = 'sin zona caliente (reparto parejo)';
   else if (!(parSimple.includes(par[0]) && parSimple.includes(par[1])))
-    motivo = 'conteo y recencia no coinciden en el par';
+    motivo = 'la zona caliente no está definida';
   else if (v.slice(-RECENCIA).some((n) => zonaDe(n, m) === excl))
-    motivo = `${nm(excl)} (la de afuera) salió en los últimos ${RECENCIA}`;
-  else if (cnt[excl] > 1) motivo = `${nm(excl)} (la de afuera) salió ${cnt[excl]} veces`;
+    motivo = 'la mesa todavía no se separa';
+  else if (cnt[excl] > 1) motivo = 'la mesa todavía no se separa';
 
   const j = jugadaDe(m, par);
   return {
@@ -211,10 +211,10 @@ export function leerVentana(giros: number[]): Lectura {
   const doc = leerMercado(v, 'doc');
   const col = leerMercado(v, 'col');
   if (ceros >= 2) {
-    return { completa: true, faltan, ceros, aprobado: false, jugada: null, doc, col, motivo: `${ceros} ceros en la ventana (indeterminado)` };
+    return { completa: true, faltan, ceros, aprobado: false, jugada: null, doc, col, motivo: 'mesa dispersa por los ceros' };
   }
   if (v.slice(-RECENCIA).includes(0)) {
-    return { completa: true, faltan, ceros, aprobado: false, jugada: null, doc, col, motivo: `cero en los últimos ${RECENCIA} giros (dispersión reciente)` };
+    return { completa: true, faltan, ceros, aprobado: false, jugada: null, doc, col, motivo: 'el cero dispersó la mesa' };
   }
   let elegido: LecturaMercado | null = null;
   if (doc.ok && col.ok) {
@@ -232,7 +232,7 @@ export function leerVentana(giros: number[]): Lectura {
     jugada: elegido ? { mercado: elegido.mercado, zonas: elegido.zonas } : null,
     doc,
     col,
-    motivo: elegido ? null : 'ningún mercado cumple las 5 reglas',
+    motivo: elegido ? null : 'ningún mercado muestra zona caliente clara',
   };
 }
 
@@ -632,13 +632,13 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
           motivoGiro = 'CONFIRMADO_NUEVO';
           c = {
             ...c, jugada: d, cambios: c.cambios + 1, apuesta: true, estadoMesa: 'CONCENTRACION',
-            motivoEstado: `${textoJugada(d)} confirmado ${CONFIRMAR_CAMBIO} lecturas seguidas`, quietos: 0, candidato: null, confirmaciones: 0,
+            motivoEstado: `${textoJugada(d)} confirmado por la mesa`, quietos: 0, candidato: null, confirmaciones: 0,
           };
           aviso = `Confirmado: ahora ${textoJugada(d)}. Vuelve a jugar.`;
         } else {
           const quietos = (c.quietos ?? 0) + 1;
           const motivo = d
-            ? `${textoJugada(d)} aparece, falta confirmarlo (${conf} de ${CONFIRMAR_CAMBIO})`
+            ? `${textoJugada(d)} aparece, falta que la mesa lo confirme`
             : `la mesa no sostiene ${textoJugada(c.jugada)}: ${lectura.motivo ?? 'sin lectura clara'}`;
           c = { ...c, apuesta: false, estadoMesa: 'TRANSICION', motivoEstado: motivo, quietos, candidato, confirmaciones: conf };
           motivoGiro = d ? 'CANDIDATO_1_DE_2' : 'SIN_LECTURA';
