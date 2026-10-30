@@ -11,7 +11,7 @@
   border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%),
-    rgba(10, 16, 26, 0.80);
+    rgba(14, 14, 14, 0.80);
   border: 1px solid var(--panel-bd-hi);
   cursor: pointer;
   display: flex; flex-direction: column;
@@ -24,7 +24,7 @@
 }
 .sidebar-hamburger:hover {
   border-color: var(--cyan);
-  box-shadow: inset 0 1px 0 rgba(0,229,255,0.12), 0 0 16px rgba(0,229,255,0.20);
+  box-shadow: inset 0 1px 0 rgba(178, 140, 56,0.12), 0 0 16px rgba(178, 140, 56,0.20);
 }
 .sidebar-hamburger span {
   display: block; width: 16px; height: 1.5px;
@@ -37,7 +37,7 @@
 .sidebar-backdrop {
   position: fixed; inset: 0;
   z-index: 8001;
-  background: rgba(4, 6, 10, 0.70);
+  background: rgba(5, 5, 5, 0.70);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   animation: sidebar-fade-in 200ms ease;
@@ -51,8 +51,8 @@
   width: 320px;
   z-index: 8002;
   background:
-    radial-gradient(ellipse at top, rgba(0,229,255,0.06) 0%, transparent 50%),
-    rgba(7, 9, 16, 0.98);
+    radial-gradient(ellipse at top, rgba(178, 140, 56,0.06) 0%, transparent 50%),
+    rgba(9, 9, 9, 0.98);
   border-right: 1px solid var(--panel-bd-hi);
   display: flex; flex-direction: column;
   transform: translateX(-100%);
@@ -76,7 +76,7 @@
 }
 .sidebar-logo-d {
   color: var(--cyan);
-  text-shadow: 0 0 16px rgba(0,229,255,0.60);
+  text-shadow: 0 0 16px rgba(178, 140, 56,0.60);
 }
 .sidebar-logo-rest { color: var(--txt-hi); }
 .sidebar-version {
@@ -104,20 +104,20 @@
   width: 100%; padding: 11px 16px;
   border-radius: 10px;
   background:
-    linear-gradient(180deg, rgba(0,229,255,0.10) 0%, rgba(0,229,255,0.02) 100%),
-    rgba(10, 16, 26, 0.50);
-  border: 1px solid rgba(0,229,255,0.35);
+    linear-gradient(180deg, rgba(178, 140, 56,0.10) 0%, rgba(178, 140, 56,0.02) 100%),
+    rgba(14, 14, 14, 0.50);
+  border: 1px solid rgba(178, 140, 56,0.35);
   font-family: var(--font-head); font-size: 11px; letter-spacing: 3px;
   color: var(--cyan); cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(0,229,255,0.16), 0 0 18px rgba(0,229,255,0.08);
-  text-shadow: 0 0 10px rgba(0,229,255,0.40);
+  box-shadow: inset 0 1px 0 rgba(178, 140, 56,0.16), 0 0 18px rgba(178, 140, 56,0.08);
+  text-shadow: 0 0 10px rgba(178, 140, 56,0.40);
   transition: all 200ms ease;
   text-align: center;
   display: flex; align-items: center; justify-content: center; gap: 8px;
 }
 .sidebar-protocol-btn:hover {
-  background: rgba(0,229,255,0.14);
-  box-shadow: inset 0 1px 0 rgba(0,229,255,0.24), 0 0 24px rgba(0,229,255,0.18);
+  background: rgba(178, 140, 56,0.14);
+  box-shadow: inset 0 1px 0 rgba(178, 140, 56,0.24), 0 0 24px rgba(178, 140, 56,0.18);
   transform: translateY(-1px);
 }
 
@@ -138,7 +138,7 @@
 .sidebar-toggle-row {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 12px; border-radius: 10px;
-  background: rgba(10, 16, 26, 0.40);
+  background: rgba(14, 14, 14, 0.40);
   border: 1px solid var(--panel-bd);
   cursor: pointer; transition: all 150ms ease;
 }
@@ -158,9 +158,9 @@
   position: relative; transition: all 200ms ease; flex-shrink: 0;
 }
 .sidebar-toggle-switch.on {
-  background: rgba(0,229,255,0.25);
-  border-color: rgba(0,229,255,0.55);
-  box-shadow: 0 0 12px rgba(0,229,255,0.25);
+  background: rgba(178, 140, 56,0.25);
+  border-color: rgba(178, 140, 56,0.55);
+  box-shadow: 0 0 12px rgba(178, 140, 56,0.25);
 }
 .sidebar-toggle-thumb {
   position: absolute; top: 2px; left: 2px;
@@ -170,14 +170,14 @@
 }
 .sidebar-toggle-switch.on .sidebar-toggle-thumb {
   left: 18px; background: var(--cyan);
-  box-shadow: 0 0 8px rgba(0,229,255,0.60);
+  box-shadow: 0 0 8px rgba(178, 140, 56,0.60);
 }
 
 /* ── Collapsibles ── */
 .sidebar-collapsible-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; border-radius: 8px;
-  background: rgba(10, 16, 26, 0.40);
+  background: rgba(14, 14, 14, 0.40);
   border: 1px solid var(--panel-bd);
   cursor: pointer; transition: all 150ms ease;
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
@@ -186,13 +186,13 @@
 .sidebar-collapsible-header:hover,
 .sidebar-collapsible-header.active {
   border-color: var(--cyan); color: var(--cyan);
-  background: rgba(0,229,255,0.04);
+  background: rgba(178, 140, 56,0.04);
 }
 .sidebar-chevron { color: var(--cyan); font-size: 10px; }
 
 .sidebar-collapsible-body {
   padding: 10px 12px;
-  background: rgba(4,6,10,0.60);
+  background: rgba(5, 5, 5,0.60);
   border: 1px solid var(--panel-bd);
   border-top: none;
   border-radius: 0 0 8px 8px;
@@ -208,7 +208,7 @@
 .sidebar-admin-note {
   font-family: var(--font-ui); font-size: 11px; color: var(--txt-md);
   line-height: 1.5; padding: 6px 8px;
-  background: rgba(0,229,255,0.04);
+  background: rgba(178, 140, 56,0.04);
   border: 1px solid var(--panel-bd);
   border-radius: 6px;
 }
@@ -243,7 +243,7 @@
  * ════════════════════════════════════════════════════════════════ */
 .onboarding-backdrop {
   position: fixed; inset: 0; z-index: 9500;
-  background: rgba(4, 6, 10, 0.85);
+  background: rgba(5, 5, 5, 0.85);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
@@ -252,8 +252,8 @@
 }
 .onboarding-modal {
   background:
-    radial-gradient(ellipse at top, rgba(0,229,255,0.08) 0%, transparent 50%),
-    rgba(10, 14, 22, 0.98);
+    radial-gradient(ellipse at top, rgba(178, 140, 56,0.08) 0%, transparent 50%),
+    rgba(12, 12, 12, 0.98);
   border: 1px solid var(--panel-bd-hi);
   border-radius: 16px;
   max-width: 680px; width: 100%;
@@ -262,7 +262,7 @@
   display: flex; flex-direction: column;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.06),
-    0 0 60px rgba(0,229,255,0.06),
+    0 0 60px rgba(178, 140, 56,0.06),
     0 24px 60px rgba(0,0,0,0.60);
 }
 .onboarding-header {
@@ -274,7 +274,7 @@
 .onboarding-title {
   font-family: var(--font-head); font-size: 14px; letter-spacing: 4px;
   color: var(--txt-hi);
-  text-shadow: 0 0 12px rgba(0,229,255,0.25);
+  text-shadow: 0 0 12px rgba(178, 140, 56,0.25);
 }
 .onboarding-close {
   background: none; border: none; cursor: pointer;
@@ -294,7 +294,7 @@
 .onboarding-step {
   display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start;
   padding: 14px 16px;
-  background: rgba(10, 16, 26, 0.50);
+  background: rgba(14, 14, 14, 0.50);
   border: 1px solid var(--panel-bd);
   border-radius: 10px;
   transition: all 200ms ease;
@@ -304,7 +304,7 @@
 .onboarding-step-num {
   font-family: var(--font-mono); font-size: 22px; font-weight: 700;
   color: var(--cyan); text-align: center;
-  text-shadow: 0 0 12px rgba(0,229,255,0.40);
+  text-shadow: 0 0 12px rgba(178, 140, 56,0.40);
   line-height: 1;
   padding-top: 2px;
 }
