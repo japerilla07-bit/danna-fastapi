@@ -15,7 +15,8 @@
 // ════════════════════════════════════════════════════════════════════════
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent as RMouseEvent, TouchEvent as RTouchEvent } from 'react';
+import type { MouseEvent as RMouseEvent, TouchEvent as RTouchEvent, FormEvent } from 'react';
+import { useSpinMutation } from '@/hooks/useGameState';
 import {
   CORTE_ERRORES,
   MAX_QUIETOS,
@@ -250,6 +251,37 @@ export function CicloPanel({ data }: { data: any }) {
   const habladoRef = useRef<string>('');
   const shellRef = useRef<HTMLDivElement>(null);
   const [escala, setEscala] = useState(1);
+  // Modo celular: pantalla angosta o baja → una columna a todo el ancho con scroll propio.
+  const esMovil = () => {
+    if (typeof window === 'undefined') return false;
+    const vv = window.visualViewport;
+    const w = Math.min(window.innerWidth, vv ? vv.width : window.innerWidth, window.screen?.width || 9999);
+    const h = Math.min(window.innerHeight, vv ? vv.height : window.innerHeight, window.screen?.height || 9999);
+    return w < 760 || h < 500;
+  };
+  const [movil, setMovil] = useState<boolean>(esMovil);
+  // En celular el panel sigue la parte VISIBLE de la pantalla (visualViewport): así no se
+  // descuadra cuando el navegador desplaza la vista o abre el teclado.
+  const leerVista = () => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    return vv
+      ? { x: vv.offsetLeft, y: vv.offsetTop, w: vv.width, h: vv.height }
+      : { x: 0, y: 0, w: typeof window !== 'undefined' ? window.innerWidth : 390, h: typeof window !== 'undefined' ? window.innerHeight : 844 };
+  };
+  const [vista, setVista] = useState(leerVista);
+  useEffect(() => {
+    const f = () => { setMovil(esMovil()); setVista(leerVista()); };
+    window.addEventListener('resize', f);
+    window.addEventListener('orientationchange', f);
+    window.visualViewport?.addEventListener('resize', f);
+    window.visualViewport?.addEventListener('scroll', f);
+    return () => {
+      window.removeEventListener('resize', f);
+      window.removeEventListener('orientationchange', f);
+      window.visualViewport?.removeEventListener('resize', f);
+      window.visualViewport?.removeEventListener('scroll', f);
+    };
+  }, []);
 
   useEffect(() => guardarJSON(CLAVE, estado), [estado]);
   useEffect(() => guardarJSON(CLAVE_UI, ui), [ui]);
@@ -289,6 +321,7 @@ export function CicloPanel({ data }: { data: any }) {
   }, [count, data]);
 
   const lectura = leerVentana(estado.ventana);
+  const spinsUlt: number | null = Array.isArray(data?.sequence?.spins) && data.sequence.spins.length > 0 ? Number(data.sequence.spins[data.sequence.spins.length - 1]) : null;
   const c = estado.ciclo;
   const rev = reventonesHoy(estado);
   const ultimo = estado.ciclos[estado.ciclos.length - 1] ?? null;
@@ -348,10 +381,11 @@ export function CicloPanel({ data }: { data: any }) {
   const arrastre = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
   const empezarArrastre = useCallback((e: RMouseEvent | RTouchEvent) => {
+    if (movil) return; // en celular el panel va fijo a todo el ancho
     const p = 'touches' in e ? e.touches[0] : (e as RMouseEvent);
     arrastre.current = { x: p.clientX, y: p.clientY, px: ui.x, py: ui.y };
     setArrastrando(true);
-  }, [ui.x, ui.y]);
+  }, [ui.x, ui.y, movil]);
   useEffect(() => {
     if (!arrastrando) return;
     const mover = (ev: MouseEvent | TouchEvent) => {
@@ -381,6 +415,7 @@ export function CicloPanel({ data }: { data: any }) {
     const el = shellRef.current;
     if (!el) return;
     const ajustar = () => {
+      if (esMovil()) { setEscala(1); return; } // en celular no se escala: se hace scroll
       const h = el.offsetHeight;
       const w = el.offsetWidth;
       if (!h || !w) return;
@@ -400,7 +435,7 @@ export function CicloPanel({ data }: { data: any }) {
       ro?.disconnect();
       window.removeEventListener('resize', ajustar);
     };
-  }, [ui.min]);
+  }, [ui.min, movil]);
 
   function descargar() {
     const blob = new Blob([csvCiclos(estado)], { type: 'text/csv;charset=utf-8' });
@@ -459,7 +494,7 @@ export function CicloPanel({ data }: { data: any }) {
         <button
           type="button"
           className={`cp-min ${tema.chip}`}
-          style={{ left: ui.x, top: ui.y }}
+          style={movil ? { left: vista.x + vista.w - 76, top: vista.y + 10 } : { left: ui.x, top: ui.y }}
           aria-label={`Abrir copiloto de ciclo (${tema.fase.toLowerCase()})`}
           onMouseDown={empezarArrastre}
           onTouchStart={empezarArrastre}
@@ -472,7 +507,9 @@ export function CicloPanel({ data }: { data: any }) {
   }
 
   return (
-    <div ref={shellRef} className="cp-shell" style={{ left: ui.x, top: ui.y, transform: `scale(${escala})`, transformOrigin: 'top left', boxShadow: `0 30px 70px rgba(15,20,38,0.22), 0 4px 14px rgba(15,20,38,0.08), 0 0 0 4px ${tema.halo}` }}>
+    <div ref={shellRef} className={`cp-shell${movil ? ' cp-movil' : ''}`} style={{ ...(movil
+      ? { left: vista.x + 6, top: vista.y + 6, width: vista.w - 12, maxHeight: vista.h - 12, transform: 'none' }
+      : { left: ui.x, top: ui.y, transform: `scale(${escala})` }), transformOrigin: 'top left', boxShadow: `0 30px 70px rgba(15,20,38,0.22), 0 4px 14px rgba(15,20,38,0.08), 0 0 0 4px ${tema.halo}` }}>
       <style>{CSS}</style>
 
       {/* Cabecera (arrastrable) */}
@@ -668,6 +705,9 @@ export function CicloPanel({ data }: { data: any }) {
               </div>
             )}
           </div>
+
+          {/* Ingresar giro: mismo envío que Control de Misión (useSpinMutation) */}
+          <EntradaGiro ultimo={spinsUlt} enPausa={estado.fase === 'PAUSA'} noArrastrar={noArrastrar} />
         </div>
 
         {/* Derecha: conversación */}
@@ -768,6 +808,56 @@ export function CicloPanel({ data }: { data: any }) {
   );
 }
 
+/** Ingreso de giro dentro del panel. Usa el MISMO hook que Control de Misión (useSpinMutation),
+ *  así el motor, el bankroll, la telemetría y el copiloto reciben el giro igual que siempre. */
+function EntradaGiro({ ultimo, enPausa, noArrastrar }: { ultimo: number | null; enPausa: boolean; noArrastrar: (e: RMouseEvent | RTouchEvent) => void }) {
+  const [valor, setValor] = useState('');
+  const [aviso, setAviso] = useState<string | null>(null);
+  const mut = useSpinMutation();
+  const ref = useRef<HTMLInputElement>(null);
+  function enviar(e?: FormEvent) {
+    if (e) e.preventDefault();
+    if (mut.isPending) return;
+    setAviso(null);
+    const raw = valor.trim();
+    if (raw === '') { setAviso('Ingresa un número.'); return; }
+    const n = parseInt(raw, 10);
+    if (isNaN(n) || String(n) !== raw.replace(/^0+(?=\d)/, '')) { setAviso('Entrada inválida (0-36).'); return; }
+    if (n < 0 || n > 36) { setAviso('Fuera de rango (0-36).'); return; }
+    mut.mutate({ spin: n, notes: '' }, {
+      onSuccess: () => { setValor(''); setTimeout(() => ref.current?.focus(), 0); },
+      onError: (err: any) => setAviso(err?.message || 'Error al procesar.'),
+    });
+  }
+  return (
+    <form className="cp-card cp-spin" onSubmit={enviar} onMouseDown={noArrastrar} onTouchStart={noArrastrar}>
+      <div className="cp-card-h">
+        <span>Ingresar giro</span>
+        <span className="cp-nota">{enPausa ? 'en pausa: el motor lo registra, el ciclo no' : ultimo !== null ? `último: ${ultimo}` : 'mismo registro que Control de Misión'}</span>
+      </div>
+      <div className="cp-spin-row">
+        <input
+          ref={ref}
+          className="cp-in cp-spin-in"
+          type="text"
+          inputMode="numeric"
+          enterKeyHint="send"
+          autoComplete="off"
+          placeholder="0–36"
+          aria-label="Número que salió (0 a 36)"
+          value={valor}
+          onChange={(e) => setValor(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+          disabled={mut.isPending}
+        />
+        <button type="submit" className="cp-spin-btn" disabled={mut.isPending || !valor.trim()}>
+          {mut.isPending ? 'Procesando…' : 'Registrar giro'}
+        </button>
+      </div>
+      {aviso && <span className="cp-spin-aviso">⚠ {aviso}</span>}
+    </form>
+  );
+}
+
 /** Opciones para jugar igual en transición (sin repetir la misma jugada). */
 function opcionesTransicion(e: Estado, l: Lectura): { clave: string; fuente: string; jugada: Jugada }[] {
   const c = e.ciclo;
@@ -848,6 +938,43 @@ const CSS = `
 .cp-btn:disabled{opacity:.45;cursor:default}
 .cp-peligro{border-color:#e7a3b1;color:#b3122e}
 .cp-body{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:16px}
+.cp-spin{gap:10px;user-select:text}
+.cp-spin-row{display:flex;gap:10px;align-items:stretch}
+.cp-spin-in{flex:1 1 auto;min-width:0;font:700 24px 'JetBrains Mono',monospace;text-align:center;letter-spacing:.08em;min-height:52px;border-radius:14px;border:1.5px solid #d4dae8}
+.cp-spin-in:focus{border-color:#c99a06;box-shadow:0 0 0 4px rgba(212,160,23,.18);outline:none}
+.cp-spin-btn{flex:0 0 auto;min-height:52px;padding:0 20px;border-radius:14px;border:1px solid #8a6500;cursor:pointer;font-weight:800;font-size:14px;letter-spacing:.04em;color:#2b1d00;background:linear-gradient(135deg,#b8860b,#f5d76e 40%,#fff1a8 55%,#c99a06);box-shadow:0 8px 18px rgba(184,134,11,.28),inset 0 1px 0 rgba(255,255,255,.7)}
+.cp-spin-btn:disabled{opacity:.5;cursor:default}
+.cp-spin-aviso{font-size:12.5px;color:#b3122e}
+/* ── Celular / pantallas bajas: una columna, ancho completo, scroll propio ── */
+.cp-shell.cp-movil>*{flex-shrink:0}
+.cp-shell.cp-movil{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:10px;gap:10px;border-radius:18px;user-select:auto}
+.cp-movil .cp-head{flex-wrap:wrap;cursor:default;gap:8px;min-height:0}
+.cp-movil .cp-brand-2{display:none}
+.cp-movil .cp-brand-1{font-size:15px}
+.cp-movil .cp-badge{padding:3px 8px 3px 4px;gap:5px}
+.cp-movil .cp-badge-ico{width:22px;height:22px;font-size:11px}
+.cp-movil .cp-badge-t b{font-size:13px}.cp-movil .cp-badge-t span{font-size:10px}
+.cp-movil .cp-voz{height:38px;padding:0 10px;font-size:12px}
+.cp-movil .cp-icon{width:38px;height:38px}
+.cp-movil .cp-ajustes{grid-template-columns:1fr 1fr}
+.cp-movil .cp-body{grid-template-columns:1fr;gap:10px}
+.cp-movil .cp-col{gap:10px}
+.cp-movil .cp-holo{min-height:0;padding:14px 14px 12px}
+.cp-movil .cp-big{font-size:40px}
+.cp-movil .cp-cerrado{font-size:34px}
+.cp-movil .cp-det{font-size:13px}
+.cp-movil .cp-ring{width:120px;height:120px;margin:0}
+.cp-movil .cp-ring svg{width:120px;height:120px}
+.cp-movil .cp-ring b{font-size:28px}
+.cp-movil .cp-pausa{gap:14px}
+.cp-movil .cp-pausa-h{font-size:24px}
+.cp-movil .cp-card{padding:12px;border-radius:16px}
+.cp-movil .cp-ventana{gap:5px}
+.cp-movil .cp-ficha{height:46px;border-radius:10px}
+.cp-movil .cp-ficha b{font-size:17px}
+.cp-movil .cp-ficha small{font-size:8.5px}
+.cp-movil .cp-chat{padding:12px;border-radius:16px}
+.cp-movil .cp-spin-in{font-size:22px}
 .cp-col{display:flex;flex-direction:column;gap:14px;min-width:0}
 .cp-persp{perspective:1000px}
 .cp-holo{position:relative;isolation:isolate;min-height:272px;box-sizing:border-box;padding:20px 22px;border-radius:22px;background:linear-gradient(150deg,#fff,#f4f7fd);transition:transform .18s ease-out;display:flex;flex-direction:column;gap:10px;overflow:hidden}
