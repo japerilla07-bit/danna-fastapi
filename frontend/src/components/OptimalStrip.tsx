@@ -211,7 +211,7 @@ export function OptimalStrip({
     <div className={`strip strip-${state}`} style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
       padding: '10px 14px', marginBottom: '8px',
-      background: `linear-gradient(90deg, ${theme.dim} 0%, rgba(3,4,8,0.95) 40%, rgba(3,4,8,0.98) 100%)`,
+      background: `linear-gradient(90deg, ${theme.dim} 0%, rgba(4, 4, 4,0.95) 40%, rgba(4, 4, 4,0.98) 100%)`,
       border: `1px solid ${theme.base}60`,
       boxShadow: `0 8px 24px rgba(0,0,0,0.6), inset 0 0 25px ${theme.dim}, inset 3px 0 0 ${theme.base}`,
       clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)',
@@ -280,12 +280,12 @@ function Pillar({ name, val, thr }: { name: string; val: number; thr: number }) 
     <div className={`pillar pillar-${cls}`} style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       padding: '4px 6px', minWidth: '48px',
-      background: 'rgba(2,4,8,0.7)',
+      background: 'rgba(4, 4, 4,0.7)',
       borderBottom: `2px solid ${pTheme.color}`,
       boxShadow: `inset 0 0 15px ${pTheme.bg}`,
       clipPath: 'polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px)'
     }}>
-      <span className="pillar-k" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', color: '#64748b', letterSpacing: '0.15em', fontWeight: 700 }}>{name}</span>
+      <span className="pillar-k" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '8px', color: '#807a6f', letterSpacing: '0.15em', fontWeight: 700 }}>{name}</span>
       <span className="pillar-v" style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '13px', fontWeight: 800, color: pTheme.color, textShadow: `0 0 10px ${pTheme.color}80`, marginTop: '1px' }}>{pct}%</span>
     </div>
   );
