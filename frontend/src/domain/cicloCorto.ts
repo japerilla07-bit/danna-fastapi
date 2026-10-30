@@ -452,6 +452,22 @@ export function jugarIgual(e: Estado, jugada: Jugada): Estado {
 }
 
 /**
+ * El jugador decide NO apostar el próximo giro (cualquier voz). El ciclo sigue abierto:
+ * ese giro queda «·» (sin apuesta, no suma acierto ni error) y marcado como decisión suya.
+ * Después el copiloto sigue con su lógica normal.
+ */
+export function noApostar(e: Estado): Estado {
+  const c = e.ciclo;
+  if (e.fase !== 'CICLO' || !c || c.apuesta === false) return e;
+  return {
+    ...e,
+    ciclo: { ...c, apuesta: false, eleccionJugador: true },
+    pendientes: c.voz === 'PROPUESTA' ? { ...e.pendientes, PROPUESTA: null } : e.pendientes,
+    aviso: 'Decides no apostar el próximo giro. Igual ingrésalo: sigo leyendo la mesa.',
+  };
+}
+
+/**
  * ¿Se puede entrar ahora con esta voz?
  * · Propuesta: solo cuando la ventana aprueba (si no aprueba, no hay propuesta).
  * · Motor docenas / Motor columnas: con la ventana completa (7 giros), aunque no
@@ -684,6 +700,7 @@ export function registrarGiro(e0: Estado, numero: number, motor: MotorSnap, ahor
       // Sigue el ciclo. La Propuesta ya se actualizó arriba (estado dinámico);
       // las voces del motor siguen su pick giro a giro.
       let nueva: Jugada = c.jugada;
+      if (c.voz !== 'PROPUESTA' && c.apuesta === false) c = { ...c, apuesta: true }; // el «no apuesto» vale un solo giro
       if (c.voz !== 'PROPUESTA') {
         const m = c.voz === 'MOTOR_DOC' ? motor.doc : motor.col;
         if (m && !mismaJugada(m, c.jugada)) {
