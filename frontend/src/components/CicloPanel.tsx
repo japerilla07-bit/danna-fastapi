@@ -665,7 +665,7 @@ export function CicloPanel({ data }: { data: any }) {
                   <div className="cp-grow" />
                   {c && (
                     <div className="cp-row cp-tira">
-                      {c.numeros.slice(-6).map((n, k, arr) => {
+                      {c.numeros.slice(-5).map((n, k, arr) => {
                         const res = c.resultados[c.resultados.length - arr.length + k] ?? 'E';
                         return (
                           <span key={k} className="cp-tira-i">
@@ -705,10 +705,10 @@ export function CicloPanel({ data }: { data: any }) {
                 <Mercado l={lectura.col} frenoCero={lectura.ceros >= 2 || (lectura.motivo ?? '').startsWith('cero en')} />
               </div>
             )}
-          </div>
 
-          {/* Ingresar giro: mismo envío que Control de Misión (useSpinMutation) */}
-          <EntradaGiro ultimo={spinsUlt} enPausa={estado.fase === 'PAUSA'} noArrastrar={noArrastrar} />
+            {/* Ingresar giro: mismo envío que Control de Misión (useSpinMutation) */}
+            <EntradaGiro ultimo={spinsUlt} enPausa={estado.fase === 'PAUSA'} noArrastrar={noArrastrar} />
+          </div>
         </div>
 
         {/* Derecha: conversación */}
@@ -837,7 +837,7 @@ function EntradaGiro({ ultimo, enPausa, noArrastrar }: { ultimo: number | null; 
     });
   }
   return (
-    <form className="cp-card cp-spin" onSubmit={enviar} onMouseDown={noArrastrar} onTouchStart={noArrastrar}>
+    <form className="cp-spin" onSubmit={enviar} onMouseDown={noArrastrar} onTouchStart={noArrastrar}>
       <div className="cp-card-h">
         <span>Ingresar giro</span>
         <span className="cp-nota">{enPausa ? 'en pausa: el motor lo registra, el ciclo no' : ultimo !== null ? `último: ${ultimo}` : 'mismo registro que Control de Misión'}</span>
@@ -945,18 +945,22 @@ const CSS = `
 .cp-btn:disabled{opacity:.45;cursor:default}
 .cp-peligro{border-color:#e7a3b1;color:#b3122e}
 .cp-body{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:16px}
-/* Tamaño ESTABLE (computador/tablet): altura fija; lo que crezca se desplaza por dentro. */
-.cp-shell:not(.cp-movil){height:860px}
-.cp-shell:not(.cp-movil) .cp-body{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr)}
-.cp-shell:not(.cp-movil) .cp-col{min-height:0}
-.cp-shell:not(.cp-movil) .cp-chat{min-height:0;overflow:hidden}
+/* Tamaño ESTABLE (computador/tablet): la altura la pone la columna izquierda; la conversación
+   se desplaza por dentro y «Tu día» va en una sola línea. */
+.cp-shell:not(.cp-movil){min-height:860px}
+.cp-shell:not(.cp-movil) .cp-holo .cp-det{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cp-shell:not(.cp-movil) .cp-body{flex:1 1 auto}
+.cp-shell:not(.cp-movil) .cp-chat{contain:size;min-height:0;overflow:hidden}
 .cp-shell:not(.cp-movil) .cp-msgs{min-height:0;overflow-y:auto;scrollbar-width:thin}
-.cp-shell:not(.cp-movil) .cp-replies{flex-shrink:0;max-height:62%;overflow-y:auto;scrollbar-width:thin}
-.cp-spin{gap:10px;user-select:text}
+.cp-shell:not(.cp-movil) .cp-replies{flex-shrink:0;max-height:66%;overflow-y:auto;scrollbar-width:thin}
+.cp-shell:not(.cp-movil) .cp-dia{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+.cp-shell:not(.cp-movil) .cp-dia>*{flex-shrink:0}
+.cp-shell:not(.cp-movil) .cp-orbes{flex-wrap:nowrap}
+.cp-spin{display:flex;flex-direction:column;gap:8px;user-select:text;border-top:1px solid #e3e8f2;padding-top:10px}
 .cp-spin-row{display:flex;gap:10px;align-items:stretch}
-.cp-spin-in{flex:1 1 auto;min-width:0;font:700 24px 'JetBrains Mono',monospace;text-align:center;letter-spacing:.08em;min-height:52px;border-radius:14px;border:1.5px solid #d4dae8}
+.cp-spin-in{flex:1 1 auto;min-width:0;font:700 22px 'JetBrains Mono',monospace;text-align:center;letter-spacing:.08em;min-height:46px;border-radius:14px;border:1.5px solid #d4dae8}
 .cp-spin-in:focus{border-color:#c99a06;box-shadow:0 0 0 4px rgba(212,160,23,.18);outline:none}
-.cp-spin-btn{flex:0 0 auto;min-height:52px;padding:0 20px;border-radius:14px;border:1px solid #8a6500;cursor:pointer;font-weight:800;font-size:14px;letter-spacing:.04em;color:#2b1d00;background:linear-gradient(135deg,#b8860b,#f5d76e 40%,#fff1a8 55%,#c99a06);box-shadow:0 8px 18px rgba(184,134,11,.28),inset 0 1px 0 rgba(255,255,255,.7)}
+.cp-spin-btn{flex:0 0 auto;min-height:46px;padding:0 20px;border-radius:14px;border:1px solid #8a6500;cursor:pointer;font-weight:800;font-size:14px;letter-spacing:.04em;color:#2b1d00;background:linear-gradient(135deg,#b8860b,#f5d76e 40%,#fff1a8 55%,#c99a06);box-shadow:0 8px 18px rgba(184,134,11,.28),inset 0 1px 0 rgba(255,255,255,.7)}
 .cp-spin-btn:disabled{opacity:.5;cursor:default}
 .cp-spin-aviso{font-size:12.5px;color:#b3122e}
 /* ── Celular / pantallas bajas: una columna, ancho completo, scroll propio ── */
@@ -1010,15 +1014,15 @@ const CSS = `
 .cp-pausa-h{font-size:34px;font-weight:800;line-height:1.05;color:#0f1426}
 .cp-orbes{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 14px;border-radius:16px;background:#f6f8fc;border:1px solid #e3e8f2}
 .cp-orbes-g{display:flex;flex-direction:column;gap:6px}
-.cp-mini{font-size:11.5px;color:#475069}
+.cp-mini{font-size:11.5px;color:#475069;white-space:nowrap}
 .cp-sep{width:1px;align-self:stretch;background:#e3e8f2}
 .cp-orbe-h{width:32px;height:32px;border-radius:50%;background:#fff;border:2px solid #d4dae8;box-sizing:border-box}
 .cp-orbe-e{width:32px;height:32px;border-radius:9px;transform:rotate(45deg) scale(.78);background:#fff;border:2px solid #d4dae8;box-sizing:border-box}
 .cp-orbe-h.on{background:linear-gradient(135deg,#7a5800,#d4a017 25%,#fff1a8 45%,#c99a06 65%,#7a5800);border:0;box-shadow:0 0 16px #d4a017,0 6px 14px rgba(212,160,23,.4),inset 0 1px 0 rgba(255,255,255,.6)}
 .cp-orbe-e.on{background:linear-gradient(135deg,#4a000e,#b3122e 25%,#ff7088 45%,#c8102e 65%,#5c0012);border:0;box-shadow:0 0 16px #c8102e,0 6px 14px rgba(200,16,46,.4),inset 0 1px 0 rgba(255,255,255,.6)}
-.cp-tira{gap:6px}
+.cp-tira{gap:5px;flex-wrap:nowrap;min-width:0}
 .cp-tira-i{display:flex;flex-direction:column;align-items:center;gap:3px}
-.cp-num{min-width:32px;height:32px;padding:0 4px;box-sizing:border-box;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font:700 13px 'JetBrains Mono',monospace;color:#fff}
+.cp-num{min-width:28px;height:28px;padding:0 4px;box-sizing:border-box;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font:700 13px 'JetBrains Mono',monospace;color:#fff}
 .cp-num[data-color="r"]{background:#d1213b}.cp-num[data-color="n"]{background:#16181f}.cp-num[data-color="v"]{background:#0f8a4c}
 .cp-num[data-res="A"]{box-shadow:0 0 0 2px #fff,0 0 0 4px #d4a017,0 0 14px rgba(212,160,23,.65)}
 .cp-num[data-res="E"]{box-shadow:0 0 0 2px #fff,0 0 0 4px #c8102e,0 0 14px rgba(200,16,46,.55)}
