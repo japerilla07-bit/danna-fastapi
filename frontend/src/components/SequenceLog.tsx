@@ -17,7 +17,7 @@ interface Props {
 // ── PALETA GEASS / SHIKON PARA LOS CHIPS ──
 const THEME = {
   red: { bg: 'linear-gradient(135deg, rgba(217,11,44,0.9) 0%, rgba(255,30,56,0.5) 100%)', border: 'rgba(255,30,56,0.8)', glow: 'rgba(255,30,56,0.5)', text: '#ffffff' },
-  black: { bg: 'linear-gradient(135deg, rgba(10,13,26,0.9) 0%, rgba(28,33,53,0.8) 100%)', border: 'rgba(92,104,122,0.6)', glow: 'rgba(92,104,122,0.4)', text: '#cbd5e1' },
+  black: { bg: 'linear-gradient(135deg, rgba(14, 14, 14,0.9) 0%, rgba(30, 30, 30,0.8) 100%)', border: 'rgba(114, 109, 100,0.6)', glow: 'rgba(114, 109, 100,0.4)', text: '#cbd5e1' },
   green: { bg: 'linear-gradient(135deg, rgba(0,255,157,0.8) 0%, rgba(16,229,123,0.4) 100%)', border: 'rgba(0,255,157,0.9)', glow: 'rgba(0,255,157,0.6)', text: '#021a0d' },
 };
 
@@ -29,19 +29,19 @@ export function SequenceLog({ spins, limit = 12 }: Props) {
     <div className="panel" style={{
       padding: '12px 14px',
       clipPath: 'polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px)',
-      background: 'linear-gradient(135deg, rgba(10,14,28,0.9) 0%, rgba(3,4,8,0.95) 100%)',
-      border: '1px solid rgba(0,229,255,0.25)',
-      boxShadow: '0 6px 20px rgba(0,0,0,0.6), inset 0 0 20px rgba(0,229,255,0.05)',
+      background: 'linear-gradient(135deg, rgba(14, 14, 14,0.9) 0%, rgba(4, 4, 4,0.95) 100%)',
+      border: '1px solid rgba(178, 140, 56,0.25)',
+      boxShadow: '0 6px 20px rgba(0,0,0,0.6), inset 0 0 20px rgba(178, 140, 56,0.05)',
       backdropFilter: 'blur(12px)',
       marginBottom: '10px'
     }}>
       <div className="seqlog-title" style={{
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: '9px',
-        color: '#00e5ff',
+        color: '#b28c38',
         letterSpacing: '0.25em',
         fontWeight: 800,
-        textShadow: '0 0 10px rgba(0,229,255,0.6)',
+        textShadow: '0 0 10px rgba(178, 140, 56,0.6)',
         marginBottom: '12px',
         display: 'flex',
         alignItems: 'center',
@@ -49,9 +49,9 @@ export function SequenceLog({ spins, limit = 12 }: Props) {
       }}>
         {/* Orbe de rastreo */}
         <span style={{ 
-          width: '8px', height: '8px', background: '#00e5ff', 
+          width: '8px', height: '8px', background: '#b28c38', 
           clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', 
-          boxShadow: '0 0 10px #00e5ff' 
+          boxShadow: '0 0 10px #b28c38' 
         }} />
         SEQUENCE LOG · LAST {tail.length || limit}
       </div>
@@ -60,10 +60,10 @@ export function SequenceLog({ spins, limit = 12 }: Props) {
         <div className="seqlog-empty" style={{
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: '11px',
-          color: '#5c687a',
+          color: '#726d64',
           textAlign: 'center',
           padding: '12px',
-          border: '1px dashed rgba(92,104,122,0.4)',
+          border: '1px dashed rgba(114, 109, 100,0.4)',
           background: 'rgba(0,0,0,0.3)'
         }}>
           Sin spins todavía
