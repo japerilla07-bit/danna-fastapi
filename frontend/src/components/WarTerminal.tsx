@@ -106,20 +106,20 @@ interface Props {
 
 // ── TEMA VISUAL GEASS / SHIKON PARA LA TERMINAL ──
 const TAG_THEME: Record<string, { color: string; glow: string }> = {
-  SYSTEM:   { color: '#00e5ff', glow: 'rgba(0,229,255,0.6)' },   // Cyan
+  SYSTEM:   { color: '#b28c38', glow: 'rgba(178, 140, 56,0.6)' },   // Cyan
   DANNA:    { color: '#ffdf60', glow: 'rgba(255,223,96,0.6)' },  // Dorado
   GUARDIAN: { color: '#ff1e38', glow: 'rgba(255,30,56,0.8)' },   // Carmesí
   PILOT:    { color: '#00ff9d', glow: 'rgba(0,255,157,0.6)' },   // Jade
   WARN:     { color: '#ff1e38', glow: 'rgba(255,30,56,0.8)' },   // Carmesí
-  INFO:     { color: '#94a3b8', glow: 'transparent' },           // Gris
+  INFO:     { color: '#aca8a0', glow: 'transparent' },           // Gris
 };
 
 const containerStyle: React.CSSProperties = {
   padding: '12px 14px',
   clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)',
-  background: 'linear-gradient(135deg, rgba(10,14,28,0.95) 0%, rgba(3,4,8,0.98) 100%)',
-  border: '1px solid rgba(0,229,255,0.25)',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.6), inset 0 0 20px rgba(0,229,255,0.05)',
+  background: 'linear-gradient(135deg, rgba(14, 14, 14,0.95) 0%, rgba(4, 4, 4,0.98) 100%)',
+  border: '1px solid rgba(178, 140, 56,0.25)',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.6), inset 0 0 20px rgba(178, 140, 56,0.05)',
   fontFamily: "'JetBrains Mono', monospace",
   fontSize: '10px',
   position: 'relative',
@@ -132,7 +132,7 @@ const containerStyle: React.CSSProperties = {
 const bgOverlay: React.CSSProperties = {
   position: 'absolute',
   inset: 0,
-  background: 'repeating-linear-gradient(0deg, rgba(0,229,255,0.02) 0px, rgba(0,229,255,0.02) 1px, transparent 1px, transparent 4px)',
+  background: 'repeating-linear-gradient(0deg, rgba(178, 140, 56,0.02) 0px, rgba(178, 140, 56,0.02) 1px, transparent 1px, transparent 4px)',
   pointerEvents: 'none',
   zIndex: 0,
 };
@@ -154,7 +154,7 @@ export function WarTerminal({ payload, spins }: Props) {
         {styleBlock}
         <div style={bgOverlay} />
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ color: '#5c687a' }}>{nowTs()}</span>
+          <span style={{ color: '#726d64' }}>{nowTs()}</span>
           <span style={{ color: TAG_THEME.SYSTEM.color, textShadow: `0 0 8px ${TAG_THEME.SYSTEM.glow}`, fontWeight: 800 }}>[SYSTEM]</span>
           <span style={{ color: '#cbd5e1' }}>aguardando datos...</span>
           <span className="wt-cursor-blink" style={{ display: 'inline-block', width: '6px', height: '12px', background: TAG_THEME.SYSTEM.color, boxShadow: `0 0 8px ${TAG_THEME.SYSTEM.glow}`, marginTop: '1px' }} />
@@ -176,7 +176,7 @@ export function WarTerminal({ payload, spins }: Props) {
           return (
             <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '5px', lineHeight: 1.3 }}>
               {/* Timestamp oscuro */}
-              <span style={{ color: '#5c687a', flexShrink: 0 }}>{l.ts}</span>
+              <span style={{ color: '#726d64', flexShrink: 0 }}>{l.ts}</span>
               
               {/* Tag con neón intenso */}
               <span style={{ color: t.color, textShadow: `0 0 8px ${t.glow}`, fontWeight: 800, flexShrink: 0 }}>
