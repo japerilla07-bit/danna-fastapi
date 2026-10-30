@@ -140,13 +140,13 @@ const CATEGORIES = [
 //      filas, para seguir W/L/SEQ/MAX horizontalmente sin más altura.
 const STATE_COLOR: Record<BadgeState, string> = {
   bet: '#4ade80',  // verde — evento accionable
-  prb: '#f4f8ff',  // blanco neón — esperar (antes ámbar)
-  wt:  '#67e8f9',  // cian — sin acción, simplemente está ahí
+  prb: '#d0b16c',  // blanco neón — esperar (antes ámbar)
+  wt:  '#d0b16c',  // cian — sin acción, simplemente está ahí
 };
 const BADGE_BG: Record<BadgeState, string> = {
   bet: 'rgba(74,222,128,0.14)',
-  prb: 'rgba(244,248,255,0.12)',
-  wt:  'rgba(34,211,238,0.12)',
+  prb: 'rgba(208, 177, 108,0.12)',
+  wt:  'rgba(190, 149, 60,0.12)',
 };
 const BADGE_TXT: Record<BadgeState, string> = { bet: 'BET', prb: 'PRB', wt: 'WT' };
 
@@ -167,7 +167,7 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebr
   const max = safeInt(counter?.max_consec_errors);
   const avg = safeInt(errorHist?.avg_errors ? errorHist.avg_errors * 10 : 0) / 10;
   const avgStr = (w + l) === 0 ? '0.0' : avg.toFixed(1);
-  const accent = god ? '#fca5a5' : '#67e8f9';
+  const accent = god ? '#fca5a5' : '#d0b16c';
   const stateColor = state === 'bet' && god ? '#f87171' : STATE_COLOR[state];
   const stateBg = state === 'bet' && god ? 'rgba(248,113,113,0.16)' : BADGE_BG[state];
   const activo = state === 'bet'; // único estado que "brilla" en la fila
@@ -197,7 +197,7 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebr
       </span>
 
       {/* nombre */}
-      <span style={{ fontSize: 12.5, color: '#a8b7cc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 98, flexShrink: 0 }}>
+      <span style={{ fontSize: 12.5, color: '#bfbcb5', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 98, flexShrink: 0 }}>
         {label}
       </span>
 
@@ -216,14 +216,14 @@ function CategoryRow({ label, state, pick, counter, errorHist, god = false, zebr
       </span>
 
       {/* stats — nunca se recortan */}
-      <span style={{ display: 'flex', gap: 8, fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap' }}>
+      <span style={{ display: 'flex', gap: 8, fontSize: 11, color: '#969186', flexShrink: 0, whiteSpace: 'nowrap' }}>
         <span>W:<b style={{ color: '#e2e8f0' }}>{w}</b></span>
         <span>L:<b style={{ color: '#e2e8f0' }}>{l}</b></span>
         <span>Sq:<b style={{ color: '#e2e8f0' }}>{seq}</b></span>
         <span>Mx:<b style={{ color: '#e2e8f0' }}>{max}</b></span>
       </span>
 
-      <span style={{ fontSize: 11, color: '#7c8aa0', flexShrink: 0, whiteSpace: 'nowrap', width: 50 }}>
+      <span style={{ fontSize: 11, color: '#969186', flexShrink: 0, whiteSpace: 'nowrap', width: 50 }}>
         AVG:<b style={{ color: '#e2e8f0' }}>{avgStr}</b>
       </span>
     </div>
@@ -296,18 +296,18 @@ export function CategoryTable({
     <>
       {!inlinePanel && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingBottom: 8 }}>
-          <span style={{ color: god ? '#f87171' : '#22d3ee', fontSize: 11, textShadow: god ? '0 0 8px rgba(248,113,113,0.6)' : '0 0 8px rgba(34,211,238,0.6)' }}>◈</span>
-          <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.2em', color: '#e2e8f0', textShadow: god ? '0 0 10px rgba(248,113,113,0.35)' : '0 0 10px rgba(34,211,238,0.35)' }}>{title}</span>
+          <span style={{ color: god ? '#f87171' : '#be953c', fontSize: 11, textShadow: god ? '0 0 8px rgba(248,113,113,0.6)' : '0 0 8px rgba(190, 149, 60,0.6)' }}>◈</span>
+          <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.2em', color: '#e2e8f0', textShadow: god ? '0 0 10px rgba(248,113,113,0.35)' : '0 0 10px rgba(190, 149, 60,0.35)' }}>{title}</span>
         </div>
       )}
       {/* encabezado de columnas — mismos anchos que CategoryRow, así queda
           claro qué es cada número sin tener que adivinar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 7px 6px 9px', borderBottom: '1px solid rgba(34,211,238,0.18)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 7px 6px 9px', borderBottom: '1px solid rgba(190, 149, 60,0.18)' }}>
         <span style={{ width: 23, flexShrink: 0 }} />
-        <span style={{ width: 98, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>CATEGORÍA</span>
-        <span style={{ flex: '1 1 auto', minWidth: 40, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>PICK</span>
-        <span style={{ flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700, width: 112 }}>W / L / SEQ / MAX</span>
-        <span style={{ width: 50, flexShrink: 0, fontSize: 9.5, color: '#64748b', letterSpacing: '0.1em', fontWeight: 700 }}>AVG</span>
+        <span style={{ width: 98, flexShrink: 0, fontSize: 9.5, color: '#807a6f', letterSpacing: '0.1em', fontWeight: 700 }}>CATEGORÍA</span>
+        <span style={{ flex: '1 1 auto', minWidth: 40, fontSize: 9.5, color: '#807a6f', letterSpacing: '0.1em', fontWeight: 700 }}>PICK</span>
+        <span style={{ flexShrink: 0, fontSize: 9.5, color: '#807a6f', letterSpacing: '0.1em', fontWeight: 700, width: 112 }}>W / L / SEQ / MAX</span>
+        <span style={{ width: 50, flexShrink: 0, fontSize: 9.5, color: '#807a6f', letterSpacing: '0.1em', fontWeight: 700 }}>AVG</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {rows.map((row, i) => (
@@ -333,12 +333,12 @@ export function CategoryTable({
     <div
       style={{
         display: 'flex', flexDirection: 'column',
-        background: 'rgba(10, 16, 28, 0.55)',
+        background: 'rgba(14, 14, 14, 0.55)',
         backdropFilter: 'blur(14px)',
         WebkitBackdropFilter: 'blur(14px)',
-        border: '1px solid rgba(34, 211, 238, 0.25)',
+        border: '1px solid rgba(190, 149, 60, 0.25)',
         borderRadius: 8,
-        boxShadow: '0 0 16px rgba(34, 211, 238, 0.08), inset 0 1px 0 rgba(34,211,238,0.05)',
+        boxShadow: '0 0 16px rgba(190, 149, 60, 0.08), inset 0 1px 0 rgba(190, 149, 60,0.05)',
         padding: '10px 10px 2px',
       }}
     >
