@@ -1,0 +1,73 @@
+/* ════════════════════════════════════════════════════════════════
+ * TEMA «SHINKIRŌ» — pantalla principal (oct 2026)
+ * MARCO: negro azabache + oro metálico (champaña) + rojo metálico (vino).
+ * ESTADOS: verde / ámbar / rojo vivo se quedan como siempre, para que los
+ * avisos de los paneles resalten y no peleen con la decoración.
+ * Solo cambia COLORES (no lógica ni tamaños). Se activa únicamente en la
+ * pantalla principal (body que contiene .app-wrap); login y landing igual.
+ * ════════════════════════════════════════════════════════════════ */
+
+body:has(.app-wrap) {
+  /* fondo negro azabache */
+  --bg-0: #030303;
+  --bg-1: #08080a;
+  --bg-2: #0e0e10;
+
+  /* paneles negros con filo de oro */
+  --panel:       rgba(6, 6, 7, 0.92);
+  --panel-bd:    rgba(201, 167, 90, 0.22);
+  --panel-bd-hi: rgba(201, 167, 90, 0.48);
+
+  /* el cian (decoración) pasa a ORO CHAMPAÑA metálico */
+  --cyan:       #c9a75a;
+  --cyan-2:     #9c7c35;
+  --cyan-soft:  rgba(201, 167, 90, 0.40);
+  --cyan-bleed: rgba(201, 167, 90, 0.05);
+
+  /* violeta/magenta (decoración) pasan a ROJO METÁLICO con brillo */
+  --violet:  #c8102e;
+  --magenta: #e01a3c;
+
+  /* --green, --amber, --red: ESTADOS → se quedan como estaban */
+
+  /* texto: blanco hueso y plata cálida */
+  --txt-hi:  #f3efe6;
+  --txt-md:  #aaa395;
+  --txt-lo:  #6d675c;
+  --txt-vlo: #3e3a33;
+
+  --w-voisins: #c9a75a;
+
+  background:
+    radial-gradient(ellipse at 12% -12%, rgba(200, 16, 46, 0.14) 0%, transparent 48%),
+    radial-gradient(ellipse at 92% 112%, rgba(200, 16, 46, 0.10) 0%, transparent 48%),
+    radial-gradient(ellipse at 50% 50%, rgba(201, 167, 90, 0.03) 0%, transparent 70%),
+    #030303 !important;
+  color: #f3efe6;
+}
+
+/* ── Marca: rojo metálico con brillo (luz que barre la letra) ── */
+@keyframes shk-brillo { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+body:has(.app-wrap) .hud-brand-app {
+  background: linear-gradient(110deg,
+      #a50f2b 0%, #e8203f 20%, #ff3352 34%, #ffe3e8 44%, #ff3352 52%,
+      #d0122f 66%, #ff2a4a 82%, #a50f2b 100%) !important;
+  background-size: 200% 100% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  animation: shk-brillo 6s linear infinite;
+  filter: drop-shadow(0 0 1px rgba(255, 120, 140, 0.55)) drop-shadow(0 2px 14px rgba(200, 16, 46, 0.55));
+}
+@media (prefers-reduced-motion: reduce) { body:has(.app-wrap) .hud-brand-app { animation: none; } }
+body:has(.app-wrap) .hud-brand-sub { color: #9c8a63; }
+
+/* ── Paneles: negro profundo con un brillo metálico arriba ── */
+body:has(.app-wrap) .panel,
+body:has(.app-wrap) .hud {
+  background-image: linear-gradient(180deg, rgba(201, 167, 90, 0.06) 0%, rgba(0, 0, 0, 0) 26%) !important;
+  background-color: rgba(6, 6, 7, 0.92) !important;
+}
+
+body:has(.app-wrap) ::selection { background: rgba(200, 16, 46, 0.50); color: #fff; }
+body:has(.app-wrap) ::-webkit-scrollbar-thumb { background: linear-gradient(#7a0019, #e8203f 50%, #c9a75a); border-radius: 8px; }
