@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as RMouseEvent, TouchEvent as RTouchEvent, FormEvent } from 'react';
 import { useSpinMutation } from '@/hooks/useGameState';
+import { useFxPref } from '@/neural/prefs';
 import {
   CORTE_ERRORES,
   MAX_QUIETOS,
@@ -241,6 +242,7 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
 export function CicloPanel({ data }: { data: any }) {
   const [estado, setEstado] = useState<Estado>(cargarEstado);
   const [ui, setUi] = useState<PrefsUI>(cargarUI);
+  const [fx, setFx] = useFxPref(); // red neuronal de fondo (misma preferencia de efectos de la app)
   const [ahora, setAhora] = useState<number>(() => Date.now());
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const [verAjustes, setVerAjustes] = useState(false);
@@ -512,6 +514,7 @@ export function CicloPanel({ data }: { data: any }) {
       ? { left: vista.x + 6, top: vista.y + 6, width: vista.w - 12, maxHeight: vista.h - 12, transform: 'none' }
       : { left: ui.x, top: ui.y, transform: `scale(${escala})` }), transformOrigin: 'top left', boxShadow: `0 30px 70px rgba(15,20,38,0.22), 0 4px 14px rgba(15,20,38,0.08), 0 0 0 4px ${tema.halo}` }}>
       <style>{CSS}</style>
+      {fx && <RedNeuronal tono={tema.chip === 'cp-rojo' || (c?.apuesta === false) ? 'rojo' : 'oro'} pulso={estado.giros} />}
 
       {/* Cabecera (arrastrable) */}
       <div className="cp-head" onMouseDown={empezarArrastre} onTouchStart={empezarArrastre}>
@@ -563,6 +566,8 @@ export function CicloPanel({ data }: { data: any }) {
           </div>
           <label className="cp-check"><input type="checkbox" checked={ui.avisarPausa}
             onChange={(ev) => setUi((u) => ({ ...u, avisarPausa: ev.target.checked }))} /> Avisar con sonido cuando termine la pausa</label>
+          <label className="cp-check"><input type="checkbox" checked={fx}
+            onChange={(ev) => setFx(ev.target.checked)} /> Red neuronal de fondo (animación)</label>
           <div className="cp-row">
             <button type="button" className="cp-btn" onClick={descargar} disabled={estado.ciclos.length === 0}>Descargar registro (CSV)</button>
             {!confirmarDia
@@ -819,6 +824,129 @@ export function CicloPanel({ data }: { data: any }) {
   );
 }
 
+/**
+ * Red neuronal de fondo: nodos que laten y destellos que viajan por las conexiones.
+ * Solo decorativa (no lee ni cambia nada del copiloto). Pausa con la pestaña oculta,
+ * respeta «reducir movimiento» y dibuja a ~30 fps. `pulso` cambia con cada giro → ráfaga.
+ */
+function RedNeuronal({ tono, pulso }: { tono: 'oro' | 'rojo'; pulso: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const tonoRef = useRef(tono);
+  const rafaga = useRef(0);
+  tonoRef.current = tono;
+  const prevPulso = useRef(pulso);
+  if (pulso !== prevPulso.current) { prevPulso.current = pulso; rafaga.current += 1; }
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    const reducir = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    let semilla = 7;
+    const rnd = () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646; };
+    const N = 44;
+    const nodos = Array.from({ length: N }, () => ({
+      x: rnd(), y: rnd(), r: 1.4 + rnd() * 1.6, fase: rnd() * Math.PI * 2, vel: 0.6 + rnd() * 0.9,
+      ax: 0.008 + rnd() * 0.012, ay: 0.008 + rnd() * 0.012, fx: rnd() * 6, fy: rnd() * 6,
+    }));
+    type Destello = { a: number; b: number; t0: number; dur: number; rojo: boolean };
+    let destellos: Destello[] = [];
+    let w = 0, h = 0, dpr = 1, ultimo = 0, proximo = 0, vistaRafaga = rafaga.current, raf = 0;
+    const medir = () => {
+      const p = cv.parentElement;
+      if (!p) return;
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      w = p.scrollWidth; h = p.scrollHeight;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      cv.style.width = `${w}px`; cv.style.height = `${h}px`;
+    };
+    medir();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(medir) : null;
+    if (cv.parentElement) ro?.observe(cv.parentElement);
+    const pos = (n: (typeof nodos)[number], t: number) => ({
+      x: (n.x + Math.sin(t * 0.00018 * n.vel + n.fx) * n.ax) * w,
+      y: (n.y + Math.cos(t * 0.00016 * n.vel + n.fy) * n.ay) * h,
+    });
+    const vecinos = (pts: { x: number; y: number }[]) => {
+      const lim = Math.max(110, Math.min(w, h) * 0.24);
+      const L: [number, number, number][] = [];
+      for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+        const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+        if (d < lim) L.push([i, j, 1 - d / lim]);
+      }
+      return L;
+    };
+    const lanzar = (t: number, desde?: number) => {
+      const pts = nodos.map((n) => pos(n, t));
+      const L = vecinos(pts);
+      if (!L.length) return;
+      const rojoBase = tonoRef.current === 'rojo';
+      const cand = desde === undefined ? L : L.filter(([i, j]) => i === desde || j === desde);
+      const usa = cand.length ? cand : L;
+      const [i, j] = usa[Math.floor(rnd() * usa.length)];
+      const ida = desde === undefined ? rnd() < 0.5 : i === desde;
+      destellos.push({ a: ida ? i : j, b: ida ? j : i, t0: t, dur: 900 + rnd() * 900, rojo: rojoBase ? rnd() < 0.75 : rnd() < 0.3 });
+    };
+    const dibujar = (t: number) => {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      const pts = nodos.map((n) => pos(n, t));
+      const L = vecinos(pts);
+      const rojo = tonoRef.current === 'rojo';
+      // conexiones
+      for (const [i, j, f] of L) {
+        ctx.strokeStyle = rojo ? `rgba(179,18,46,${0.16 * f + 0.05})` : `rgba(184,134,11,${0.20 * f + 0.05})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[j].x, pts[j].y); ctx.stroke();
+      }
+      // nodos que laten
+      nodos.forEach((n, k) => {
+        const lat = 0.5 + 0.5 * Math.sin(t * 0.0022 * n.vel + n.fase);
+        const r = n.r * (1 + 0.45 * lat);
+        const g = ctx.createRadialGradient(pts[k].x, pts[k].y, 0, pts[k].x, pts[k].y, r * 5);
+        const col = rojo && k % 3 !== 0 ? '200,16,46' : '212,160,23';
+        g.addColorStop(0, `rgba(${col},${0.35 + 0.35 * lat})`);
+        g.addColorStop(1, `rgba(${col},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(pts[k].x, pts[k].y, r * 5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = `rgba(${col},${0.55 + 0.4 * lat})`;
+        ctx.beginPath(); ctx.arc(pts[k].x, pts[k].y, r, 0, Math.PI * 2); ctx.fill();
+      });
+      // destellos viajando
+      destellos = destellos.filter((d) => t - d.t0 < d.dur);
+      for (const d of destellos) {
+        const u = (t - d.t0) / d.dur;
+        const A = pts[d.a], B = pts[d.b];
+        const x = A.x + (B.x - A.x) * u, y = A.y + (B.y - A.y) * u;
+        const col = d.rojo ? '224,49,79' : '245,215,110';
+        const lg = ctx.createLinearGradient(A.x, A.y, x, y);
+        lg.addColorStop(0, `rgba(${col},0)`); lg.addColorStop(1, `rgba(${col},0.55)`);
+        ctx.strokeStyle = lg; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(A.x + (x - A.x) * 0.4, A.y + (y - A.y) * 0.4); ctx.lineTo(x, y); ctx.stroke();
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 12);
+        g.addColorStop(0, `rgba(255,255,255,0.95)`); g.addColorStop(0.25, `rgba(${col},0.85)`); g.addColorStop(1, `rgba(${col},0)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
+      }
+    };
+    const ciclo = (t: number) => {
+      raf = requestAnimationFrame(ciclo);
+      if (document.hidden || t - ultimo < 33) return;
+      ultimo = t;
+      if (rafaga.current !== vistaRafaga) {
+        vistaRafaga = rafaga.current;
+        const hub = Math.floor(rnd() * N);
+        for (let k = 0; k < 10; k++) lanzar(t, hub);
+      }
+      if (t > proximo) { lanzar(t); proximo = t + 260 + rnd() * 340; }
+      dibujar(t);
+    };
+    if (reducir) dibujar(0);
+    else raf = requestAnimationFrame(ciclo);
+    return () => { cancelAnimationFrame(raf); ro?.disconnect(); };
+  }, []);
+  return <canvas ref={ref} className="cp-red" aria-hidden="true" />;
+}
+
 /** Ingreso de giro dentro del panel. Usa el MISMO hook que Control de Misión (useSpinMutation),
  *  así el motor, el bankroll, la telemetría y el copiloto reciben el giro igual que siempre. */
 function EntradaGiro({ ultimo, enPausa, noArrastrar }: { ultimo: number | null; enPausa: boolean; noArrastrar: (e: RMouseEvent | RTouchEvent) => void }) {
@@ -952,6 +1080,12 @@ const CSS = `
 .cp-btn:disabled{opacity:.45;cursor:default}
 .cp-peligro{border-color:#e7a3b1;color:#b3122e}
 .cp-body{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:16px}
+/* Red neuronal de fondo: detrás de todo, sin capturar clics */
+.cp-red{position:absolute;left:0;top:0;pointer-events:none;z-index:0;border-radius:inherit}
+.cp-shell>:not(.cp-red):not(.cp-ajustes):not(style){position:relative;z-index:1}
+.cp-shell .cp-card{background:rgba(255,255,255,.78);backdrop-filter:blur(1.5px);-webkit-backdrop-filter:blur(1.5px)}
+.cp-shell .cp-dia{background:rgba(246,248,252,.74)}
+.cp-shell .cp-holo{background:linear-gradient(150deg,rgba(255,255,255,.82),rgba(244,247,253,.78))}
 /* Tamaño ESTABLE (computador/tablet): la altura la pone la columna izquierda; la conversación
    se desplaza por dentro y «Tu día» va en una sola línea. */
 .cp-shell:not(.cp-movil){min-height:860px}
