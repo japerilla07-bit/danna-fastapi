@@ -23,8 +23,8 @@ import { fxEnabled, subscribeFx } from './prefs';
 
 type C3 = [number, number, number];
 const RGB: Record<ToneVoz, C3> = {
-  cian: [46, 232, 255], esmeralda: [36, 242, 163], ambar: [255, 200, 61], rojo: [255, 70, 104],
-  capa1: [91, 157, 255], escudo: [194, 139, 255],
+  cian: [199, 161, 78], esmeralda: [36, 242, 163], ambar: [255, 200, 61], rojo: [255, 70, 104],
+  capa1: [208, 177, 108], escudo: [237, 18, 54],
 };
 const rgba = (c: C3, a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`;
 
