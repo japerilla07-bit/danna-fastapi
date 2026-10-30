@@ -167,9 +167,9 @@ function jugadaHablada(j: Jugada | null): string {
 // ── Textos del copiloto ──────────────────────────────────────────────────
 const NOMBRE_MKT = { doc: 'Docenas', col: 'Columnas' } as const;
 const REGLAS_TXT =
-  'Las 5 reglas: 1) una zona sale al menos 2 veces más que la menos salida; 2) el conteo y lo más reciente señalan el mismo par; ' +
-  '3) la zona de afuera no salió en los últimos 4 giros; 4) la de afuera salió como máximo 1 vez en los 7; 5) menos de 2 ceros en la ventana y ningún cero en los últimos 4. ' +
-  'Dentro del ciclo: si la mesa deja de sostener tu par, es transición y no apuestas ese giro; un par nuevo se juega solo cuando la mesa lo aprueba 2 veces seguidas; 7 giros sin lectura clara cierran el ciclo.';
+  'D.A.N.N.A. lee la mesa con sus modelos: busca zonas calientes claras y estables, y descarta la mesa cuando está dispersa. ' +
+  'Si no aprueba es porque ahora no ve una zona caliente en la que valga la pena entrar. ' +
+  'Dentro del ciclo: si la mesa deja de sostener tu par, es transición y no apuestas ese giro, hasta que la mesa confirme un par.';
 
 const MARCA_RES = { A: '✓', E: '✗', N: '·' } as const;
 function tiraTexto(c: Ciclo): string {
@@ -191,13 +191,13 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
       if (l.aprobado && l.jugada) {
         const lm = l.jugada.mercado === 'doc' ? l.doc! : l.col!;
         const pref = l.jugada.mercado === 'doc' ? 'D' : 'C';
-        out.push(`${NOMBRE_MKT[l.jugada.mercado]} cumple las 5 reglas: ${pref}${lm.zonas[0] + 1} y ${pref}${lm.zonas[1] + 1} se llevan la ventana y ${pref}${lm.excluida + 1} no aparece en los últimos 4.`);
+        out.push(`${NOMBRE_MKT[l.jugada.mercado]} muestra zona caliente: ${pref}${lm.zonas[0] + 1} y ${pref}${lm.zonas[1] + 1}.`);
         out.push(`Te propongo ${textoJugada(l.jugada)}. El motor ve ${textoJugada(e.pendientes.MOTOR_DOC)} en docenas y ${textoJugada(e.pendientes.MOTOR_COL)} en columnas. Elige con qué entras, o toca «Paso esta». Mientras no toques nada, los giros no cuentan para ningún ciclo.`);
-      } else if (l.motivo && l.motivo.startsWith('cero en')) {
-        out.push('Salió un cero en los últimos 4 giros: la mesa está dispersa, no la doy por buena.');
+      } else if (l.motivo && l.motivo.startsWith('el cero')) {
+        out.push('El cero dispersó la mesa: no la doy por buena.');
         out.push('Mete el siguiente giro y vuelvo a mirar.');
       } else if (l.ceros >= 2) {
-        out.push(`Hay ${l.ceros} ceros en la ventana: no la doy por buena.`);
+        out.push('Los ceros dispersaron la mesa: no la doy por buena.');
         out.push('Mete el siguiente giro y vuelvo a mirar.');
       } else {
         out.push(`Docenas: ${l.doc?.motivo ?? 'cumple'}. Columnas: ${l.col?.motivo ?? 'cumple'}.`);
@@ -211,11 +211,11 @@ function chatDe(e: Estado, l: Lectura, extra: string[]): string[] {
       ? `Ciclo #${c.id} con ${nombreVoz(c.voz)}: ${textoJugada(c.jugada)}. Cierra en 2 aciertos o en ${CORTE_ERRORES} errores seguidos.`
       : `Ciclo #${c.id}: ${tiraTexto(c)}.`);
     if (e.aviso && c.numeros.length > 0) out.push(e.aviso);
-    if (c.apuesta === false) out.push(`Llevo ${c.quietos ?? 0} de ${MAX_QUIETOS} giros sin lectura clara. Tus errores y aciertos quedan guardados; espera a que confirme.`);
+    if (c.apuesta === false) out.push('La mesa todavía no confirma un par. Tus errores y aciertos quedan guardados; espera a que confirme.');
     else if ((c.voz !== 'PROPUESTA' || c.resultados[c.resultados.length - 1] === 'A') && c.numeros.length > 0 && l.doc && l.col) {
       // Relectura de la mesa: tras un acierto (Propuesta) o en cada giro (voces del motor).
-      const freno = l.ceros >= 2 || (l.motivo ?? '').startsWith('cero en');
-      const lm = (x: LecturaMercado) => (x.ok ? `cumple ${textoJugada({ mercado: x.mercado, zonas: x.zonas })}${freno ? ' pero frenado por el cero' : ''}` : x.motivo);
+      const freno = l.ceros >= 2 || (l.motivo ?? '').startsWith('el cero');
+      const lm = (x: LecturaMercado) => (x.ok ? `zona caliente ${textoJugada({ mercado: x.mercado, zonas: x.zonas })}${freno ? ' pero la mesa está dispersa' : ''}` : x.motivo);
       const sigo = c.voz === 'PROPUESTA' ? `Sigo con ${textoJugada(c.jugada)}` : `El motor sigue con ${textoJugada(c.jugada)}`;
       const consejo = c.voz !== 'PROPUESTA' && c.resultados[c.resultados.length - 1] === 'E' && !l.aprobado
         ? ' Con la Propuesta yo no apostaría este giro (transición).'
@@ -620,7 +620,7 @@ export function CicloPanel({ data }: { data: any }) {
                   {c.apuesta === false ? (
                     <>
                       <span className="cp-big" style={{ color: '#8a6500' }}>No apuestes</span>
-                      <span className="cp-det">Transición · {c.motivoEstado ?? 'la mesa no sostiene el par'} · {c.quietos ?? 0} de {MAX_QUIETOS} sin lectura clara</span>
+                      <span className="cp-det">Transición · {c.motivoEstado ?? 'la mesa no sostiene el par'} · esperando que la mesa confirme</span>
                     </>
                   ) : (
                     <>
@@ -644,7 +644,7 @@ export function CicloPanel({ data }: { data: any }) {
                 <div className="cp-hero">
                   <span className="cp-lab">La mesa no muestra dominancia</span>
                   <span className="cp-big" style={{ color: '#8a6500' }}>No entres</span>
-                  <span className="cp-det">{lectura.ceros >= 2 ? `${lectura.ceros} ceros en la ventana.` : lectura.motivo && lectura.motivo.startsWith('cero en') ? 'Cero en los últimos 4 giros: dispersión reciente.' : 'Ningún mercado cumple las 5 reglas.'}</span>
+                  <span className="cp-det">{lectura.ceros >= 2 ? 'Mesa dispersa por los ceros.' : lectura.motivo && lectura.motivo.startsWith('el cero') ? 'El cero dispersó la mesa.' : 'Ningún mercado muestra zona caliente clara.'}</span>
                 </div>
               ) : (
                 <div className="cp-hero">
@@ -710,8 +710,8 @@ export function CicloPanel({ data }: { data: any }) {
             </div>
             {lectura.completa && lectura.doc && lectura.col && estado.fase !== 'PAUSA' && estado.fase !== 'CERRADO' && (
               <div className="cp-mercados">
-                <Mercado l={lectura.doc} frenoCero={lectura.ceros >= 2 || (lectura.motivo ?? '').startsWith('cero en')} />
-                <Mercado l={lectura.col} frenoCero={lectura.ceros >= 2 || (lectura.motivo ?? '').startsWith('cero en')} />
+                <Mercado l={lectura.doc} frenoCero={lectura.ceros >= 2 || (lectura.motivo ?? '').startsWith('el cero')} />
+                <Mercado l={lectura.col} frenoCero={lectura.ceros >= 2 || (lectura.motivo ?? '').startsWith('el cero')} />
               </div>
             )}
 
@@ -760,8 +760,8 @@ export function CicloPanel({ data }: { data: any }) {
             )}
             {estado.fase === 'VENTANA' && lectura.completa && !lectura.aprobado && (
               <button type="button" className="cp-reply cp-mute" aria-pressed={explicar} onClick={() => setExplicar((x) => !x)}>
-                <span className="cp-reply-t">{explicar ? 'Ocultar las 5 reglas' : '¿Por qué no?'}</span>
-                <span className="cp-reply-s">ver las 5 reglas de la lectura</span>
+                <span className="cp-reply-t">{explicar ? 'Ocultar explicación' : '¿Por qué no?'}</span>
+                <span className="cp-reply-s">qué está viendo D.A.N.N.A. en la mesa</span>
               </button>
             )}
             {estado.fase === 'CICLO' && c && opcionesTransicion(estado, lectura).map((o) => (
@@ -1029,7 +1029,7 @@ function Mercado({ l, frenoCero = false }: { l: LecturaMercado; frenoCero?: bool
       </div>
       <div className="cp-mkt-t">
         <span className="cp-mkt-n">{l.mercado === 'doc' ? 'Docenas' : 'Columnas'} <span className="cp-mono">{l.conteo.map((n, z) => `${nombreZona(l.mercado, z as 0 | 1 | 2)}:${n}`).join(' ')}</span></span>
-        <span className="cp-mkt-r">{frenado ? `Cumple sus 4 reglas · ${pref}${l.zonas[0] + 1} + ${pref}${l.zonas[1] + 1} · frenado por el cero` : l.ok ? `Cumple las 5 reglas · ${pref}${l.zonas[0] + 1} + ${pref}${l.zonas[1] + 1}` : l.motivo}</span>
+        <span className="cp-mkt-r">{frenado ? `Zona caliente · ${pref}${l.zonas[0] + 1} + ${pref}${l.zonas[1] + 1} · mesa dispersa` : l.ok ? `Zona caliente · ${pref}${l.zonas[0] + 1} + ${pref}${l.zonas[1] + 1}` : l.motivo}</span>
       </div>
     </div>
   );
